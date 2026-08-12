@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "21464729425",
+    "project_id": "barber-book-lycb",
+    "storage_bucket": "barber-book-lycb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:21464729425:android:aba5121a2d77be6b813570",
+        "android_client_info": {
+          "package_name": "com.barberbook.barberbook"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDOyYgnAkz0HjDK3jZW6imW3TyEUX-KoDU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

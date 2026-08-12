@@ -1,0 +1,42 @@
+buildscript {
+    repositories {
+        maven { url = uri("file:///C:/Users/HP/AppData/Local/Temp/opencode/maven-local") }
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/central") }
+        google()
+        mavenCentral()
+    }
+}
+
+allprojects {
+    repositories {
+        maven { url = uri("file:///C:/Users/HP/AppData/Local/Temp/opencode/maven-local") }
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/central") }
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.buildDir = "../build"
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    buildscript {
+        repositories {
+            maven { url = uri("file:///C:/Users/HP/AppData/Local/Temp/opencode/maven-local") }
+            maven { url = uri("https://maven.aliyun.com/repository/google") }
+            maven { url = uri("https://maven.aliyun.com/repository/central") }
+            google()
+            mavenCentral()
+        }
+    }
+}
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
