@@ -354,7 +354,32 @@ class _PaymentsTab extends StatelessWidget {
           Card(child: ListTile(leading: const Icon(Icons.account_balance_wallet), title: const Text('إجمالي المدفوعات المسجلة'), trailing: Text(fmtPrice(total, currency), style: const TextStyle(fontWeight: FontWeight.w800)))),
           Card(child: ListTile(leading: const Icon(Icons.local_offer_outlined), title: const Text('الترويج للخدمات'), subtitle: const Text('أنشئ عروضًا وأكواد خصم وشاركها مع العملاء.'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscountsScreen())))),
           const SizedBox(height: 8),
-          ...tools.payments.map((payment) => Card(child: ListTile(leading: const Icon(Icons.payments_outlined), title: Text(payment.customerName.isEmpty ? 'عميل' : payment.customerName), subtitle: Text('${payment.method} · ${DateFormat('yyyy/MM/dd HH:mm').format(payment.paidAt)}'), trailing: Row(mainAxisSize: MainAxisSize.min, children: [Text(fmtPrice(payment.amount, currency), style: const TextStyle(fontWeight: FontWeight.w700)), IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => tools.deletePayment(payment.id))]))),
+          ...tools.payments.map(
+            (payment) => Card(
+              child: ListTile(
+                leading: const Icon(Icons.payments_outlined),
+                title: Text(
+                  payment.customerName.isEmpty ? 'عميل' : payment.customerName,
+                ),
+                subtitle: Text(
+                  '${payment.method} · ${DateFormat('yyyy/MM/dd HH:mm').format(payment.paidAt)}',
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      fmtPrice(payment.amount, currency),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => tools.deletePayment(payment.id),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
