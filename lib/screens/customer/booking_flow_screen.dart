@@ -9,6 +9,7 @@ import '../../models/enums.dart';
 import '../../models/service.dart';
 import '../../models/unavailability_request.dart';
 import '../../providers/appointment_provider.dart';
+import '../../providers/business_tools_provider.dart';
 import '../../providers/discount_provider.dart';
 import '../../providers/feedback_provider.dart';
 import '../../providers/shop_provider.dart';
@@ -23,6 +24,7 @@ import '../../widgets/feature_labels.dart';
 import '../../widgets/slot_picker.dart';
 import '../../widgets/slot_utils.dart';
 import 'booking_success_screen.dart';
+import 'portfolio_gallery_screen.dart';
 import 'track_booking_screen.dart';
 
 class BookingFlowScreen extends StatefulWidget {
@@ -46,6 +48,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
   String? _primaryServiceId;
   final List<String> _extraServiceIds = [];
   String? _employeeId;
+  String? _chairId;
   String? _favoriteEmployeeId;
   bool _saveAsFavorite = false;
   DateTime? _date;
@@ -251,10 +254,27 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     final status = settings.autoConfirm
         ? AppointmentStatus.confirmed
         : AppointmentStatus.requested;
+    final occurrences = _recurring
+        ? expandWeeklySeries(first: _slot!, count: 4)
+        : <DateTime>[_slot!];
+    if (occurrences.any((occ) => provider.hasConflict(
+          employeeId: _employeeId!,
+          chairId: _chairId,
+          start: occ,
+          end: occ.add(Duration(minutes: _totalDuration)),
+        ))) {
+      setState(() => _busy = false);
+      if (mounted) {
+        showSnack(context, FeatureLabels.text(context,
+            'هذا الحلاق أو الكرسي محجوز في الوقت المختار.',
+            'This barber or chair is already booked at that time.'));
+      }
+      return;
+    }
 
     if (_recurring) {
       final seriesId = newAppointmentId();
-      for (final occ in expandWeeklySeries(first: _slot!, count: 4)) {
+      for (final occ in occurrences) {
         final appt = Appointment(
           id: newAppointmentId(),
           shopId: shopId,
@@ -263,6 +283,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
           customerPhone: _phone.text.trim(),
           customerEmail: _email.text.trim(),
           employeeId: _employeeId!,
+          chairId: _chairId,
           serviceIds: _serviceIds,
           startTime: occ,
           endTime: occ.add(Duration(minutes: _totalDuration)),
@@ -289,8 +310,9 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
         customerName: _name.text.trim(),
         customerPhone: _phone.text.trim(),
         customerEmail: _email.text.trim(),
-        employeeId: _employeeId!,
-        serviceIds: _serviceIds,
+            employeeId: _employeeId!,
+            chairId: _chairId,
+            serviceIds: _serviceIds,
         startTime: _slot!,
         endTime: _slot!.add(Duration(minutes: _totalDuration)),
         status: status,
@@ -456,6 +478,15 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                 ),
               ),
               IconButton(
+                tooltip: FeatureLabels.text(context, 'استعراض الأعمال', 'Our work'),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const PortfolioGalleryScreen()),
+                ),
+                icon: const Icon(Icons.photo_library_outlined, color: Colors.white),
+              ),
+              IconButton(
                 tooltip: t(context).trackBooking,
                 onPressed: () => Navigator.push(
                   context,
@@ -599,6 +630,26 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     );
   }
 
+  Widget _chairSelector(BuildContext context) {
+    final chairs = context.watch<BusinessToolsProvider>().chairs.where((c) => c.active).toList();
+    if (chairs.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(FeatureLabels.text(context, 'الكرسي', 'Chair'), style: const TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          children: chairs.map((chair) => ChoiceChip(
+            label: Text(chair.name),
+            selected: _chairId == chair.id,
+            onSelected: (_) => setState(() => _chairId = chair.id),
+          )).toList(),
+        ),
+      ],
+    );
+  }
+
   Widget _primaryServiceSelector(
       BuildContext context, List<Service> services, String currency) {
     return Column(
@@ -713,6 +764,8 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
               }).toList(),
             ),
             const SizedBox(height: 10),
+            _chairSelector(context),
+            const SizedBox(height: 4),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               secondary: const Icon(Icons.star_outline_rounded),

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/appointment.dart';
+import '../models/business_features.dart';
 import '../models/booking_settings.dart';
 import '../models/discount.dart';
 import '../models/employee.dart';
@@ -249,8 +250,75 @@ class FirestoreService {
     await _coll(shopId, 'requests').doc(r.id).set(r.toMap());
   }
 
-  // ---------- Customer helpers ----------
+    // ---------- Portfolio ----------
+  Stream<List<PortfolioItem>> watchPortfolio(String shopId) =>
+      _coll(shopId, 'portfolio')
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => PortfolioItem.fromMap(d.id, d.data()))
+              .toList());
 
+  Future<void> addPortfolioItem(String shopId, PortfolioItem item) =>
+      _coll(shopId, 'portfolio').doc(item.id).set(item.toMap());
+  Future<void> updatePortfolioItem(String shopId, PortfolioItem item) =>
+      _coll(shopId, 'portfolio').doc(item.id).set(item.toMap());
+  Future<void> deletePortfolioItem(String shopId, String id) =>
+      _coll(shopId, 'portfolio').doc(id).delete();
+
+  // ---------- Loyalty ----------
+  Stream<List<LoyaltyAccount>> watchLoyalty(String shopId) =>
+      _coll(shopId, 'loyalty')
+          .orderBy('points', descending: true)
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => LoyaltyAccount.fromMap(d.id, d.data()))
+              .toList());
+  Future<void> saveLoyalty(String shopId, LoyaltyAccount account) =>
+      _coll(shopId, 'loyalty').doc(account.id).set(account.toMap());
+  Future<void> addLoyaltyPoints(String shopId, String id, int points) =>
+      _coll(shopId, 'loyalty').doc(id).update({
+        'points': FieldValue.increment(points),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+  // ---------- Chairs ----------
+  Stream<List<Chair>> watchChairs(String shopId) =>
+      _coll(shopId, 'chairs').orderBy('name').snapshots().map((snap) => snap.docs
+          .map((d) => Chair.fromMap(d.id, d.data()))
+          .toList());
+  Future<void> saveChair(String shopId, Chair chair) =>
+      _coll(shopId, 'chairs').doc(chair.id).set(chair.toMap());
+  Future<void> deleteChair(String shopId, String id) =>
+      _coll(shopId, 'chairs').doc(id).delete();
+
+  // ---------- Queue ----------
+  Stream<List<QueueEntry>> watchQueue(String shopId) =>
+      _coll(shopId, 'queue')
+          .orderBy('joinedAt')
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => QueueEntry.fromMap(d.id, d.data()))
+              .toList());
+  Future<void> saveQueueEntry(String shopId, QueueEntry entry) =>
+      _coll(shopId, 'queue').doc(entry.id).set(entry.toMap());
+  Future<void> updateQueueEntry(String shopId, QueueEntry entry) =>
+      _coll(shopId, 'queue').doc(entry.id).set(entry.toMap());
+
+  // ---------- Payments ----------
+  Stream<List<Payment>> watchPayments(String shopId) =>
+      _coll(shopId, 'payments')
+          .orderBy('paidAt', descending: true)
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => Payment.fromMap(d.id, d.data()))
+              .toList());
+  Future<void> addPayment(String shopId, Payment payment) =>
+      _coll(shopId, 'payments').doc(payment.id).set(payment.toMap());
+  Future<void> deletePayment(String shopId, String id) =>
+      _coll(shopId, 'payments').doc(id).delete();
+
+  // ---------- Customer helpers ----------
   static String genReference() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     final rand = DateTime.now().microsecondsSinceEpoch;

@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
 import 'providers/appointment_provider.dart';
+import 'providers/business_tools_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/discount_provider.dart';
 import 'providers/expense_provider.dart';
@@ -23,6 +24,7 @@ class BarberApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ShopProvider()),
         ChangeNotifierProvider(create: (_) => AppointmentProvider()),
+        ChangeNotifierProvider(create: (_) => BusinessToolsProvider()),
         ChangeNotifierProvider(create: (_) => DiscountProvider()),
         ChangeNotifierProvider(create: (_) => ExpenseProvider()),
         ChangeNotifierProvider(create: (_) => FeedbackProvider()),

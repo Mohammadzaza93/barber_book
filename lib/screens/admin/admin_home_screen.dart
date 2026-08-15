@@ -16,6 +16,7 @@ import 'feedback_screen.dart';
 import 'reports_screen.dart';
 import 'services_screen.dart';
 import 'settings_screen.dart';
+import 'business_tools_screen.dart';
 import 'staff_screen.dart';
 import 'unavailability_screen.dart';
 
@@ -40,6 +41,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     UnavailabilityScreen(),
     ReportsScreen(),
     SettingsScreen(),
+    BusinessToolsScreen(),
     ProfileScreen(),
   ];
 
@@ -150,7 +152,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   ),
                   _item(context, 8, Icons.insights_outlined, Icons.insights, t(context).reports),
                   _item(context, 9, Icons.tune_rounded, Icons.tune, t(context).bookingPageSettings),
-                  _item(context, 10, Icons.person_outline_rounded, Icons.person_rounded, t(context).profile),
+                  _item(context, 10, Icons.business_center_outlined, Icons.business_center, 'أدوات الأعمال'),
+                  _item(context, 11, Icons.person_outline_rounded, Icons.person_rounded, t(context).profile),
                 ],
               ),
             ),
