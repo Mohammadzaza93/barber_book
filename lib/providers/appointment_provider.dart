@@ -79,9 +79,8 @@ class AppointmentProvider extends ChangeNotifier {
     if (applyToSeries && a.seriesId != null) {
       for (final item in appointments) {
         if (item.seriesId == a.seriesId &&
-            item.status == AppointmentStatus.confirmed ||
-            item.seriesId == a.seriesId &&
-                item.status == AppointmentStatus.requested) {
+            (item.status == AppointmentStatus.confirmed ||
+                item.status == AppointmentStatus.requested)) {
           await FirestoreService.instance
               .updateAppointment(shopId, item.copyWith(status: s));
         }

@@ -1,8 +1,33 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isShopOwner(shopId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId
+          == request.auth.uid;
+    }
+
+    match /shops/{shopId} {
+      // A new shop may only be created for the currently authenticated user.
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid;
+
+      // Shop settings and all management data are private to the owner.
+      allow read, update, delete: if isShopOwner(shopId);
+
+      match /{subcollection}/{documentId} {
+        allow read, write: if isShopOwner(shopId);
+      }
+    }
+
+    // No other top-level collections are part of the application data model.
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }
