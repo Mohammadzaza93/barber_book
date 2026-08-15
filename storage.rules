@@ -1,8 +1,26 @@
 rules_version = '2';
+
 service firebase.storage {
   match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isShopOwner(shopId) {
+      return signedIn()
+        && firestore.get(/databases/(default)/documents/shops/$(shopId)).data.ownerId
+          == request.auth.uid;
+    }
+
+    match /shops/{shopId}/logo {
+      allow read: if isShopOwner(shopId);
+      allow write: if isShopOwner(shopId)
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
     match /{allPaths=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }
