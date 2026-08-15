@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../l10n/strings.dart';
 import '../../models/appointment.dart';
 import '../../models/enums.dart';
+import '../../models/service.dart';
 import '../../models/unavailability_request.dart';
 import '../../providers/appointment_provider.dart';
 import '../../providers/discount_provider.dart';
@@ -13,10 +15,11 @@ import '../../providers/shop_provider.dart';
 import '../../services/booking_calc.dart';
 import '../../services/firestore_service.dart';
 import '../../services/reminder_service.dart';
+import '../../services/notification_service.dart';
 import '../../services/shop_manager.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/confirm.dart';
-import '../../widgets/service_picker.dart';
+import '../../widgets/feature_labels.dart';
 import '../../widgets/slot_picker.dart';
 import '../../widgets/slot_utils.dart';
 import 'booking_success_screen.dart';
@@ -40,7 +43,11 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
   final _promo = TextEditingController();
 
   List<String> _serviceIds = [];
+  String? _primaryServiceId;
+  final List<String> _extraServiceIds = [];
   String? _employeeId;
+  String? _favoriteEmployeeId;
+  bool _saveAsFavorite = false;
   DateTime? _date;
   DateTime? _slot;
   bool _outOfHours = false;
@@ -50,6 +57,36 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
   double _appliedDiscount = 0;
 
   List<DateTime> _slots = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFavoriteBarber();
+  }
+
+  Future<void> _loadFavoriteBarber() async {
+    final shopId = ShopManager.shopId;
+    if (shopId == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final favorite = prefs.getString('favorite_barber_$shopId');
+    if (!mounted || favorite == null) return;
+    final exists = context.read<ShopProvider>().activeEmployees.any((e) => e.id == favorite);
+    if (exists) {
+      setState(() {
+        _favoriteEmployeeId = favorite;
+        _employeeId = favorite;
+      });
+      _recomputeSlots();
+    }
+  }
+
+  Future<void> _saveFavoriteBarber() async {
+    if (!_saveAsFavorite || _employeeId == null) return;
+    final shopId = ShopManager.shopId;
+    if (shopId == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('favorite_barber_$shopId', _employeeId!);
+  }
 
   @override
   void dispose() {
@@ -161,6 +198,10 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
       showSnack(context, t(context).selectEmployee);
       return;
     }
+    if (_primaryServiceId == null) {
+      showSnack(context, t(context).selectServicesFirst);
+      return;
+    }
     if (_slot == null) {
       showSnack(context, t(context).selectTime);
       return;
@@ -169,6 +210,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     setState(() => _busy = true);
     final shop = context.read<ShopProvider>();
     final settings = shop.settings!;
+    await _saveFavoriteBarber();
     final provider = context.read<AppointmentProvider>();
     final shopId = ShopManager.shopId!;
 
@@ -213,32 +255,31 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     if (_recurring) {
       final seriesId = newAppointmentId();
       for (final occ in expandWeeklySeries(first: _slot!, count: 4)) {
-        await provider.add(
-          Appointment(
-            id: newAppointmentId(),
-            shopId: shopId,
-            reference: reference,
-            customerName: _name.text.trim(),
-            customerPhone: _phone.text.trim(),
-            customerEmail: _email.text.trim(),
-            employeeId: _employeeId!,
-            serviceIds: _serviceIds,
-            startTime: occ,
-            endTime: occ.add(Duration(minutes: _totalDuration)),
-            status: status,
-            paymentStatus:
-                deposit > 0 ? PaymentStatus.depositPaid : PaymentStatus.unpaid,
-            totalAmount: payable,
-            depositAmount: deposit,
-            discountCode: _appliedCode,
-            discountAmount: _appliedDiscount,
-            notes: _notes.text.trim(),
-            recurring: true,
-            seriesId: seriesId,
-            createdAt: DateTime.now(),
-          ),
-          shopId,
+        final appt = Appointment(
+          id: newAppointmentId(),
+          shopId: shopId,
+          reference: reference,
+          customerName: _name.text.trim(),
+          customerPhone: _phone.text.trim(),
+          customerEmail: _email.text.trim(),
+          employeeId: _employeeId!,
+          serviceIds: _serviceIds,
+          startTime: occ,
+          endTime: occ.add(Duration(minutes: _totalDuration)),
+          status: status,
+          paymentStatus:
+              deposit > 0 ? PaymentStatus.depositPaid : PaymentStatus.unpaid,
+          totalAmount: payable,
+          depositAmount: deposit,
+          discountCode: _appliedCode,
+          discountAmount: _appliedDiscount,
+          notes: _notes.text.trim(),
+          recurring: true,
+          seriesId: seriesId,
+          createdAt: DateTime.now(),
         );
+        await provider.add(appt, shopId);
+        await ReminderService.instance.scheduleLocalReminders(settings, appt);
       }
     } else {
       final appt = Appointment(
@@ -264,8 +305,13 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
         createdAt: DateTime.now(),
       );
       await provider.add(appt, shopId);
-      ReminderService.instance.scheduleLocalReminders(settings, appt);
+      await ReminderService.instance.scheduleLocalReminders(settings, appt);
     }
+
+    await NotificationService.instance.show(
+      'تم إنشاء الحجز',
+      'المرجع: $reference',
+    );
 
     if (_appliedCode != null) {
       if (!mounted) return;
@@ -553,6 +599,62 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     );
   }
 
+  Widget _primaryServiceSelector(
+      BuildContext context, List<Service> services, String currency) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(FeatureLabels.text(context, 'الخدمة الأساسية', 'Primary service'),
+            style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade800)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: services.map<Widget>((service) {
+            final selected = _primaryServiceId == service.id;
+            return ChoiceChip(
+              avatar: Icon(Icons.content_cut_rounded,
+                  size: 16, color: selected ? Colors.white : null),
+              label: Text('${service.name} · ${fmtPrice(service.price, currency)}'),
+              selected: selected,
+              onSelected: (_) => setState(() {
+                _extraServiceIds.remove(service.id);
+                _primaryServiceId = service.id;
+                _serviceIds = [service.id, ..._extraServiceIds];
+              }),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _extraServicesSelector(List<Service> services, String currency) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: services.where((s) => s.id != _primaryServiceId).map<Widget>((service) {
+        final selected = _extraServiceIds.contains(service.id);
+        return FilterChip(
+          avatar: const Icon(Icons.add_rounded, size: 16),
+          label: Text('${service.name} · ${fmtPrice(service.price, currency)}'),
+          selected: selected,
+          onSelected: (value) => setState(() {
+            if (value) {
+              _extraServiceIds.add(service.id);
+            } else {
+              _extraServiceIds.remove(service.id);
+            }
+            _serviceIds = [
+              if (_primaryServiceId != null) _primaryServiceId!,
+              ..._extraServiceIds,
+            ];
+          }),
+        );
+      }).toList(),
+    );
+  }
+
   Widget _buildStep(BuildContext context, settings, Color accent) {
     final shop = context.watch<ShopProvider>();
     switch (_step) {
@@ -562,12 +664,18 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
           children: [
             _title(t(context).chooseServices),
             const SizedBox(height: 10),
-            ServicePicker(
-              services: shop.activeServices,
-              selectedIds: _serviceIds,
-              currency: settings.currency,
-              onChanged: (ids) => setState(() => _serviceIds = ids),
-            ),
+              _primaryServiceSelector(context, shop.activeServices, settings.currency),
+              if (_primaryServiceId != null) ...[
+                const SizedBox(height: 18),
+                _title(FeatureLabels.text(context, 'الخدمات الإضافية', 'Additional services')),
+                const SizedBox(height: 6),
+                Text(
+                  FeatureLabels.text(context, 'أضف خدمات أخرى إلى نفس الموعد لزيادة قيمة الحجز.', 'Add more services to the same appointment.'),
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                _extraServicesSelector(shop.activeServices, settings.currency),
+              ],
           ],
         );
       case 1:
@@ -576,6 +684,18 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
           children: [
             _title(t(context).chooseBarber),
             const SizedBox(height: 10),
+            if (_favoriteEmployeeId != null && shop.employeeById(_favoriteEmployeeId!) != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: ActionChip(
+                  avatar: const Icon(Icons.star_rounded, color: Colors.amber),
+                  label: Text('${FeatureLabels.text(context, 'الحلاق المفضل', 'Favorite barber')}: ${shop.employeeById(_favoriteEmployeeId!)!.name}'),
+                  onPressed: () {
+                    setState(() => _employeeId = _favoriteEmployeeId);
+                    _recomputeSlots();
+                  },
+                ),
+              ),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -591,6 +711,15 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                   },
                 );
               }).toList(),
+            ),
+            const SizedBox(height: 10),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: const Icon(Icons.star_outline_rounded),
+              title: Text(FeatureLabels.text(context, 'حفظ هذا الحلاق كمفضل', 'Save this barber as favorite')),
+              subtitle: Text(FeatureLabels.text(context, 'سيتم اختياره تلقائيًا في الحجز القادم', 'He will be selected automatically next time')),
+              value: _saveAsFavorite,
+              onChanged: (v) => setState(() => _saveAsFavorite = v),
             ),
           ],
         );

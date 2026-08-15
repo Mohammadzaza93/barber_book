@@ -24,7 +24,11 @@ class AnalyticsService {
   double revenueForDay(List<Appointment> all, DateTime day) {
     final start = DateTime(day.year, day.month, day.day);
     final end = start.add(const Duration(days: 1));
-    return revenue(all, from: start, to: end);
+    return revenue(
+      all,
+      from: start,
+      to: end.subtract(const Duration(microseconds: 1)),
+    );
   }
 
   int bookingsInRange(List<Appointment> all,
@@ -50,6 +54,32 @@ class AnalyticsService {
           revenueForDay(all, day);
     }
     return map;
+  }
+
+  Map<DateTime, int> dailyBookings(
+      List<Appointment> all, DateTime start, int days) {
+    final map = <DateTime, int>{};
+    for (var i = 0; i < days; i++) {
+      final day = start.add(Duration(days: i));
+      final from = DateTime(day.year, day.month, day.day);
+      final to = from.add(const Duration(days: 1));
+      map[from] = bookingsInRange(
+        all,
+        from: from,
+        to: to.subtract(const Duration(microseconds: 1)),
+      );
+    }
+    return map;
+  }
+
+  double completionRate(List<Appointment> all) {
+    final finished = all.where((a) =>
+        a.status == AppointmentStatus.completed ||
+        a.status == AppointmentStatus.noShow ||
+        a.status == AppointmentStatus.cancelled).length;
+    if (finished == 0) return 0;
+    return all.where((a) => a.status == AppointmentStatus.completed).length /
+        finished * 100;
   }
 
   Map<String, double> popularServices(

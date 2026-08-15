@@ -13,11 +13,13 @@ class ReminderService {
   int _idFor(Appointment a, int hoursBefore) =>
       (a.id.hashCode * 31 + hoursBefore).abs() % 1000000;
 
-  /// Schedules local notifications on this device at each reminder timing.
+  /// Schedules every configured local reminder for one appointment.
   Future<void> scheduleLocalReminders(
       BookingSettings settings, Appointment a) async {
+    await cancelLocalReminders(a, settings.reminderTimings);
     if (!settings.remindersEnabled) return;
     for (final hoursBefore in settings.reminderTimings) {
+      if (hoursBefore <= 0) continue;
       final when = a.startTime.subtract(Duration(hours: hoursBefore));
       await NotificationService.instance.scheduleReminder(
         _idFor(a, hoursBefore),
@@ -28,9 +30,10 @@ class ReminderService {
     }
   }
 
-  Future<void> cancelLocalReminders(Appointment a) async {
-    for (var h = 1; h <= 72; h++) {
-      await NotificationService.instance.cancel(_idFor(a, h));
+  Future<void> cancelLocalReminders(Appointment a, [List<int>? timings]) async {
+    final ids = timings ?? List<int>.generate(72, (i) => i + 1);
+    for (final hoursBefore in ids) {
+      await NotificationService.instance.cancel(_idFor(a, hoursBefore));
     }
   }
 
