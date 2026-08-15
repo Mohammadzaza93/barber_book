@@ -9,6 +9,7 @@ class Appointment {
   final String customerPhone;
   final String customerEmail;
   final String employeeId;
+  final String? chairId;
   final List<String> serviceIds;
   final DateTime startTime;
   final DateTime endTime;
@@ -36,6 +37,7 @@ class Appointment {
     required this.customerPhone,
     this.customerEmail = '',
     required this.employeeId,
+    this.chairId,
     required this.serviceIds,
     required this.startTime,
     required this.endTime,
@@ -61,6 +63,7 @@ class Appointment {
     String? customerPhone,
     String? customerEmail,
     String? employeeId,
+    String? chairId,
     List<String>? serviceIds,
     DateTime? startTime,
     DateTime? endTime,
@@ -86,6 +89,7 @@ class Appointment {
       customerPhone: customerPhone ?? this.customerPhone,
       customerEmail: customerEmail ?? this.customerEmail,
       employeeId: employeeId ?? this.employeeId,
+      chairId: chairId ?? this.chairId,
       serviceIds: serviceIds ?? this.serviceIds,
       startTime: startTime ?? this.startTime,
       endTime: endTime ?? this.endTime,
@@ -114,6 +118,7 @@ class Appointment {
         'customerPhone': customerPhone,
         'customerEmail': customerEmail,
         'employeeId': employeeId,
+        'chairId': chairId,
         'serviceIds': serviceIds,
         'startTime': startTime,
         'endTime': endTime,
@@ -143,6 +148,7 @@ class Appointment {
         customerPhone: (m['customerPhone'] as String?) ?? '',
         customerEmail: (m['customerEmail'] as String?) ?? '',
         employeeId: (m['employeeId'] as String?) ?? '',
+        chairId: m['chairId'] as String?,
         serviceIds: (m['serviceIds'] as List<dynamic>? ?? const [])
             .map((e) => e.toString())
             .toList(),

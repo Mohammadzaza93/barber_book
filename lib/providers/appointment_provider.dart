@@ -62,6 +62,27 @@ class AppointmentProvider extends ChangeNotifier {
   List<UnavailabilityRequest> get pendingRequests =>
       requests.where((r) => r.status == 'pending').toList();
 
+  bool hasConflict({
+    required String employeeId,
+    String? chairId,
+    required DateTime start,
+    required DateTime end,
+    String? excludeId,
+  }) {
+    return appointments.any((existing) {
+      if (existing.id == excludeId ||
+          existing.status == AppointmentStatus.cancelled ||
+          existing.status == AppointmentStatus.noShow) {
+        return false;
+      }
+      final sameEmployee = existing.employeeId == employeeId;
+      final sameChair = chairId != null && existing.chairId == chairId;
+      final overlaps = start.isBefore(existing.endTime) &&
+          end.isAfter(existing.startTime);
+      return overlaps && (sameEmployee || sameChair);
+    });
+  }
+
   Future<void> add(Appointment a, String shopId) async {
     await FirestoreService.instance.addAppointment(shopId, a);
   }
