@@ -31,6 +31,9 @@ class NotificationService {
     );
     const settings = InitializationSettings(android: android, iOS: ios);
     await _local.initialize(settings);
+    final androidPlugin = _local.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    await androidPlugin?.requestNotificationsPermission();
 
     await _messaging.requestPermission(alert: true, badge: true, sound: true);
     _messaging.setForegroundNotificationPresentationOptions(
