@@ -634,7 +634,12 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
     final payments = tools.payments.where((payment) => payment.chairId == chair.id && !payment.paidAt.isBefore(_weekStart) && payment.paidAt.isBefore(end)).toList();
     final stored = tools.weeklyProfits.where((report) => report.id == '${_weekId()}_${chair.id}').firstOrNull;
     final revenue = appointments.fold<double>(0, (sum, appointment) => sum + appointment.totalAmount);
-    final supplyCost = payments.fold<double>(0, (sum, payment) => sum + payment.materialCost);
+    final appointmentIds = appointments.map((appointment) => appointment.id).toSet();
+    final consumedCost = tools.inventoryMovements
+        .where((movement) => movement.type == 'usage' && appointmentIds.contains(movement.appointmentId))
+        .fold<double>(0, (sum, movement) => sum + (movement.quantity * movement.unitCost));
+    final legacyPaymentCost = payments.fold<double>(0, (sum, payment) => sum + payment.materialCost);
+    final supplyCost = consumedCost > 0 ? consumedCost : legacyPaymentCost;
     final workingMinutes = appointments.fold<int>(0, (sum, appointment) => sum + appointment.endTime.difference(appointment.startTime).inMinutes);
     return ChairWeeklyProfit(
       id: stored?.id ?? '${_weekId()}_${chair.id}',
@@ -656,7 +661,7 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
     final tools = context.watch<BusinessToolsProvider>();
     final currency = context.watch<ShopProvider>().settings?.currency ?? 'SAR';
     final totalProfit = tools.chairs.fold<double>(0, (sum, chair) => sum + _computedReport(tools, chair).profit);
-    final lowStock = tools.chairSupplies.where((supply) => supply.lowStock).length;
+    final lowStock = tools.chairSupplies.where((supply) => supply.lowStock).length + tools.inventory.where((item) => item.lowStock).length;
     return Scaffold(
       body: ListView(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),

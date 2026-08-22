@@ -27,6 +27,7 @@ class Appointment {
   final DateTime createdAt;
   final bool reminderSent;
   final int? rating;
+  final bool inventoryConsumed;
 
   const Appointment({
     required this.id,
@@ -55,6 +56,7 @@ class Appointment {
     required this.createdAt,
     this.reminderSent = false,
     this.rating,
+    this.inventoryConsumed = false,
   });
 
   Appointment copyWith({
@@ -79,6 +81,7 @@ class Appointment {
     bool? outOfHours,
     bool? reminderSent,
     int? rating,
+    bool? inventoryConsumed,
   }) {
     return Appointment(
       id: id,
@@ -107,6 +110,7 @@ class Appointment {
       createdAt: createdAt,
       reminderSent: reminderSent ?? this.reminderSent,
       rating: rating ?? this.rating,
+      inventoryConsumed: inventoryConsumed ?? this.inventoryConsumed,
     );
   }
 
@@ -136,6 +140,7 @@ class Appointment {
         'createdAt': createdAt,
         'reminderSent': reminderSent,
         'rating': rating,
+        'inventoryConsumed': inventoryConsumed,
       };
 
   factory Appointment.fromMap(String id, Map<String, dynamic> m) =>
@@ -172,5 +177,6 @@ class Appointment {
         createdAt: (m['createdAt'] as dynamic).toDate(),
         reminderSent: (m['reminderSent'] as bool?) ?? false,
         rating: (m['rating'] as num?)?.toInt(),
+        inventoryConsumed: (m['inventoryConsumed'] as bool?) ?? false,
       );
 }

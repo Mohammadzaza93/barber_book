@@ -11,6 +11,7 @@ class Service {
   final int colorValue;
   final int sortOrder;
   final String? imageUrl;
+  final Map<String, double> materialRequirements;
 
   const Service({
     required this.id,
@@ -25,6 +26,7 @@ class Service {
     this.colorValue = 0xFF3949AB,
     this.sortOrder = 0,
     this.imageUrl,
+    this.materialRequirements = const {},
   });
 
   Service copyWith({
@@ -39,6 +41,7 @@ class Service {
     int? colorValue,
     int? sortOrder,
     String? imageUrl,
+    Map<String, double>? materialRequirements,
   }) {
     return Service(
       id: id,
@@ -53,6 +56,7 @@ class Service {
       colorValue: colorValue ?? this.colorValue,
       sortOrder: sortOrder ?? this.sortOrder,
       imageUrl: imageUrl ?? this.imageUrl,
+      materialRequirements: materialRequirements ?? this.materialRequirements,
     );
   }
 
@@ -68,6 +72,7 @@ class Service {
         'colorValue': colorValue,
         'sortOrder': sortOrder,
         'imageUrl': imageUrl,
+        'materialRequirements': materialRequirements,
       };
 
   factory Service.fromMap(String id, Map<String, dynamic> m) => Service(
@@ -83,5 +88,8 @@ class Service {
         colorValue: (m['colorValue'] as num?)?.toInt() ?? 0xFF3949AB,
         sortOrder: (m['sortOrder'] as num?)?.toInt() ?? 0,
         imageUrl: m['imageUrl'] as String?,
+        materialRequirements: ((m['materialRequirements'] as Map?) ?? {}).map(
+          (key, value) => MapEntry(key.toString(), (value as num).toDouble()),
+        ),
       );
 }

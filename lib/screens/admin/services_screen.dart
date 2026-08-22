@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../../l10n/strings.dart';
 import '../../models/service.dart';
 import '../../providers/shop_provider.dart';
+import '../../providers/business_tools_provider.dart';
 import '../../services/shop_manager.dart';
 import '../../widgets/confirm.dart';
 import '../../widgets/empty_state.dart';
@@ -124,6 +125,10 @@ class ServicesScreen extends StatelessWidget {
     var category = service?.category ?? 'haircut';
     var highDemand = service?.highDemand ?? false;
     var active = service?.active ?? true;
+    final inventory = context.read<BusinessToolsProvider>().inventory;
+    final materialRequirements = <String, double>{
+      ...?service?.materialRequirements,
+    };
 
     await showDialog(
       context: context,
@@ -191,6 +196,29 @@ class ServicesScreen extends StatelessWidget {
                   value: highDemand,
                   onChanged: (v) => setState(() => highDemand = v),
                 ),
+                if (inventory.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Align(alignment: AlignmentDirectional.centerStart, child: Text('المواد المستهلكة في هذه الخدمة', style: TextStyle(fontWeight: FontWeight.w700))),
+                  const SizedBox(height: 6),
+                  ...inventory.where((item) => item.active).map((item) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: TextField(
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(labelText: '${item.name} (${item.unit})', hintText: 'اتركه فارغًا إذا لم تُستهلك المادة'),
+                        controller: TextEditingController(text: materialRequirements[item.id]?.toString() ?? ''),
+                        onChanged: (value) {
+                          final quantity = double.tryParse(value.replaceAll(',', '.'));
+                          if (quantity == null || quantity <= 0) {
+                            materialRequirements.remove(item.id);
+                          } else {
+                            materialRequirements[item.id] = quantity;
+                          }
+                        },
+                      ),
+                    );
+                  }),
+                ],
                 if (highDemand)
                   LabeledField(
                     label: t(ctx).depositAmount,
@@ -227,6 +255,8 @@ class ServicesScreen extends StatelessWidget {
                   depositAmount: double.tryParse(deposit.text) ?? 0,
                   active: active,
                   sortOrder: service?.sortOrder ?? 999,
+                  materialRequirements: materialRequirements,
+
                 );
                 final shopProvider = context.read<ShopProvider>();
                 final shopId = ShopManager.shopId!;

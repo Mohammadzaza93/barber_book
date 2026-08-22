@@ -5,6 +5,7 @@ import '../models/business_features.dart';
 import '../models/booking_settings.dart';
 import '../models/discount.dart';
 import '../models/employee.dart';
+import '../models/enums.dart';
 import '../models/expense.dart';
 import '../models/feedback.dart';
 import '../models/service.dart';
@@ -385,6 +386,113 @@ class FirestoreService {
 
   Future<void> deleteChairSupply(String shopId, String id) =>
       _coll(shopId, 'chairSupplies').doc(id).delete();
+
+  // ---------- Inventory ----------
+  Stream<List<InventoryItem>> watchInventory(String shopId) =>
+      _coll(shopId, 'inventory')
+          .orderBy('name')
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => InventoryItem.fromMap(d.id, d.data()))
+              .toList());
+
+  Stream<List<InventoryMovement>> watchInventoryMovements(String shopId) =>
+      _coll(shopId, 'inventoryMovements')
+          .orderBy('createdAt', descending: true)
+          .limit(200)
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => InventoryMovement.fromMap(d.id, d.data()))
+              .toList());
+
+  Future<void> saveInventoryItem(String shopId, InventoryItem item) =>
+      _coll(shopId, 'inventory').doc(item.id).set(item.toMap());
+
+  Future<void> deleteInventoryItem(String shopId, String id) =>
+      _coll(shopId, 'inventory').doc(id).delete();
+
+  Future<void> consumeMaterialsForAppointment(
+      String shopId, Appointment appointment) async {
+    if (appointment.inventoryConsumed || appointment.status != AppointmentStatus.completed) return;
+    final appointmentRef = _coll(shopId, 'appointments').doc(appointment.id);
+    await _db.runTransaction((transaction) async {
+      final appointmentSnap = await transaction.get(appointmentRef);
+      if (!appointmentSnap.exists) return;
+      final current = Appointment.fromMap(appointmentRef.id, appointmentSnap.data() ?? {});
+      if (current.inventoryConsumed || current.status != AppointmentStatus.completed) return;
+
+      final requirements = <String, double>{};
+      for (final serviceId in current.serviceIds) {
+        final serviceSnap = await transaction.get(_coll(shopId, 'services').doc(serviceId));
+        if (!serviceSnap.exists) continue;
+        final service = Service.fromMap(serviceSnap.id, serviceSnap.data() ?? {});
+        service.materialRequirements.forEach((itemId, quantity) {
+          requirements[itemId] = (requirements[itemId] ?? 0) + quantity;
+        });
+      }
+
+      final itemSnapshots = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+      for (final itemId in requirements.keys) {
+        itemSnapshots[itemId] = await transaction.get(_coll(shopId, 'inventory').doc(itemId));
+      }
+
+      for (final entry in requirements.entries) {
+        final snap = itemSnapshots[entry.key];
+        if (snap == null || !snap.exists) continue;
+        final item = InventoryItem.fromMap(snap.id, snap.data() ?? {});
+        if (item.quantity < entry.value) {
+          throw StateError('الكمية غير كافية للمادة: ${item.name}');
+        }
+      }
+
+      for (final entry in requirements.entries) {
+        final snap = itemSnapshots[entry.key];
+        if (snap == null || !snap.exists) continue;
+        final item = InventoryItem.fromMap(snap.id, snap.data() ?? {});
+        transaction.set(
+          _coll(shopId, 'inventory').doc(item.id),
+          item.copyWith(
+            quantity: item.quantity - entry.value,
+            updatedAt: DateTime.now(),
+          ).toMap(),
+        );
+        final movement = InventoryMovement(
+          id: '${current.id}_${item.id}',
+          itemId: item.id,
+          type: 'usage',
+          quantity: entry.value,
+          unitCost: item.unitCost,
+          reason: 'استهلاك تلقائي للخدمة المكتملة',
+          appointmentId: current.id,
+          createdAt: DateTime.now(),
+        );
+        transaction.set(_coll(shopId, 'inventoryMovements').doc(movement.id), movement.toMap());
+      }
+      transaction.update(appointmentRef, {'inventoryConsumed': true});
+    });
+  }
+
+  Future<void> applyInventoryMovement(
+      String shopId, InventoryMovement movement) async {
+    final itemRef = _coll(shopId, 'inventory').doc(movement.itemId);
+    final movementRef = _coll(shopId, 'inventoryMovements').doc(movement.id);
+    await _db.runTransaction((transaction) async {
+      final itemSnap = await transaction.get(itemRef);
+      if (!itemSnap.exists) throw StateError('المادة غير موجودة');
+      final item = InventoryItem.fromMap(itemRef.id, itemSnap.data() ?? {});
+      final nextQuantity = movement.type == 'purchase'
+          ? item.quantity + movement.quantity
+          : movement.type == 'adjustment'
+              ? movement.quantity
+              : item.quantity - movement.quantity;
+      if (nextQuantity < 0) throw StateError('الكمية المتاحة لا تكفي للصرف');
+      final nextCost = movement.type == 'purchase' && nextQuantity > 0
+          ? ((item.quantity * item.unitCost) + (movement.quantity * movement.unitCost)) / nextQuantity
+          : item.unitCost;
+      transaction.set(itemRef, item.copyWith(quantity: nextQuantity, unitCost: nextCost, updatedAt: DateTime.now()).toMap());
+      transaction.set(movementRef, movement.toMap());
+    });
+  }
 
   // ---------- Weekly chair profitability ----------
   Stream<List<ChairWeeklyProfit>> watchChairWeeklyProfits(String shopId) =>

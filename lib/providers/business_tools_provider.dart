@@ -20,6 +20,8 @@ class BusinessToolsProvider extends ChangeNotifier {
   List<LoyaltyGift> loyaltyGifts = [];
   List<Chair> chairs = [];
   List<ChairSupply> chairSupplies = [];
+  List<InventoryItem> inventory = [];
+  List<InventoryMovement> inventoryMovements = [];
   List<ChairWeeklyProfit> weeklyProfits = [];
   List<QueueEntry> queue = [];
   List<Payment> payments = [];
@@ -61,6 +63,14 @@ class BusinessToolsProvider extends ChangeNotifier {
     }));
     _subs.add(db.watchChairSupplies(shopId).listen((value) {
       chairSupplies = value;
+      notifyListeners();
+    }));
+    _subs.add(db.watchInventory(shopId).listen((value) {
+      inventory = value;
+      notifyListeners();
+    }));
+    _subs.add(db.watchInventoryMovements(shopId).listen((value) {
+      inventoryMovements = value;
       notifyListeners();
     }));
     _subs.add(db.watchChairWeeklyProfits(shopId).listen((value) {
@@ -119,6 +129,12 @@ class BusinessToolsProvider extends ChangeNotifier {
       FirestoreService.instance.saveChairSupply(shopId, supply);
   Future<void> deleteChairSupply(String id) =>
       FirestoreService.instance.deleteChairSupply(shopId, id);
+  Future<void> saveInventoryItem(InventoryItem item) =>
+      FirestoreService.instance.saveInventoryItem(shopId, item);
+  Future<void> deleteInventoryItem(String id) =>
+      FirestoreService.instance.deleteInventoryItem(shopId, id);
+  Future<void> applyInventoryMovement(InventoryMovement movement) =>
+      FirestoreService.instance.applyInventoryMovement(shopId, movement);
   Future<void> saveWeeklyProfit(ChairWeeklyProfit report) =>
       FirestoreService.instance.saveChairWeeklyProfit(shopId, report);
 

@@ -9,6 +9,7 @@ import '../../providers/shop_provider.dart';
 import '../../widgets/feature_labels.dart';
 import 'discounts_screen.dart';
 import 'business_management_tabs.dart';
+import 'inventory_tab.dart';
 
 class BusinessToolsScreen extends StatelessWidget {
   const BusinessToolsScreen({super.key});
@@ -16,7 +17,7 @@ class BusinessToolsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 6,
+      length: 7,
       child: Column(
         children: [
           Material(
@@ -28,6 +29,7 @@ class BusinessToolsScreen extends StatelessWidget {
                 Tab(text: 'العملاء', icon: const Icon(Icons.people_alt_outlined)),
                 Tab(text: FeatureLabels.text(context, 'الولاء', 'Loyalty'), icon: const Icon(Icons.stars_outlined)),
                 Tab(text: FeatureLabels.text(context, 'الكراسي', 'Chairs'), icon: const Icon(Icons.event_seat_outlined)),
+                Tab(text: 'المخزون', icon: const Icon(Icons.inventory_2_outlined)),
                 Tab(text: FeatureLabels.text(context, 'الطابور', 'Queue'), icon: const Icon(Icons.people_alt_outlined)),
                 Tab(text: FeatureLabels.text(context, 'المدفوعات', 'Payments'), icon: const Icon(Icons.account_balance_wallet_outlined)),
               ],
@@ -40,6 +42,7 @@ class BusinessToolsScreen extends StatelessWidget {
                 CustomerManagementTab(),
                 LoyaltyProgramTab(),
                 ChairOperationsTab(),
+                InventoryTab(),
                 _QueueTab(),
                 _PaymentsTab(),
               ],

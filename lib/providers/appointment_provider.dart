@@ -102,13 +102,19 @@ class AppointmentProvider extends ChangeNotifier {
         if (item.seriesId == a.seriesId &&
             (item.status == AppointmentStatus.confirmed ||
                 item.status == AppointmentStatus.requested)) {
-          await FirestoreService.instance
-              .updateAppointment(shopId, item.copyWith(status: s));
+          final updated = item.copyWith(status: s);
+          await FirestoreService.instance.updateAppointment(shopId, updated);
+          if (s == AppointmentStatus.completed) {
+            await FirestoreService.instance.consumeMaterialsForAppointment(shopId, updated);
+          }
         }
       }
     } else {
-      await FirestoreService.instance
-          .updateAppointment(shopId, a.copyWith(status: s));
+      final updated = a.copyWith(status: s);
+      await FirestoreService.instance.updateAppointment(shopId, updated);
+      if (s == AppointmentStatus.completed) {
+        await FirestoreService.instance.consumeMaterialsForAppointment(shopId, updated);
+      }
     }
   }
 
