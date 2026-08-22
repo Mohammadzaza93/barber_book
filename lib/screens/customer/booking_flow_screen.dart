@@ -181,6 +181,8 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     }
   }
 
+  String _normalizePhone(String value) => value.replaceAll(RegExp(r'[^0-9+]'), '');
+
   double get _totalAmount {
     final shop = context.read<ShopProvider>();
     return shop.services
@@ -279,6 +281,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
           id: newAppointmentId(),
           shopId: shopId,
           reference: reference,
+          customerId: _normalizePhone(_phone.text),
           customerName: _name.text.trim(),
           customerPhone: _phone.text.trim(),
           customerEmail: _email.text.trim(),
@@ -307,6 +310,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
         id: newAppointmentId(),
         shopId: shopId,
         reference: reference,
+        customerId: _normalizePhone(_phone.text),
         customerName: _name.text.trim(),
         customerPhone: _phone.text.trim(),
         customerEmail: _email.text.trim(),

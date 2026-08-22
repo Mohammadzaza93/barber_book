@@ -7,6 +7,7 @@ import '../../models/appointment.dart';
 import '../../models/enums.dart';
 import '../../models/service.dart';
 import '../../providers/appointment_provider.dart';
+import '../../providers/business_tools_provider.dart';
 import '../../providers/discount_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/booking_calc.dart';
@@ -40,6 +41,7 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
 
   List<String> _serviceIds = [];
   String? _employeeId;
+  String? _chairId;
   DateTime? _date;
   DateTime? _slot;
   bool _recurring = false;
@@ -58,6 +60,7 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
       _notes.text = a.notes;
       _serviceIds = List.from(a.serviceIds);
       _employeeId = a.employeeId;
+      _chairId = a.chairId;
       _date = a.startTime;
       _slot = a.startTime;
       _recurring = a.recurring;
@@ -142,6 +145,17 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
     final provider = context.read<AppointmentProvider>();
     final discountProvider = context.read<DiscountProvider>();
     final shopId = ShopManager.shopId!;
+    if (provider.hasConflict(
+      employeeId: _employeeId!,
+      chairId: _chairId,
+      start: _slot!,
+      end: _slot!.add(Duration(minutes: _totalDuration)),
+      excludeId: _a?.id,
+    )) {
+      if (mounted) showSnack(context, 'الحلاق أو الكرسي مرتبط بموعد آخر في هذا الوقت');
+      if (mounted) setState(() => _busy = false);
+      return;
+    }
 
     final selected = shop.services
         .where((s) => _serviceIds.contains(s.id))
@@ -180,10 +194,12 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
             id: newAppointmentId(),
             shopId: shopId,
             reference: reference,
+            customerId: _normalizePhone(_phone.text),
             customerName: _name.text.trim(),
             customerPhone: _phone.text.trim(),
             customerEmail: _email.text.trim(),
             employeeId: _employeeId!,
+            chairId: _chairId,
             serviceIds: _serviceIds,
             startTime: occ,
             endTime: occEnd,
@@ -208,10 +224,12 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
         id: newAppointmentId(),
         shopId: shopId,
         reference: reference,
+        customerId: _normalizePhone(_phone.text),
         customerName: _name.text.trim(),
         customerPhone: _phone.text.trim(),
         customerEmail: _email.text.trim(),
         employeeId: _employeeId!,
+        chairId: _chairId,
         serviceIds: _serviceIds,
         startTime: start,
         endTime: end,
@@ -240,6 +258,7 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
   @override
   Widget build(BuildContext context) {
     final shop = context.watch<ShopProvider>();
+    final tools = context.watch<BusinessToolsProvider>();
     final settings = shop.settings!;
     final currency = settings.currency;
 
@@ -248,15 +267,15 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
           title: Text(
               _isNew ? t(context).newAppointment : t(context).editAppointment)),
       body: _isNew
-          ? _buildCreate(context, shop, settings, currency)
-          : _buildView(context, shop, settings, currency),
+          ? _buildCreate(context, shop, tools, settings, currency)
+          : _buildView(context, shop, tools, settings, currency),
     );
   }
 
   // ---------- Create mode ----------
 
   Widget _buildCreate(
-      BuildContext context, ShopProvider shop, settings, String currency) {
+      BuildContext context, ShopProvider shop, BusinessToolsProvider tools, settings, String currency) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -292,12 +311,30 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
                 label: Text(e.name),
                 selected: selected,
                 onSelected: (_) {
-                  setState(() => _employeeId = e.id);
+                  setState(() {
+                    _employeeId = e.id;
+                    _chairId = null;
+                  });
                   _recomputeSlots();
                 },
               );
             }).toList(),
           ),
+          if (_employeeId != null && tools.chairs.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: DropdownButtonFormField<String>(
+                value: _chairId,
+                decoration: const InputDecoration(
+                  labelText: 'كرسي الحلاقة',
+                  prefixIcon: Icon(Icons.event_seat_outlined),
+                ),
+                items: tools.chairs.where((chair) => chair.active && (chair.employeeId == null || chair.employeeId == _employeeId)).map(
+                    (chair) => DropdownMenuItem(value: chair.id, child: Text(chair.number.isEmpty ? chair.name : 'كرسي ${chair.number} — ${chair.name}')),
+                  ).toList(),
+                onChanged: (value) => setState(() => _chairId = value),
+              ),
+            ),
         ]),
         _section(context, t(context).chooseDateTime, [
           OutlinedButton.icon(
@@ -382,13 +419,14 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
   // ---------- View mode ----------
 
   Widget _buildView(
-      BuildContext context, ShopProvider shop, settings, String currency) {
+      BuildContext context, ShopProvider shop, BusinessToolsProvider tools, settings, String currency) {
     final a = _a!;
     final services = a.serviceIds
         .map((id) => shop.serviceById(id))
         .whereType<Service>()
         .toList();
     final employeeName = shop.employeeById(a.employeeId)?.name ?? '-';
+    final chair = a.chairId == null ? null : tools.chairs.where((item) => item.id == a.chairId).firstOrNull;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -424,6 +462,7 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
                 if (a.customerEmail.isNotEmpty)
                   _infoRow(Icons.mail_outline_rounded, a.customerEmail),
                 _infoRow(Icons.person_rounded, employeeName),
+                if (chair != null) _infoRow(Icons.event_seat_outlined, chair.number.isEmpty ? chair.name : 'كرسي ${chair.number} — ${chair.name}'),
                 _infoRow(Icons.content_cut_rounded,
                     services.map((s) => s.name).join(' + ')),
                 if (a.notes.isNotEmpty)
@@ -613,8 +652,9 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
     );
   }
 
-  Widget _field(String label, TextEditingController c,
-      {IconData? icon, TextInputType? keyboard, bool optional = false}) {
+  String _normalizePhone(String value) => value.replaceAll(RegExp(r'[^0-9+]'), '');
+
+  Widget _field(String label, TextEditingController controller, {IconData? icon, TextInputType? keyboard, bool optional = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: TextFormField(

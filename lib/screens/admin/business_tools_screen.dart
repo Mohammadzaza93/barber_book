@@ -8,6 +8,7 @@ import '../../providers/business_tools_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../widgets/feature_labels.dart';
 import 'discounts_screen.dart';
+import 'business_management_tabs.dart';
 
 class BusinessToolsScreen extends StatelessWidget {
   const BusinessToolsScreen({super.key});
@@ -15,7 +16,7 @@ class BusinessToolsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Column(
         children: [
           Material(
@@ -24,6 +25,7 @@ class BusinessToolsScreen extends StatelessWidget {
               isScrollable: true,
               tabs: [
                 Tab(text: FeatureLabels.text(context, 'الأعمال', 'Portfolio'), icon: const Icon(Icons.photo_library_outlined)),
+                Tab(text: 'العملاء', icon: const Icon(Icons.people_alt_outlined)),
                 Tab(text: FeatureLabels.text(context, 'الولاء', 'Loyalty'), icon: const Icon(Icons.stars_outlined)),
                 Tab(text: FeatureLabels.text(context, 'الكراسي', 'Chairs'), icon: const Icon(Icons.event_seat_outlined)),
                 Tab(text: FeatureLabels.text(context, 'الطابور', 'Queue'), icon: const Icon(Icons.people_alt_outlined)),
@@ -35,8 +37,9 @@ class BusinessToolsScreen extends StatelessWidget {
             child: TabBarView(
               children: [
                 _PortfolioTab(),
-                _LoyaltyTab(),
-                _ChairsTab(),
+                CustomerManagementTab(),
+                LoyaltyProgramTab(),
+                ChairOperationsTab(),
                 _QueueTab(),
                 _PaymentsTab(),
               ],
@@ -311,23 +314,32 @@ class _PaymentsTab extends StatelessWidget {
     final customer = TextEditingController();
     final phone = TextEditingController();
     final amount = TextEditingController();
+    final materialCost = TextEditingController(text: '0');
     final appointment = TextEditingController();
+    final tools = context.read<BusinessToolsProvider>();
+    final shop = context.read<ShopProvider>();
+    String? chairId = tools.chairs.where((chair) => chair.active).firstOrNull?.id;
+    String? employeeId;
     String method = 'cash';
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => StatefulBuilder(builder: (context, setState) => AlertDialog(
-        title: const Text('تسجيل دفعة'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
+        title: const Text('تسجيل دفعة ومبيعات الكرسي'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(controller: customer, decoration: const InputDecoration(labelText: 'اسم العميل')),
           TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'هاتف العميل')),
           TextField(controller: appointment, decoration: const InputDecoration(labelText: 'رقم الموعد')),
-          TextField(controller: amount, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المبلغ')),
+          TextField(controller: amount, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المبلغ المحصل')),
+          TextField(controller: materialCost, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'تكلفة المواد المستخدمة')),
+          if (tools.chairs.isNotEmpty)
+            DropdownButtonFormField<String>(value: chairId, decoration: const InputDecoration(labelText: 'كرسي الحلاقة'), items: tools.chairs.where((chair) => chair.active).map((chair) => DropdownMenuItem(value: chair.id, child: Text(chair.number.isEmpty ? chair.name : 'كرسي ${chair.number} — ${chair.name}'))).toList(), onChanged: (value) => setState(() => chairId = value)),
+          DropdownButtonFormField<String>(value: employeeId, decoration: const InputDecoration(labelText: 'الحلاق'), items: shop.activeEmployees.map((employee) => DropdownMenuItem(value: employee.id, child: Text(employee.name))).toList(), onChanged: (value) => setState(() => employeeId = value)),
           DropdownButtonFormField<String>(value: method, items: const [
             DropdownMenuItem(value: 'cash', child: Text('نقدي')),
             DropdownMenuItem(value: 'card', child: Text('بطاقة')),
             DropdownMenuItem(value: 'transfer', child: Text('تحويل')),
-          ], onChanged: (v) => setState(() => method = v ?? 'cash')),
-        ]),
+            ], onChanged: (v) => setState(() => method = v ?? 'cash')),
+        ])),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
           FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('حفظ')),
@@ -337,21 +349,26 @@ class _PaymentsTab extends StatelessWidget {
     if (ok != true || !context.mounted) return;
     final value = double.tryParse(amount.text);
     if (value == null || value <= 0) return;
-    final tools = context.read<BusinessToolsProvider>();
-    await tools.addPayment(Payment(id: tools.newId(), appointmentId: appointment.text.trim(), customerName: customer.text.trim(), customerPhone: phone.text.trim(), amount: value, method: method, paidAt: DateTime.now()));
+    final cost = double.tryParse(materialCost.text) ?? 0;
+    await tools.addPayment(Payment(id: tools.newId(), appointmentId: appointment.text.trim(), customerName: customer.text.trim(), customerPhone: phone.text.trim(), chairId: chairId, employeeId: employeeId, amount: value, materialCost: cost, method: method, paidAt: DateTime.now()));
   }
 
   @override
   Widget build(BuildContext context) {
     final tools = context.watch<BusinessToolsProvider>();
     final total = tools.payments.fold<double>(0, (sum, p) => sum + p.amount);
+    final materialTotal = tools.payments.fold<double>(0, (sum, p) => sum + p.materialCost);
     final currency = context.watch<ShopProvider>().settings?.currency ?? 'SAR';
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(onPressed: () => _addPayment(context), icon: const Icon(Icons.add_card), label: const Text('تسجيل دفعة')),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          Card(child: ListTile(leading: const Icon(Icons.account_balance_wallet), title: const Text('إجمالي المدفوعات المسجلة'), trailing: Text(fmtPrice(total, currency), style: const TextStyle(fontWeight: FontWeight.w800)))),
+          Row(children: [
+            Expanded(child: Card(child: ListTile(leading: const Icon(Icons.account_balance_wallet), title: const Text('المبيعات'), subtitle: Text(fmtPrice(total, currency)),))),
+            Expanded(child: Card(child: ListTile(leading: const Icon(Icons.inventory_2_outlined), title: const Text('المواد'), subtitle: Text(fmtPrice(materialTotal, currency)),))),
+            Expanded(child: Card(child: ListTile(leading: const Icon(Icons.trending_up), title: const Text('الصافي'), subtitle: Text(fmtPrice(total - materialTotal, currency)),))),
+          ]),
           Card(child: ListTile(leading: const Icon(Icons.local_offer_outlined), title: const Text('الترويج للخدمات'), subtitle: const Text('أنشئ عروضًا وأكواد خصم وشاركها مع العملاء.'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscountsScreen())))),
           const SizedBox(height: 8),
           ...tools.payments.map(
@@ -362,7 +379,7 @@ class _PaymentsTab extends StatelessWidget {
                   payment.customerName.isEmpty ? 'عميل' : payment.customerName,
                 ),
                 subtitle: Text(
-                  '${payment.method} · ${DateFormat('yyyy/MM/dd HH:mm').format(payment.paidAt)}',
+                  '${payment.method} · ${DateFormat('yyyy/MM/dd HH:mm').format(payment.paidAt)} · صافي ${fmtPrice(payment.profit, currency)}',
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,

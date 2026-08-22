@@ -266,6 +266,21 @@ class FirestoreService {
   Future<void> deletePortfolioItem(String shopId, String id) =>
       _coll(shopId, 'portfolio').doc(id).delete();
 
+  // ---------- Customers ----------
+  Stream<List<CustomerProfile>> watchCustomers(String shopId) =>
+      _coll(shopId, 'customers')
+          .orderBy('updatedAt', descending: true)
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => CustomerProfile.fromMap(d.id, d.data()))
+              .toList());
+
+  Future<void> saveCustomer(String shopId, CustomerProfile customer) =>
+      _coll(shopId, 'customers').doc(customer.id).set(customer.toMap());
+
+  Future<void> deleteCustomer(String shopId, String id) =>
+      _coll(shopId, 'customers').doc(id).delete();
+
   // ---------- Loyalty ----------
   Stream<List<LoyaltyAccount>> watchLoyalty(String shopId) =>
       _coll(shopId, 'loyalty')
@@ -276,11 +291,75 @@ class FirestoreService {
               .toList());
   Future<void> saveLoyalty(String shopId, LoyaltyAccount account) =>
       _coll(shopId, 'loyalty').doc(account.id).set(account.toMap());
-  Future<void> addLoyaltyPoints(String shopId, String id, int points) =>
-      _coll(shopId, 'loyalty').doc(id).update({
-        'points': FieldValue.increment(points),
-        'updatedAt': FieldValue.serverTimestamp(),
+
+  Future<void> addLoyaltyPoints(String shopId, String id, int points) async {
+    final ref = _coll(shopId, 'loyalty').doc(id);
+    await _db.runTransaction((transaction) async {
+      final snap = await transaction.get(ref);
+      if (!snap.exists) return;
+      final current = LoyaltyAccount.fromMap(ref.id, snap.data() ?? {});
+      final updated = current.copyWith(
+        points: (current.points + points).clamp(0, 100000000).toInt(),
+        tier: current.copyWith(points: current.points + points).calculatedTier,
+        updatedAt: DateTime.now(),
+      );
+      transaction.set(ref, updated.toMap());
+    });
+  }
+
+  Stream<List<LoyaltyRule>> watchLoyaltyRules(String shopId) =>
+      _coll(shopId, 'loyaltyRules')
+          .orderBy('updatedAt', descending: true)
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => LoyaltyRule.fromMap(d.id, d.data()))
+              .toList());
+
+  Future<void> saveLoyaltyRule(String shopId, LoyaltyRule rule) =>
+      _coll(shopId, 'loyaltyRules').doc(rule.id).set(rule.toMap());
+
+  Future<void> deleteLoyaltyRule(String shopId, String id) =>
+      _coll(shopId, 'loyaltyRules').doc(id).delete();
+
+  Stream<List<LoyaltyGift>> watchLoyaltyGifts(String shopId) =>
+      _coll(shopId, 'loyaltyGifts')
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => LoyaltyGift.fromMap(d.id, d.data()))
+              .toList());
+
+  Future<void> saveLoyaltyGift(String shopId, LoyaltyGift gift) =>
+      _coll(shopId, 'loyaltyGifts').doc(gift.id).set(gift.toMap());
+
+  Future<void> deleteLoyaltyGift(String shopId, String id) =>
+      _coll(shopId, 'loyaltyGifts').doc(id).delete();
+
+  Future<void> redeemLoyaltyGift(String shopId, String accountId, LoyaltyGift gift) async {
+    final accountRef = _coll(shopId, 'loyalty').doc(accountId);
+    final giftRef = _coll(shopId, 'loyaltyGifts').doc(gift.id);
+    await _db.runTransaction((transaction) async {
+      final accountSnap = await transaction.get(accountRef);
+      final giftSnap = await transaction.get(giftRef);
+      if (!accountSnap.exists || !giftSnap.exists) {
+        throw StateError('السجل غير موجود');
+      }
+      final account = LoyaltyAccount.fromMap(accountId, accountSnap.data() ?? {});
+      final currentGift = LoyaltyGift.fromMap(gift.id, giftSnap.data() ?? {});
+      if (account.points < currentGift.pointsCost || !currentGift.isAvailable) {
+        throw StateError('النقاط غير كافية أو الهدية غير متاحة');
+      }
+      final updatedAccount = account.copyWith(
+        points: account.points - currentGift.pointsCost,
+        tier: account.copyWith(points: account.points - currentGift.pointsCost).calculatedTier,
+        updatedAt: DateTime.now(),
+      );
+      transaction.set(accountRef, updatedAccount.toMap());
+      transaction.update(giftRef, {
+        'redeemedCount': FieldValue.increment(1),
       });
+    });
+  }
 
   // ---------- Chairs ----------
   Stream<List<Chair>> watchChairs(String shopId) =>
@@ -291,6 +370,33 @@ class FirestoreService {
       _coll(shopId, 'chairs').doc(chair.id).set(chair.toMap());
   Future<void> deleteChair(String shopId, String id) =>
       _coll(shopId, 'chairs').doc(id).delete();
+
+  // ---------- Chair supplies ----------
+  Stream<List<ChairSupply>> watchChairSupplies(String shopId) =>
+      _coll(shopId, 'chairSupplies')
+          .orderBy('updatedAt', descending: true)
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => ChairSupply.fromMap(d.id, d.data()))
+              .toList());
+
+  Future<void> saveChairSupply(String shopId, ChairSupply supply) =>
+      _coll(shopId, 'chairSupplies').doc(supply.id).set(supply.toMap());
+
+  Future<void> deleteChairSupply(String shopId, String id) =>
+      _coll(shopId, 'chairSupplies').doc(id).delete();
+
+  // ---------- Weekly chair profitability ----------
+  Stream<List<ChairWeeklyProfit>> watchChairWeeklyProfits(String shopId) =>
+      _coll(shopId, 'chairWeeklyProfits')
+          .orderBy('weekStart', descending: true)
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => ChairWeeklyProfit.fromMap(d.id, d.data()))
+              .toList());
+
+  Future<void> saveChairWeeklyProfit(String shopId, ChairWeeklyProfit report) =>
+      _coll(shopId, 'chairWeeklyProfits').doc(report.id).set(report.toMap());
 
   // ---------- Queue ----------
   Stream<List<QueueEntry>> watchQueue(String shopId) =>
