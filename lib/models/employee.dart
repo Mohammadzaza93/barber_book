@@ -24,6 +24,10 @@ class Employee {
   final String phone;
   final String email;
   final String? avatarUrl;
+  final String bio;
+  final String specialties;
+  final int experienceYears;
+  final bool showBio;
   final Map<int, List<WorkSlot>> workingHours;
   final List<String> serviceIds;
   final bool active;
@@ -36,6 +40,10 @@ class Employee {
     this.phone = '',
     this.email = '',
     this.avatarUrl,
+    this.bio = '',
+    this.specialties = '',
+    this.experienceYears = 0,
+    this.showBio = true,
     this.workingHours = const {},
     this.serviceIds = const [],
     this.active = true,
@@ -48,6 +56,10 @@ class Employee {
     String? phone,
     String? email,
     String? avatarUrl,
+    String? bio,
+    String? specialties,
+    int? experienceYears,
+    bool? showBio,
     Map<int, List<WorkSlot>>? workingHours,
     List<String>? serviceIds,
     bool? active,
@@ -60,6 +72,10 @@ class Employee {
       phone: phone ?? this.phone,
       email: email ?? this.email,
       avatarUrl: avatarUrl ?? this.avatarUrl,
+      bio: bio ?? this.bio,
+      specialties: specialties ?? this.specialties,
+      experienceYears: experienceYears ?? this.experienceYears,
+      showBio: showBio ?? this.showBio,
       workingHours: workingHours ?? this.workingHours,
       serviceIds: serviceIds ?? this.serviceIds,
       active: active ?? this.active,
@@ -78,6 +94,10 @@ class Employee {
         'phone': phone,
         'email': email,
         'avatarUrl': avatarUrl,
+        'bio': bio,
+        'specialties': specialties,
+        'experienceYears': experienceYears,
+        'showBio': showBio,
         'workingHours': workingHours.map((k, v) =>
             MapEntry(k.toString(), v.map((s) => s.toMap()).toList())),
         'serviceIds': serviceIds,
@@ -103,6 +123,10 @@ class Employee {
       phone: (m['phone'] as String?) ?? '',
       email: (m['email'] as String?) ?? '',
       avatarUrl: m['avatarUrl'] as String?,
+      bio: (m['bio'] as String?) ?? '',
+      specialties: (m['specialties'] as String?) ?? '',
+      experienceYears: (m['experienceYears'] as num?)?.toInt() ?? 0,
+      showBio: (m['showBio'] as bool?) ?? true,
       workingHours: wh,
       serviceIds: (m['serviceIds'] as List<dynamic>? ?? const [])
           .map((e) => e.toString())

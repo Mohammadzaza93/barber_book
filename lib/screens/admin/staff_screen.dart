@@ -43,7 +43,9 @@ class StaffScreen extends StatelessWidget {
                       MaterialPageRoute(
                           builder: (_) => StaffEditScreen(employee: e)),
                     ),
-                    leading: CircleAvatar(
+                    leading: e.avatarUrl != null && e.avatarUrl!.trim().isNotEmpty
+                        ? CircleAvatar(backgroundImage: NetworkImage(e.avatarUrl!))
+                        : CircleAvatar(
                       backgroundColor: Color(e.colorValue).withOpacity(0.15),
                       child: Text(
                         e.name.isEmpty ? '?' : e.name.characters.first,
@@ -77,7 +79,8 @@ class StaffScreen extends StatelessWidget {
                       ],
                     ),
                     subtitle: Text(
-                      '${e.serviceIds.length} ${t(context).servicesSelected}',
+                      '${e.serviceIds.length} ${t(context).servicesSelected}'
+                      '${e.bio.trim().isEmpty ? '' : '  •  سيرة ذاتية مضافة'}',
                       style:
                           TextStyle(color: Colors.grey.shade600, fontSize: 12),
                     ),
@@ -123,6 +126,11 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
   late final TextEditingController _name;
   final _role = TextEditingController();
   final _phone = TextEditingController();
+  final _email = TextEditingController();
+  final _avatarUrl = TextEditingController();
+  final _bio = TextEditingController();
+  final _specialties = TextEditingController();
+  final _experienceYears = TextEditingController();
   late Map<int, List<WorkSlot>> _hours;
   late List<String> _serviceIds;
   late bool _active;
@@ -134,6 +142,11 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     _name = TextEditingController(text: e?.name ?? '');
     _role.text = e?.role ?? 'barber';
     _phone.text = e?.phone ?? '';
+    _email.text = e?.email ?? '';
+    _avatarUrl.text = e?.avatarUrl ?? '';
+    _bio.text = e?.bio ?? '';
+    _specialties.text = e?.specialties ?? '';
+    _experienceYears.text = '${e?.experienceYears ?? 0}';
     _hours = Map.from(e?.workingHours ?? {});
     _serviceIds = List.from(e?.serviceIds ?? []);
     _active = e?.active ?? true;
@@ -144,6 +157,11 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     _name.dispose();
     _role.dispose();
     _phone.dispose();
+    _email.dispose();
+    _avatarUrl.dispose();
+    _bio.dispose();
+    _specialties.dispose();
+    _experienceYears.dispose();
     super.dispose();
   }
 
@@ -159,6 +177,12 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
       name: _name.text.trim(),
       role: _role.text.trim().isEmpty ? 'barber' : _role.text.trim(),
       phone: _phone.text.trim(),
+      email: _email.text.trim(),
+      avatarUrl: _avatarUrl.text.trim().isEmpty ? null : _avatarUrl.text.trim(),
+      bio: _bio.text.trim(),
+      specialties: _specialties.text.trim(),
+      experienceYears: int.tryParse(_experienceYears.text.trim()) ?? 0,
+      showBio: true,
       workingHours: _hours,
       serviceIds: _serviceIds,
       active: _active,
@@ -209,6 +233,31 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 16),
+          const Text('السيرة الذاتية المهنية', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF0F172A))),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _avatarUrl,
+            keyboardType: TextInputType.url,
+            decoration: const InputDecoration(labelText: 'رابط الصورة الشخصية', prefixIcon: Icon(Icons.image_outlined)),
+          ),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: TextFormField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'البريد الإلكتروني', prefixIcon: Icon(Icons.email_outlined)))),
+            const SizedBox(width: 10),
+            SizedBox(width: 130, child: TextFormField(controller: _experienceYears, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'سنوات الخبرة'))),
+          ]),
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: _specialties,
+            decoration: const InputDecoration(labelText: 'التخصصات والمهارات', hintText: 'قصات رجالية، لحية، تدرج... ', prefixIcon: Icon(Icons.workspace_premium_outlined)),
+          ),
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: _bio,
+            maxLines: 5,
+            decoration: const InputDecoration(labelText: 'نبذة عن الموظف', hintText: 'اكتب الخبرة المهنية والإنجازات وطريقة العمل...', prefixIcon: Icon(Icons.description_outlined)),
           ),
           const SizedBox(height: 16),
           Text(t(context).workingHours,

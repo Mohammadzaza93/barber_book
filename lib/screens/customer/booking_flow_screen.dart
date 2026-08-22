@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../l10n/strings.dart';
 import '../../models/appointment.dart';
 import '../../models/enums.dart';
+import '../../models/employee.dart';
 import '../../models/service.dart';
 import '../../models/unavailability_request.dart';
 import '../../providers/appointment_provider.dart';
@@ -634,6 +635,66 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     );
   }
 
+  Widget _employeeBioCard(BuildContext context, Employee? employee) {
+    if (employee == null || !employee.showBio) return const SizedBox.shrink();
+    final hasBio = employee.bio.trim().isNotEmpty ||
+        employee.specialties.trim().isNotEmpty || employee.experienceYears > 0;
+    if (!hasBio) return const SizedBox.shrink();
+    return Card(
+      margin: const EdgeInsets.only(top: 12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => showDialog<void>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: Text(employee.name),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (employee.avatarUrl != null && employee.avatarUrl!.trim().isNotEmpty)
+                    Center(child: CircleAvatar(radius: 36, backgroundImage: NetworkImage(employee.avatarUrl!))),
+                  const SizedBox(height: 12),
+                  Text(employee.role, style: TextStyle(color: Colors.grey.shade700)),
+                  if (employee.experienceYears > 0)
+                    Padding(padding: const EdgeInsets.only(top: 6), child: Text('الخبرة: ${employee.experienceYears} سنة')),
+                  if (employee.specialties.trim().isNotEmpty)
+                    Padding(padding: const EdgeInsets.only(top: 10), child: Text('التخصصات: ${employee.specialties}')),
+                  if (employee.bio.trim().isNotEmpty)
+                    Padding(padding: const EdgeInsets.only(top: 10), child: Text(employee.bio)),
+                ],
+              ),
+            ),
+            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('إغلاق'))],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              employee.avatarUrl != null && employee.avatarUrl!.trim().isNotEmpty
+                  ? CircleAvatar(backgroundImage: NetworkImage(employee.avatarUrl!))
+                  : const CircleAvatar(child: Icon(Icons.person_outline)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(employee.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                    Text(employee.specialties.trim().isEmpty ? employee.role : employee.specialties, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    if (employee.experienceYears > 0) Text('${employee.experienceYears} سنة خبرة', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.info_outline),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _chairSelector(BuildContext context) {
     final chairs = context.watch<BusinessToolsProvider>().chairs.where((c) => c.active).toList();
     if (chairs.isEmpty) return const SizedBox.shrink();
@@ -767,6 +828,8 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                 );
               }).toList(),
             ),
+            if (_employeeId != null)
+              _employeeBioCard(context, shop.employeeById(_employeeId!)),
             const SizedBox(height: 10),
             _chairSelector(context),
             const SizedBox(height: 4),
