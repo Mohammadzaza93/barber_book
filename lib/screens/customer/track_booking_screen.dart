@@ -104,6 +104,7 @@ class _TrackBookingScreenState extends State<TrackBookingScreen> {
             fb.Feedback(
               id: const Uuid().v4(),
               appointmentId: a.id,
+              employeeId: a.employeeId,
               customerName: a.customerName,
               rating: rating,
               comment: comment.text.trim(),

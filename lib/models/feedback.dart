@@ -1,6 +1,7 @@
 class Feedback {
   final String id;
   final String appointmentId;
+  final String? employeeId;
   final String customerName;
   final int rating; // 1..5
   final String comment;
@@ -10,6 +11,7 @@ class Feedback {
   const Feedback({
     required this.id,
     required this.appointmentId,
+    this.employeeId,
     required this.customerName,
     required this.rating,
     this.comment = '',
@@ -20,6 +22,7 @@ class Feedback {
   Feedback copyWith({bool? showOnPage}) => Feedback(
         id: id,
         appointmentId: appointmentId,
+        employeeId: employeeId,
         customerName: customerName,
         rating: rating,
         comment: comment,
@@ -29,6 +32,7 @@ class Feedback {
 
   Map<String, dynamic> toMap() => {
         'appointmentId': appointmentId,
+        'employeeId': employeeId,
         'customerName': customerName,
         'rating': rating,
         'comment': comment,
@@ -39,6 +43,7 @@ class Feedback {
   factory Feedback.fromMap(String id, Map<String, dynamic> m) => Feedback(
         id: id,
         appointmentId: (m['appointmentId'] as String?) ?? '',
+        employeeId: m['employeeId'] as String?,
         customerName: (m['customerName'] as String?) ?? '',
         rating: (m['rating'] as num?)?.toInt() ?? 5,
         comment: (m['comment'] as String?) ?? '',

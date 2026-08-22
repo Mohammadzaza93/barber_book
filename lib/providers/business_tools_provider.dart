@@ -7,6 +7,7 @@ import '../models/appointment.dart';
 import '../models/business_features.dart';
 import '../models/enums.dart';
 import '../services/firestore_service.dart';
+import '../services/notification_service.dart';
 
 class BusinessToolsProvider extends ChangeNotifier {
   String? _shopId;
@@ -154,6 +155,10 @@ class BusinessToolsProvider extends ChangeNotifier {
       );
       await saveLoyalty(account.copyWith(tier: account.calculatedTier));
     }
+    await NotificationService.instance.show(
+      'تمت إضافة نقاط الولاء',
+      'تمت إضافة $earned نقطة للعميل ${payment.customerName.isEmpty ? payment.customerPhone : payment.customerName}.',
+    );
   }
 
   Future<void> deletePayment(String id) =>

@@ -37,6 +37,20 @@ class FeedbackProvider extends ChangeNotifier {
     return approved.fold(0.0, (s, f) => s + f.rating) / approved.length;
   }
 
+  List<Feedback> forEmployee(String employeeId, {bool approvedOnly = true}) {
+    final source = approvedOnly ? approved : feedback;
+    return source.where((f) => f.employeeId == employeeId).toList();
+  }
+
+  double averageForEmployee(String employeeId, {bool approvedOnly = true}) {
+    final reviews = forEmployee(employeeId, approvedOnly: approvedOnly);
+    if (reviews.isEmpty) return 0;
+    return reviews.fold<double>(0, (sum, review) => sum + review.rating) / reviews.length;
+  }
+
+  int countForEmployee(String employeeId, {bool approvedOnly = true}) =>
+      forEmployee(employeeId, approvedOnly: approvedOnly).length;
+
   Future<void> add(Feedback f, String shopId) =>
       FirestoreService.instance.addFeedback(shopId, f);
 

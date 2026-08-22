@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../../l10n/strings.dart';
 import '../../models/employee.dart';
 import '../../providers/shop_provider.dart';
+import '../../providers/feedback_provider.dart';
 import '../../services/shop_manager.dart';
 import '../../widgets/confirm.dart';
 import '../../widgets/empty_state.dart';
@@ -80,7 +81,8 @@ class StaffScreen extends StatelessWidget {
                     ),
                     subtitle: Text(
                       '${e.serviceIds.length} ${t(context).servicesSelected}'
-                      '${e.bio.trim().isEmpty ? '' : '  •  سيرة ذاتية مضافة'}',
+                      '${e.bio.trim().isEmpty ? '' : '  •  سيرة ذاتية مضافة'}'
+                      '${context.read<FeedbackProvider>().countForEmployee(e.id) == 0 ? '' : '  •  ${context.read<FeedbackProvider>().averageForEmployee(e.id).toStringAsFixed(1)} ★ (${context.read<FeedbackProvider>().countForEmployee(e.id)})'}',
                       style:
                           TextStyle(color: Colors.grey.shade600, fontSize: 12),
                     ),

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../l10n/strings.dart';
 import '../../models/feedback.dart' as fb;
 import '../../providers/feedback_provider.dart';
+import '../../providers/shop_provider.dart';
 import '../../services/shop_manager.dart';
 import '../../widgets/empty_state.dart';
 
@@ -84,6 +85,9 @@ class _FeedbackCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final f = feedback;
+    final barberName = f.employeeId == null
+        ? null
+        : context.read<ShopProvider>().employeeById(f.employeeId!)?.name;
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
@@ -94,8 +98,13 @@ class _FeedbackCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(f.customerName,
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(f.customerName, style: const TextStyle(fontWeight: FontWeight.w700)),
+                      if (barberName != null) Text('للحلاق: $barberName', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                    ],
+                  ),
                 ),
                 Row(
                   mainAxisSize: MainAxisSize.min,

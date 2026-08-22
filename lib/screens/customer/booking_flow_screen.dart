@@ -637,6 +637,9 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
 
   Widget _employeeBioCard(BuildContext context, Employee? employee) {
     if (employee == null || !employee.showBio) return const SizedBox.shrink();
+    final feedback = context.watch<FeedbackProvider>();
+    final rating = feedback.averageForEmployee(employee.id);
+    final reviewCount = feedback.countForEmployee(employee.id);
     final hasBio = employee.bio.trim().isNotEmpty ||
         employee.specialties.trim().isNotEmpty || employee.experienceYears > 0;
     if (!hasBio) return const SizedBox.shrink();
@@ -657,6 +660,8 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                     Center(child: CircleAvatar(radius: 36, backgroundImage: NetworkImage(employee.avatarUrl!))),
                   const SizedBox(height: 12),
                   Text(employee.role, style: TextStyle(color: Colors.grey.shade700)),
+                  if (reviewCount > 0)
+                    Padding(padding: const EdgeInsets.only(top: 6), child: Row(children: [const Icon(Icons.star_rounded, color: Colors.amber, size: 18), const SizedBox(width: 4), Text('${rating.toStringAsFixed(1)} من 5 ($reviewCount تقييم)')])),
                   if (employee.experienceYears > 0)
                     Padding(padding: const EdgeInsets.only(top: 6), child: Text('الخبرة: ${employee.experienceYears} سنة')),
                   if (employee.specialties.trim().isNotEmpty)
@@ -682,6 +687,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(employee.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                    if (reviewCount > 0) Text('★ ${rating.toStringAsFixed(1)} ($reviewCount)', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w700)),
                     Text(employee.specialties.trim().isEmpty ? employee.role : employee.specialties, maxLines: 1, overflow: TextOverflow.ellipsis),
                     if (employee.experienceYears > 0) Text('${employee.experienceYears} سنة خبرة', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                   ],

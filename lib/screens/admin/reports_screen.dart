@@ -7,6 +7,7 @@ import '../../l10n/strings.dart';
 import '../../models/appointment.dart';
 import '../../models/expense.dart';
 import '../../providers/appointment_provider.dart';
+import '../../providers/business_tools_provider.dart';
 import '../../providers/expense_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/analytics_service.dart';
@@ -31,6 +32,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget build(BuildContext context) {
     final appointments = context.watch<AppointmentProvider>().appointments;
     final expenses = context.watch<ExpenseProvider>().expenses;
+    final businessTools = context.watch<BusinessToolsProvider>();
     final shop = context.watch<ShopProvider>();
     final settings = shop.settings;
     final currency = settings?.currency ?? 'SAR';
@@ -129,6 +131,27 @@ class _ReportsScreenState extends State<ReportsScreen> {
         const SizedBox(height: 8),
         SectionHeader(title: t(context).staffPerformance),
         _StaffList(shop: shop, appointments: appointments, currency: currency),
+        const SizedBox(height: 16),
+        const SectionHeader(title: 'ربحية كراسي الحلاقة — التقارير المحفوظة'),
+        if (businessTools.weeklyProfits.isEmpty)
+          const Card(child: ListTile(title: Text('لا توجد تقارير محفوظة بعد'), subtitle: Text('اذهب إلى أدوات الأعمال ← الكراسي وأدخل الربح الأسبوعي لكل كرسي.')))
+        else
+          ...businessTools.weeklyProfits.take(12).map((report) {
+            final chair = businessTools.chairs.where((item) => item.id == report.chairId).firstOrNull;
+            final chairName = chair == null
+                ? 'كرسي غير معروف'
+                : chair.number.trim().isEmpty
+                    ? chair.name
+                    : 'كرسي ${chair.number} — ${chair.name}';
+            return Card(
+              child: ListTile(
+                leading: const Icon(Icons.event_seat_outlined),
+                title: Text(chairName),
+                subtitle: Text('${DateFormat('yyyy/MM/dd').format(report.weekStart)}  •  ${report.completedVisits} زيارة  •  ${report.manualProfit == null ? 'محسوب من الإيراد والمواد' : 'ربح معتمد يدويًا'}'),
+                trailing: Text(fmtPrice(report.profit, currency), style: const TextStyle(fontWeight: FontWeight.w800)),
+              ),
+            );
+          }),
         const SizedBox(height: 24),
       ],
     );
