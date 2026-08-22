@@ -658,7 +658,7 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: TextFormField(
-        controller: c,
+        controller: controller,
         keyboardType: keyboard,
         decoration: InputDecoration(
           labelText: optional ? '$label ${t(context).optional}' : label,
