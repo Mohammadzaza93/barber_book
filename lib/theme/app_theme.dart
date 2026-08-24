@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+const Color appBrandBackground = Color(0xFF0B0B0D);
+const Color appBrandGold = Color(0xFFD8B15A);
+const Color appBrandGoldDark = Color(0xFFB8892E);
+
 Color parseHexColor(String hex, {Color fallback = const Color(0xFF2563EB)}) {
   try {
     var h = hex.replaceAll('0x', '').replaceAll('#', '').trim();
@@ -12,14 +16,21 @@ Color parseHexColor(String hex, {Color fallback = const Color(0xFF2563EB)}) {
 }
 
 ThemeData buildAppTheme({Color primary = const Color(0xFF111827), Color accent = const Color(0xFF2563EB)}) {
-  final scheme = ColorScheme.fromSeed(seedColor: accent, brightness: Brightness.light);
+  final scheme = ColorScheme.fromSeed(
+    seedColor: accent,
+    brightness: Brightness.light,
+  ).copyWith(
+    primary: accent,
+    secondary: appBrandGold,
+    surface: Colors.white,
+  );
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
-    scaffoldBackgroundColor: const Color(0xFFF6F7FB),
+    scaffoldBackgroundColor: const Color(0xFFF9F5EC),
     appBarTheme: const AppBarTheme(
-      backgroundColor: Colors.white,
-      foregroundColor: Color(0xFF111827),
+      backgroundColor: appBrandBackground,
+      foregroundColor: Colors.white,
       elevation: 0,
       centerTitle: true,
     ),
@@ -44,7 +55,7 @@ ThemeData buildAppTheme({Color primary = const Color(0xFF111827), Color accent =
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: accent, width: 1.5),
+        borderSide: BorderSide(color: appBrandGoldDark, width: 1.5),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     ),
@@ -66,11 +77,11 @@ ThemeData buildAppTheme({Color primary = const Color(0xFF111827), Color accent =
     ),
     chipTheme: ChipThemeData(
       backgroundColor: const Color(0xFFF1F5F9),
-      selectedColor: accent.withOpacity(0.15),
+      selectedColor: appBrandGold.withOpacity(0.2),
       side: BorderSide.none,
       labelStyle: const TextStyle(color: Color(0xFF0F172A)),
     ),
-    dividerTheme: const DividerThemeData(color: Color(0xFFEEF2F7)),
+    dividerTheme: const DividerThemeData(color: Color(0xFFE9DDC6)),
     progressIndicatorTheme: ProgressIndicatorThemeData(color: accent),
   );
 }

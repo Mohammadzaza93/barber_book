@@ -5,6 +5,7 @@ import '../../l10n/strings.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/language_provider.dart';
 import '../../widgets/confirm.dart';
+import '../../theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -63,7 +64,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Icon(Icons.content_cut_rounded,
-                            size: 32, color: Color(0xFF0F172A)),
+                            size: 32, color: appBrandBackground),
                         SegmentedButton<Locale>(
                           segments: const [
                             ButtonSegment(
@@ -83,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 40),
                     const Icon(Icons.content_cut_rounded,
-                        size: 64, color: Color(0xFF2563EB)),
+                        size: 64, color: appBrandGold),
                     const SizedBox(height: 12),
                     Text(
                       _isRegister

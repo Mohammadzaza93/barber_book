@@ -7,6 +7,7 @@ import '../../models/appointment.dart';
 import '../../models/enums.dart';
 import '../../providers/appointment_provider.dart';
 import '../../providers/shop_provider.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/status_chip.dart';
 import 'appointment_edit_screen.dart';
@@ -112,6 +113,8 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
         ),
         icon: const Icon(Icons.add_rounded),
         label: Text(t(context).newAppointment),
+        backgroundColor: appBrandGoldDark,
+        foregroundColor: Colors.white,
       ),
     );
   }

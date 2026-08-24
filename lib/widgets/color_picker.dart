@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
+
 class ColorOption {
   final String hex;
   final Color color;
@@ -57,7 +59,7 @@ class ColorPicker extends StatelessWidget {
                   color: o.color,
                   shape: BoxShape.circle,
                   border: isSelected
-                      ? Border.all(color: Theme.of(context).colorScheme.primary, width: 3)
+                      ? Border.all(color: appBrandGoldDark, width: 3)
                       : null,
                 ),
                 child: isSelected

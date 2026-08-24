@@ -12,6 +12,7 @@ import 'providers/feedback_provider.dart';
 import 'providers/language_provider.dart';
 import 'providers/shop_provider.dart';
 import 'screens/root_gate.dart';
+import 'theme/app_theme.dart';
 
 class BarberApp extends StatelessWidget {
   const BarberApp({super.key});
@@ -44,7 +45,16 @@ class _Material extends StatelessWidget {
       title: 'BarberBook',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.light,
-      theme: ThemeData(useMaterial3: true),
+      theme: buildAppTheme(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            splashColor: appBrandGold.withOpacity(0.12),
+            highlightColor: appBrandGold.withOpacity(0.08),
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       locale: lang.locale,
       supportedLocales: const [Locale('ar'), Locale('en')],
       localizationsDelegates: const [

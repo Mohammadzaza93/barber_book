@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/strings.dart';
 import '../models/enums.dart';
+import '../theme/app_theme.dart';
 
 Color statusColor(AppointmentStatus s) => switch (s) {
       AppointmentStatus.requested => Colors.orange,
@@ -29,8 +30,15 @@ class StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: c.withOpacity(0.12),
+        color: status == AppointmentStatus.confirmed
+            ? appBrandGold.withOpacity(0.14)
+            : c.withOpacity(0.12),
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: status == AppointmentStatus.confirmed
+              ? appBrandGold.withOpacity(0.3)
+              : c.withOpacity(0.18),
+        ),
       ),
       child: Text(
         statusLabel(context, status),
