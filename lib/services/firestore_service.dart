@@ -1,12 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/appointment.dart';
+import '../models/app_role.dart';
 import '../models/business_features.dart';
 import '../models/booking_settings.dart';
 import '../models/discount.dart';
 import '../models/employee.dart';
 import '../models/expense.dart';
 import '../models/feedback.dart';
+import '../models/member.dart';
 import '../models/service.dart';
 import '../models/unavailability_request.dart';
 
@@ -48,6 +50,7 @@ class FirestoreService {
     await doc.set({
       ...settings.toMap(),
       'ownerId': ownerId,
+      'joinCode': genJoinCode(),
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -423,6 +426,123 @@ class FirestoreService {
       _coll(shopId, 'payments').doc(payment.id).set(payment.toMap());
   Future<void> deletePayment(String shopId, String id) =>
       _coll(shopId, 'payments').doc(id).delete();
+
+  // ---------- Members / Roles ----------
+
+  CollectionReference<Map<String, dynamic>> _members(String shopId) =>
+      _coll(shopId, 'members');
+
+  CollectionReference<Map<String, dynamic>> _users() =>
+      _db.collection('users');
+
+  Stream<List<Member>> watchMembers(String shopId) => _members(shopId)
+      .orderBy('createdAt', descending: false)
+      .snapshots()
+      .map((snap) =>
+          snap.docs.map((d) => Member.fromMap(d.id, d.data())).toList());
+
+  Future<Member?> getMember(String shopId, String uid) async {
+    final snap = await _members(shopId).doc(uid).get();
+    if (!snap.exists) return null;
+    return Member.fromMap(snap.id, snap.data() ?? {});
+  }
+
+  /// يبحث عن محل يملكه المستخدم، وإلا عن محل انضم إليه كعضو.
+  Future<({String? shopId, AppRole role})> resolveShopForUser(
+      String uid) async {
+    final ownedShopId = await findShopByOwner(uid);
+    if (ownedShopId != null) {
+      return (shopId: ownedShopId, role: AppRole.owner);
+    }
+    final profile = await getUserProfile(uid);
+    final joinedShopId = profile?['joinedShopId'] as String?;
+    if (joinedShopId == null || joinedShopId.isEmpty) {
+      return (shopId: null, role: AppRole.staff);
+    }
+    final membership = await getMember(joinedShopId, uid);
+    if (membership == null) {
+      return (shopId: null, role: AppRole.staff);
+    }
+    return (shopId: joinedShopId, role: membership.role);
+  }
+
+  Future<Map<String, dynamic>?> getUserProfile(String uid) async {
+    final snap = await _users().doc(uid).get();
+    return snap.exists ? snap.data() : null;
+  }
+
+  Future<void> _setUserProfile(
+      String uid, String email, String? joinedShopId) async {
+    await _users().doc(uid).set({
+      'email': email,
+      if (joinedShopId != null) 'joinedShopId': joinedShopId,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  /// انضمام المستخدم إلى محل عبر كود الانضمام.
+  /// العضو الجديد يحصل على دور [AppRole.staff] دائماً (أقل صلاحية).
+  Future<void> joinShopByCode({
+    required String uid,
+    required String email,
+    required String code,
+  }) async {
+    final clean = code.trim().toUpperCase();
+    if (clean.isEmpty) throw StateError('joinCodeRequired');
+    final snap = await _shops()
+        .where('joinCode', isEqualTo: clean)
+        .limit(1)
+        .get();
+    if (snap.docs.isEmpty) throw StateError('joinCodeNotFound');
+    final shop = snap.docs.first;
+
+    // منع الانضمام مرتين أو انضمام المالك لمحله بكود.
+    final existing = await getMember(shop.id, uid);
+    if (existing != null) throw StateError('alreadyMember');
+
+    await _members(shop.id).doc(uid).set(Member(
+          uid: uid,
+          email: email,
+          role: AppRole.staff,
+          createdAt: DateTime.now(),
+        ).toMap());
+    await _setUserProfile(uid, email, shop.id);
+  }
+
+  Future<void> updateMemberRole(
+      String shopId, String uid, AppRole role) async {
+    await _members(shopId).doc(uid).update({'role': role.name});
+  }
+
+  Future<void> removeMember(String shopId, String uid) async {
+    await _members(shopId).doc(uid).delete();
+    // إزالة الربط من ملف المستخدم إن كان يشير لنفس المحل.
+    final profile = await getUserProfile(uid);
+    if (profile?['joinedShopId'] == shopId) {
+      await _users().doc(uid).set({
+        'joinedShopId': FieldValue.delete(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+  }
+
+  Future<String> rotateJoinCode(String shopId) async {
+    final code = genJoinCode();
+    await updateSettings(shopId, {'joinCode': code});
+    return code;
+  }
+
+  static String genJoinCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    final rand = DateTime.now().microsecondsSinceEpoch;
+    var seed = rand ^ (rand >> 7);
+    String s = '';
+    for (var i = 0; i < 6; i++) {
+      s += chars[seed % chars.length];
+      seed = seed ~/ 17 + 31 * (i + 1);
+    }
+    return s;
+  }
 
   // ---------- Customer helpers ----------
   static String genReference() {

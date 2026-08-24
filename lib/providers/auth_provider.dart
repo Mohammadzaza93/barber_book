@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../models/app_role.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
@@ -9,6 +10,7 @@ import '../services/shop_manager.dart';
 class AuthProvider extends ChangeNotifier {
   User? user;
   String? shopId;
+  AppRole role = AppRole.staff;
   bool initializing = true;
   String? error;
 
@@ -16,13 +18,22 @@ class AuthProvider extends ChangeNotifier {
     AuthService.instance.authStateChanges.listen(_onAuthChanged);
   }
 
+  bool get isOwner => role == AppRole.owner;
+  bool get canManageRules => role.canManageRules;
+  bool get canManageOperations => role.canManageOperations;
+  bool get canViewReports => role.canViewReports;
+
   Future<void> _onAuthChanged(User? u) async {
     user = u;
     if (u == null) {
       shopId = null;
+      role = AppRole.staff;
       ShopManager.shopId = null;
     } else {
-      shopId = await FirestoreService.instance.findShopByOwner(u.uid);
+      final resolved =
+          await FirestoreService.instance.resolveShopForUser(u.uid);
+      shopId = resolved.shopId;
+      role = resolved.role;
       ShopManager.shopId = shopId;
       if (shopId != null) {
         NotificationService.instance.subscribeToShop();
@@ -79,6 +90,32 @@ class AuthProvider extends ChangeNotifier {
     await NotificationService.instance.subscribeToShop();
     notifyListeners();
     return id;
+  }
+
+  /// انضمام الحساب الحالي إلى محل قائم عبر كود الانضمام (بدور موظف).
+  Future<bool> joinShopByCode(String code) async {
+    error = null;
+    try {
+      await FirestoreService.instance.joinShopByCode(
+        uid: user!.uid,
+        email: user!.email ?? '',
+        code: code,
+      );
+      final resolved =
+          await FirestoreService.instance.resolveShopForUser(user!.uid);
+      shopId = resolved.shopId;
+      role = resolved.role;
+      ShopManager.shopId = shopId;
+      if (shopId != null) {
+        await NotificationService.instance.subscribeToShop();
+      }
+      notifyListeners();
+      return true;
+    } catch (e) {
+      error = e.toString();
+      notifyListeners();
+      return false;
+    }
   }
 
   Future<void> signOut() async {
