@@ -742,3 +742,123 @@ class Payment {
         notes: (m['notes'] as String?) ?? '',
       );
 }
+
+/// مادة في المخزون المركزي للمحل.
+class InventoryItem {
+  final String id;
+  final String name;
+  final String sku;
+  final String category;
+  final String unit;
+  final double quantity;
+  final double unitCost;
+  final double reorderLevel;
+  final bool active;
+  final DateTime updatedAt;
+
+  const InventoryItem({
+    required this.id,
+    required this.name,
+    this.sku = '',
+    this.category = 'general',
+    this.unit = 'piece',
+    this.quantity = 0,
+    this.unitCost = 0,
+    this.reorderLevel = 0,
+    this.active = true,
+    required this.updatedAt,
+  });
+
+  double get stockValue => quantity * unitCost;
+  bool get lowStock => quantity <= reorderLevel;
+
+  InventoryItem copyWith({
+    String? name,
+    String? sku,
+    String? category,
+    String? unit,
+    double? quantity,
+    double? unitCost,
+    double? reorderLevel,
+    bool? active,
+    DateTime? updatedAt,
+  }) => InventoryItem(
+        id: id,
+        name: name ?? this.name,
+        sku: sku ?? this.sku,
+        category: category ?? this.category,
+        unit: unit ?? this.unit,
+        quantity: quantity ?? this.quantity,
+        unitCost: unitCost ?? this.unitCost,
+        reorderLevel: reorderLevel ?? this.reorderLevel,
+        active: active ?? this.active,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'sku': sku,
+        'category': category,
+        'unit': unit,
+        'quantity': quantity,
+        'unitCost': unitCost,
+        'reorderLevel': reorderLevel,
+        'active': active,
+        'updatedAt': updatedAt,
+      };
+
+  factory InventoryItem.fromMap(String id, Map<String, dynamic> m) =>
+      InventoryItem(
+        id: id,
+        name: (m['name'] as String?) ?? '',
+        sku: (m['sku'] as String?) ?? '',
+        category: (m['category'] as String?) ?? 'general',
+        unit: (m['unit'] as String?) ?? 'piece',
+        quantity: ((m['quantity'] as num?) ?? 0).toDouble(),
+        unitCost: ((m['unitCost'] as num?) ?? 0).toDouble(),
+        reorderLevel: ((m['reorderLevel'] as num?) ?? 0).toDouble(),
+        active: (m['active'] as bool?) ?? true,
+        updatedAt: _readDate(m['updatedAt']),
+      );
+}
+
+/// حركة مخزون: شراء / صرف / هدر / جرد.
+class InventoryMovement {
+  final String id;
+  final String itemId;
+  final String type; // purchase | usage | waste | adjustment
+  final double quantity;
+  final double unitCost;
+  final String reason;
+  final DateTime createdAt;
+
+  const InventoryMovement({
+    required this.id,
+    required this.itemId,
+    required this.type,
+    this.quantity = 0,
+    this.unitCost = 0,
+    this.reason = '',
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'itemId': itemId,
+        'type': type,
+        'quantity': quantity,
+        'unitCost': unitCost,
+        'reason': reason,
+        'createdAt': createdAt,
+      };
+
+  factory InventoryMovement.fromMap(String id, Map<String, dynamic> m) =>
+      InventoryMovement(
+        id: id,
+        itemId: (m['itemId'] as String?) ?? '',
+        type: (m['type'] as String?) ?? 'adjustment',
+        quantity: ((m['quantity'] as num?) ?? 0).toDouble(),
+        unitCost: ((m['unitCost'] as num?) ?? 0).toDouble(),
+        reason: (m['reason'] as String?) ?? '',
+        createdAt: _readDate(m['createdAt']),
+      );
+}

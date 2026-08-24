@@ -22,6 +22,8 @@ class BusinessToolsProvider extends ChangeNotifier {
   List<ChairWeeklyProfit> weeklyProfits = [];
   List<QueueEntry> queue = [];
   List<Payment> payments = [];
+  List<InventoryItem> inventory = [];
+  List<InventoryMovement> inventoryMovements = [];
   bool loading = true;
   List<Appointment> _appointments = [];
 
@@ -68,6 +70,14 @@ class BusinessToolsProvider extends ChangeNotifier {
     }));
     _subs.add(db.watchQueue(shopId).listen((value) {
       queue = value;
+      notifyListeners();
+    }));
+    _subs.add(db.watchInventory(shopId).listen((value) {
+      inventory = value;
+      notifyListeners();
+    }));
+    _subs.add(db.watchInventoryMovements(shopId).listen((value) {
+      inventoryMovements = value;
       notifyListeners();
     }));
     _subs.add(db.watchPayments(shopId).listen((value) {
@@ -158,6 +168,50 @@ class BusinessToolsProvider extends ChangeNotifier {
 
   Future<void> deletePayment(String id) =>
       FirestoreService.instance.deletePayment(shopId, id);
+
+  Future<void> saveInventoryItem(InventoryItem item) =>
+      FirestoreService.instance.saveInventoryItem(shopId, item);
+
+  Future<void> deleteInventoryItem(String id) =>
+      FirestoreService.instance.deleteInventoryItem(shopId, id);
+
+  /// يسجل حركة مخزون ويحدّث رصيد المادة تلقائياً.
+  /// - purchase: إضافة الكمية للرصيد وتحديث تكلفة الوحدة.
+  /// - usage / waste: خصم الكمية (يفشل إذا كان الرصيد غير كافٍ).
+  /// - adjustment: ضبط الرصيد على الكمية الفعلية بعد الجرد.
+  Future<void> applyInventoryMovement(InventoryMovement movement) async {
+    final item = inventory.where((x) => x.id == movement.itemId).firstOrNull;
+    if (item == null) throw StateError('المادة غير موجودة في المخزون');
+    double newQuantity;
+    switch (movement.type) {
+      case 'purchase':
+        newQuantity = item.quantity + movement.quantity;
+        break;
+      case 'usage':
+      case 'waste':
+        if (movement.quantity > item.quantity) {
+          throw StateError('الرصيد غير كافٍ (${item.quantity} ${item.unit})');
+        }
+        newQuantity = item.quantity - movement.quantity;
+        break;
+      case 'adjustment':
+        newQuantity = movement.quantity;
+        break;
+      default:
+        throw StateError('نوع حركة غير معروف');
+    }
+    await FirestoreService.instance.saveInventoryItem(
+      shopId,
+      item.copyWith(
+        quantity: newQuantity,
+        unitCost: movement.type == 'purchase' && movement.unitCost > 0
+            ? movement.unitCost
+            : item.unitCost,
+        updatedAt: DateTime.now(),
+      ),
+    );
+    await FirestoreService.instance.addInventoryMovement(shopId, movement);
+  }
 
   String normalizePhone(String value) =>
       value.replaceAll(RegExp(r'[^0-9+]'), '');

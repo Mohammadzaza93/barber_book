@@ -544,6 +544,34 @@ class FirestoreService {
     return s;
   }
 
+  // ---------- Inventory ----------
+  Stream<List<InventoryItem>> watchInventory(String shopId) =>
+      _coll(shopId, 'inventory')
+          .orderBy('name')
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => InventoryItem.fromMap(d.id, d.data()))
+              .toList());
+
+  Future<void> saveInventoryItem(String shopId, InventoryItem item) =>
+      _coll(shopId, 'inventory').doc(item.id).set(item.toMap());
+
+  Future<void> deleteInventoryItem(String shopId, String id) =>
+      _coll(shopId, 'inventory').doc(id).delete();
+
+  Stream<List<InventoryMovement>> watchInventoryMovements(String shopId) =>
+      _coll(shopId, 'inventoryMovements')
+          .orderBy('createdAt', descending: true)
+          .limit(200)
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => InventoryMovement.fromMap(d.id, d.data()))
+              .toList());
+
+  Future<void> addInventoryMovement(
+          String shopId, InventoryMovement movement) =>
+      _coll(shopId, 'inventoryMovements').doc(movement.id).set(movement.toMap());
+
   // ---------- Customer helpers ----------
   static String genReference() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
