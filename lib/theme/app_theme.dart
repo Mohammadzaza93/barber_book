@@ -17,10 +17,10 @@ Color parseHexColor(String hex, {Color fallback = const Color(0xFF2563EB)}) {
 
 ThemeData buildAppTheme({Color primary = const Color(0xFF111827), Color accent = const Color(0xFF2563EB)}) {
   final scheme = ColorScheme.fromSeed(
-    seedColor: accent,
+    seedColor: primary,
     brightness: Brightness.light,
   ).copyWith(
-    primary: accent,
+    primary: primary,
     secondary: appBrandGold,
     surface: Colors.white,
   );
