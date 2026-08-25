@@ -216,8 +216,9 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     setState(() => _busy = true);
     final shop = context.read<ShopProvider>();
     final settings = shop.settings!;
-    await _saveFavoriteBarber();
     final provider = context.read<AppointmentProvider>();
+    final navigator = Navigator.of(context);
+    await _saveFavoriteBarber();
     final shopId = ShopManager.shopId!;
 
     final selected = shop.services
@@ -242,8 +243,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
       );
       await provider.addRequest(request, shopId);
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
+      navigator.pushReplacement(
         MaterialPageRoute(
           builder: (_) => BookingSuccessScreen(
             reference: reference,

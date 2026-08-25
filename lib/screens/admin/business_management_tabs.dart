@@ -3,7 +3,6 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../l10n/strings.dart';
-import '../../models/appointment.dart';
 import '../../models/business_features.dart';
 import '../../models/enums.dart';
 import '../../providers/business_tools_provider.dart';

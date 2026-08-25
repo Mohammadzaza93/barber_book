@@ -181,6 +181,17 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
+                  Container(
+                    width: 84,
+                    height: 84,
+                    decoration: BoxDecoration(
+                      color: appBrandBackground,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    padding: const EdgeInsets.all(12),
+                    child: Image.asset('assets/brand/app_icon.png'),
+                  ),
+                  const SizedBox(height: 18),
                   _buildStep(context),
                 ],
               ),

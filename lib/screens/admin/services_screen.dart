@@ -6,6 +6,7 @@ import '../../l10n/strings.dart';
 import '../../models/service.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/shop_manager.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/confirm.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/labeled_field.dart';
@@ -93,6 +94,8 @@ class ServicesScreen extends StatelessWidget {
         onPressed: () => _editService(context),
         icon: const Icon(Icons.add_rounded),
         label: Text(t(context).addService),
+        backgroundColor: appBrandGoldDark,
+        foregroundColor: Colors.white,
       ),
     );
   }

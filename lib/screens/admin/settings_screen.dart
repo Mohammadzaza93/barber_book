@@ -11,6 +11,7 @@ import '../../l10n/strings.dart';
 import '../../models/booking_settings.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/shop_manager.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/color_picker.dart';
 import '../../widgets/confirm.dart';
 import '../../widgets/labeled_field.dart';
@@ -159,6 +160,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Container(
+                    height: 92,
+                    decoration: BoxDecoration(
+                      color: appBrandBackground,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.all(18),
+                    child: Image.asset('assets/brand/app_icon.png'),
+                  ),
+                  const SizedBox(height: 12),
                   Text(t(context).shareBookingLink,
                       style: const TextStyle(
                           fontWeight: FontWeight.w800, fontSize: 15)),

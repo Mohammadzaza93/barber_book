@@ -59,8 +59,32 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           final pendingCount = appointments.pendingRequests.length;
           return Scaffold(
             appBar: AppBar(
-              title: Text(shop.settings?.shopName ?? 'BarberBook'),
-              actions: [
+            toolbarHeight: 72,
+            titleSpacing: 0,
+            title: Row(
+              children: [
+                const SizedBox(width: 12),
+                Container(
+                  width: 38,
+                  height: 38,
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: appBrandGold.withOpacity(0.16),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Image.asset('assets/brand/app_icon.png'),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    shop.settings?.shopName ?? 'BarberBook',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
                 IconButton(
                   tooltip: t(context).openBookingPage,
                   onPressed: () => Navigator.push(
@@ -95,10 +119,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 children: [
                   CircleAvatar(
                     radius: 26,
-                    backgroundColor:
-                        Theme.of(context).colorScheme.primary,
-                    child: const Icon(Icons.content_cut_rounded,
-                        color: Colors.white),
+                    backgroundColor: appBrandGold.withOpacity(0.16),
+                    child: Image.asset('assets/brand/app_icon.png'),
                   ),
                   const SizedBox(width: 12),
                   Expanded(

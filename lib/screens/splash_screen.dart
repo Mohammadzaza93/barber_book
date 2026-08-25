@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
+
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: appBrandBackground,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.content_cut_rounded,
-                size: 72, color: Colors.amber.shade400),
+            Image.asset('assets/brand/app_icon.png', width: 120, height: 120),
             const SizedBox(height: 16),
             const Text(
               'BarberBook',
@@ -29,7 +30,7 @@ class SplashScreen extends StatelessWidget {
               height: 28,
               child: CircularProgressIndicator(
                 strokeWidth: 3,
-                color: Colors.amber,
+                color: appBrandGold,
               ),
             ),
           ],
