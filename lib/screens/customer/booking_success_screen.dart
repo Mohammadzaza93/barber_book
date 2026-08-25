@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -47,7 +47,7 @@ class BookingSuccessScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final shop = context.watch<ShopProvider>();
     final settings = shop.settings;
-    final accent = parseHexColor(settings?.accentColorHex ?? '0xFF2563EB');
+    final accent = parseHexColor(settings?.accentColorHex ?? '0xFFC6CBD4');
 
     return Scaffold(
       body: SafeArea(

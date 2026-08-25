@@ -1,4 +1,4 @@
-import 'employee.dart';
+﻿import 'employee.dart';
 
 class BookingSettings {
   final String shopName;
@@ -51,8 +51,8 @@ class BookingSettings {
     this.email = '',
     this.currency = 'SAR',
     this.logoUrl,
-    this.primaryColorHex = '0xFF111827',
-    this.accentColorHex = '0xFF2563EB',
+    this.primaryColorHex = '0xFF121316',
+    this.accentColorHex = '0xFFC6CBD4',
     this.slug = '',
     this.workingHours = const {},
     this.policies = const [],
@@ -191,8 +191,8 @@ class BookingSettings {
       email: (m['email'] as String?) ?? '',
       currency: (m['currency'] as String?) ?? 'SAR',
       logoUrl: m['logoUrl'] as String?,
-      primaryColorHex: (m['primaryColorHex'] as String?) ?? '0xFF111827',
-      accentColorHex: (m['accentColorHex'] as String?) ?? '0xFF2563EB',
+      primaryColorHex: (m['primaryColorHex'] as String?) ?? '0xFF121316',
+      accentColorHex: (m['accentColorHex'] as String?) ?? '0xFFC6CBD4',
       slug: (m['slug'] as String?) ?? '',
       workingHours: wh,
       policies: (m['policies'] as List<dynamic>? ?? const [])

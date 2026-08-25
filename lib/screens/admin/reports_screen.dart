@@ -1,4 +1,4 @@
-import 'package:fl_chart/fl_chart.dart';
+﻿import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -34,7 +34,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final shop = context.watch<ShopProvider>();
     final settings = shop.settings;
     final currency = settings?.currency ?? 'SAR';
-    final accent = parseHexColor(settings?.accentColorHex ?? '0xFF2563EB');
+    final accent = parseHexColor(settings?.accentColorHex ?? '0xFFC6CBD4');
     final analytics = AnalyticsService.instance;
 
     final now = DateTime.now();
@@ -94,7 +94,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 icon: Icons.event_note_rounded,
                 label: t(context).totalBookings,
                 value: '${analytics.bookingsInRange(appointments, from: start)}',
-                color: const Color(0xFF2563EB),
+                color: const Color(0xFFC6CBD4),
               ),
             ),
             const SizedBox(width: 12),
@@ -220,7 +220,7 @@ class _ServicePie extends StatelessWidget {
               title: t(context).noData));
     }
     const colors = [
-      Color(0xFF2563EB), Color(0xFF7C3AED), Color(0xFF059669),
+      Color(0xFFC6CBD4), Color(0xFF7C3AED), Color(0xFF059669),
       Color(0xFFD97706), Color(0xFFB91C1C),
     ];
     final entries = popular.entries.toList();
@@ -308,7 +308,7 @@ class _ExpensePie extends StatelessWidget {
     }
     const colors = [
       Color(0xFFB91C1C), Color(0xFFD97706), Color(0xFF059669),
-      Color(0xFF2563EB), Color(0xFF7C3AED), Color(0xFF0E7490),
+      Color(0xFFC6CBD4), Color(0xFF7C3AED), Color(0xFF0E7490),
       Color(0xFF64748B),
     ];
     final entries = byCategory.entries.toList();

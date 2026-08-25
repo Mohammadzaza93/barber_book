@@ -1,4 +1,4 @@
-import 'package:fl_chart/fl_chart.dart';
+﻿import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -25,7 +25,7 @@ class DashboardScreen extends StatelessWidget {
     final expenses = context.watch<ExpenseProvider>();
     final settings = shop.settings;
     final currency = settings?.currency ?? 'SAR';
-    final accent = parseHexColor(settings?.accentColorHex ?? '0xFF2563EB');
+    final accent = parseHexColor(settings?.accentColorHex ?? '0xFFC6CBD4');
 
     final analytics = AnalyticsService.instance;
     final now = DateTime.now();

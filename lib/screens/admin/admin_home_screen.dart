@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../../l10n/strings.dart';
@@ -48,8 +49,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final shop = context.watch<ShopProvider>();
-    final primary = parseHexColor(shop.settings?.primaryColorHex ?? '0xFF111827');
-    final accent = parseHexColor(shop.settings?.accentColorHex ?? '0xFF2563EB');
+    final primary = parseHexColor(shop.settings?.primaryColorHex ?? '0xFF121316');
+    final accent = parseHexColor(shop.settings?.accentColorHex ?? '0xFFC6CBD4');
     final theme = buildAppTheme(primary: primary, accent: accent);
 
     return Theme(
@@ -93,12 +94,19 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 26,
-                    backgroundColor:
-                        Theme.of(context).colorScheme.primary,
-                    child: const Icon(Icons.content_cut_rounded,
-                        color: Colors.white),
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF0B0B0D),
+                      shape: BoxShape.circle,
+                    ),
+                    padding: const EdgeInsets.all(10),
+                    child: SvgPicture.asset(
+                      'assets/brand/logo.svg',
+                      colorFilter: const ColorFilter.mode(
+                          Color(0xFFC6CBD4), BlendMode.srcIn),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(

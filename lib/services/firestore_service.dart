@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/appointment.dart';
 import '../models/app_role.dart';
@@ -43,8 +43,8 @@ class FirestoreService {
       phone: phone,
       address: address,
       currency: currency,
-      primaryColorHex: primaryColorHex ?? '0xFF111827',
-      accentColorHex: accentColorHex ?? '0xFF2563EB',
+      primaryColorHex: primaryColorHex ?? '0xFF121316',
+      accentColorHex: accentColorHex ?? '0xFFC6CBD4',
       slug: slug ?? 'shop-${doc.id.substring(0, 6)}',
     );
     await doc.set({

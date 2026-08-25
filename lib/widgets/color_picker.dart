@@ -7,8 +7,10 @@ class ColorOption {
 }
 
 const colorOptions = [
+  ColorOption('0xFF121316', Color(0xFF121316)),
+  ColorOption('0xFFC6CBD4', Color(0xFFC6CBD4)),
   ColorOption('0xFF111827', Color(0xFF111827)),
-  ColorOption('0xFF2563EB', Color(0xFF2563EB)),
+  ColorOption('0xFF8A9099', Color(0xFF8A9099)),
   ColorOption('0xFF7C3AED', Color(0xFF7C3AED)),
   ColorOption('0xFF059669', Color(0xFF059669)),
   ColorOption('0xFFB91C1C', Color(0xFFB91C1C)),

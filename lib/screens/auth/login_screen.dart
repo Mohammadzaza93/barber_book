@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../../l10n/strings.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/language_provider.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/confirm.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -62,8 +64,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Icon(Icons.content_cut_rounded,
-                            size: 32, color: Color(0xFF0F172A)),
+                        SvgPicture.asset(
+                          'assets/brand/logo.svg',
+                          width: 32,
+                          height: 32,
+                          colorFilter: const ColorFilter.mode(
+                              kInk, BlendMode.srcIn),
+                        ),
                         SegmentedButton<Locale>(
                           segments: const [
                             ButtonSegment(
@@ -82,8 +89,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                     ),
                     const SizedBox(height: 40),
-                    const Icon(Icons.content_cut_rounded,
-                        size: 64, color: Color(0xFF2563EB)),
+                    SvgPicture.asset(
+                      'assets/brand/logo.svg',
+                      width: 96,
+                      height: 96,
+                      colorFilter:
+                          const ColorFilter.mode(kInk, BlendMode.srcIn),
+                    ),
                     const SizedBox(height: 12),
                     Text(
                       _isRegister

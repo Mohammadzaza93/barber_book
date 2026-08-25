@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -30,8 +30,8 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   final _address = TextEditingController();
   final _currency = TextEditingController(text: 'SAR');
 
-  String _primaryHex = '0xFF111827';
-  String _accentHex = '0xFF2563EB';
+  String _primaryHex = '0xFF121316';
+  String _accentHex = '0xFFC6CBD4';
   Map<int, List<WorkSlot>> _hours = {};
   final List<Service> _services = [];
   final List<Employee> _staff = [];
@@ -408,7 +408,12 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
             child: Text(
               t(context).bookNow,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                color: accent.computeLuminance() > 0.5
+                    ? const Color(0xFF121316)
+                    : Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
