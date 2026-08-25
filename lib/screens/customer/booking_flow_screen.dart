@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -300,6 +301,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
           notes: _notes.text.trim(),
           recurring: true,
           seriesId: seriesId,
+          createdById: FirebaseAuth.instance.currentUser?.uid,
           createdAt: DateTime.now(),
         );
         await provider.add(appt, shopId);
@@ -328,6 +330,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
         discountAmount: _appliedDiscount,
         notes: _notes.text.trim(),
         recurring: false,
+        createdById: FirebaseAuth.instance.currentUser?.uid,
         createdAt: DateTime.now(),
       );
       await provider.add(appt, shopId);

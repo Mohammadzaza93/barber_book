@@ -26,32 +26,69 @@ service cloud.firestore {
       return get(memberPath(shopId)).data.role;
     }
 
-    // المالك أو مدير: إدارة العمليات اليومية.
     function isManager(shopId) {
       return isShopOwner(shopId)
         || (isShopMember(shopId) && myRole(shopId) == 'manager');
     }
 
-    // أي عضو في المحل (مالك/مدير/موظف): إدخال بيانات عادية.
-    function canEnterData(shopId) {
+    function isStaff(shopId) {
+      return isShopMember(shopId) && myRole(shopId) == 'staff';
+    }
+
+    function canReadShopData(shopId) {
       return isShopOwner(shopId) || isShopMember(shopId);
     }
 
+    function belongsToShop(data, shopId) {
+      return data.shopId == shopId;
+    }
+
+    function appointmentMutableFields() {
+      return [
+        'customerName', 'customerPhone', 'customerEmail',
+        'employeeId', 'chairId', 'serviceIds', 'startTime', 'endTime',
+        'status', 'paymentStatus', 'totalAmount', 'depositAmount',
+        'discountCode', 'discountAmount', 'notes', 'recurring', 'seriesId',
+        'outOfHours', 'reminderSent', 'rating'
+      ];
+    }
+
+    function isAppointmentManagerUpdate(shopId) {
+      return isManager(shopId)
+        && belongsToShop(request.resource.data, shopId)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdById == resource.data.createdById
+        && request.resource.data.reference == resource.data.reference
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(appointmentMutableFields());
+    }
+
+    // Staff can only edit the customer-facing notes/contact details of an
+    // appointment they created. Status, payment and schedule changes belong
+    // to a manager. This also makes future customer/employee identity checks
+    // possible without widening write access again.
+    function isStaffAppointmentUpdate(shopId) {
+      return isStaff(shopId)
+        && resource.data.createdById == request.auth.uid
+        && belongsToShop(request.resource.data, shopId)
+        && request.resource.data.createdById == resource.data.createdById
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.reference == resource.data.reference
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'customerName', 'customerPhone', 'customerEmail', 'notes'
+        ]);
+    }
+
     match /shops/{shopId} {
-      // A new shop may only be created for the currently authenticated user.
       allow create: if signedIn()
         && request.resource.data.ownerId == request.auth.uid;
 
-      // Shop settings: readable by members, but ONLY the owner can change
-      // settings or rules (joinCode included).
       allow read: if isShopOwner(shopId) || isShopMember(shopId);
       allow update, delete: if isShopOwner(shopId);
 
-      // Members directory. A user may create ONLY their own doc and only
-      // with the least-privileged role ('staff'). Role changes and removals
-      // are owner-only.
       match /members/{memberId} {
-        allow read: if isShopOwner(shopId) || signedIn() && request.auth.uid == memberId;
+        allow read: if isShopOwner(shopId)
+          || (signedIn() && request.auth.uid == memberId);
         allow create: if signedIn()
           && request.auth.uid == memberId
           && request.resource.data.uid == memberId
@@ -59,105 +96,124 @@ service cloud.firestore {
         allow update, delete: if isShopOwner(shopId);
       }
 
-      // ---- Operational data: entry for all members, deletes for managers+ ----
-
+      // The current client loads the operational calendar for shop members.
+      // Until customer-facing public reads are moved behind a server endpoint,
+      // keep reads compatible while restricting all sensitive writes below.
       match /appointments/{docId} {
-        allow read, create, update: if canEnterData(shopId);
+        allow read: if canReadShopData(shopId);
+        allow create: if belongsToShop(request.resource.data, shopId)
+          && (isManager(shopId)
+            || (isStaff(shopId)
+              && request.resource.data.createdById == request.auth.uid));
+        allow update: if isAppointmentManagerUpdate(shopId)
+          || isStaffAppointmentUpdate(shopId);
         allow delete: if isManager(shopId);
       }
 
+      // Financial records are manager-owned. A staff member must not create,
+      // alter, or delete expenses or payment records from the client.
       match /expenses/{docId} {
-        allow read, create, update: if canEnterData(shopId);
-        allow delete: if isManager(shopId);
-      }
-
-      // Out-of-hours requests: staff can submit only; approval is manager+.
-      match /requests/{docId} {
-        allow read, create: if canEnterData(shopId);
-        allow update, delete: if isManager(shopId);
-      }
-
-      match /feedback/{docId} {
-        allow read, create, update: if canEnterData(shopId);
-        allow delete: if isManager(shopId);
-      }
-
-      match /customers/{docId} {
-        allow read, create, update: if canEnterData(shopId);
-        allow delete: if isManager(shopId);
-      }
-
-      match /loyalty/{docId} {
-        allow read, create, update: if canEnterData(shopId);
-        allow delete: if isManager(shopId);
-      }
-
-      match /queue/{docId} {
-        allow read, create, update: if canEnterData(shopId);
+        allow read: if isManager(shopId);
+        allow create, update: if isManager(shopId);
         allow delete: if isManager(shopId);
       }
 
       match /payments/{docId} {
-        allow read, create, update: if canEnterData(shopId);
+        allow read: if isManager(shopId);
+        allow create, update: if isManager(shopId);
         allow delete: if isManager(shopId);
       }
 
-      // ---- Rules & catalog data: ONLY the owner may write ----
-      // (services, employees/staff definitions, discounts, business tools)
+      // A staff member may submit an out-of-hours request, but only a manager
+      // may approve, reject, or delete it.
+      match /requests/{docId} {
+        allow read: if isManager(shopId) || isStaff(shopId);
+        allow create: if isManager(shopId) || isStaff(shopId);
+        allow update, delete: if isManager(shopId);
+      }
 
+      // Ratings are append-only from the client. Moderation is manager-only.
+      // A future public customer endpoint should replace the member read rule.
+      match /feedback/{docId} {
+        allow read: if isManager(shopId);
+        allow create: if canReadShopData(shopId);
+        allow update: if isManager(shopId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['showOnPage']);
+        allow delete: if isManager(shopId);
+      }
+
+      // Customer and loyalty records contain personal and business data.
+      match /customers/{docId} {
+        allow read: if isManager(shopId);
+        allow create, update: if isManager(shopId);
+        allow delete: if isManager(shopId);
+      }
+
+      match /loyalty/{docId} {
+        allow read: if isManager(shopId);
+        allow create, update: if isManager(shopId);
+        allow delete: if isManager(shopId);
+      }
+
+      match /queue/{docId} {
+        allow read, create, update: if isManager(shopId);
+        allow delete: if isManager(shopId);
+      }
+
+      // Catalog and configuration writes remain owner-only. This prevents a
+      // staff account from changing prices, services, staff definitions, or
+      // reward rules even if the UI is bypassed.
       match /services/{docId} {
-        allow read: if canEnterData(shopId);
+        allow read: if canReadShopData(shopId);
         allow write: if isShopOwner(shopId);
       }
 
       match /employees/{docId} {
-        allow read: if canEnterData(shopId);
+        allow read: if canReadShopData(shopId);
         allow write: if isShopOwner(shopId);
       }
 
       match /discounts/{docId} {
-        allow read: if canEnterData(shopId);
+        allow read: if canReadShopData(shopId);
         allow write: if isShopOwner(shopId);
       }
 
       match /portfolio/{docId} {
-        allow read: if canEnterData(shopId);
+        allow read: if canReadShopData(shopId);
         allow write: if isShopOwner(shopId);
       }
 
       match /chairs/{docId} {
-        allow read: if canEnterData(shopId);
+        allow read: if canReadShopData(shopId);
         allow write: if isShopOwner(shopId);
       }
 
       match /chairSupplies/{docId} {
-        allow read: if canEnterData(shopId);
+        allow read: if isManager(shopId);
         allow write: if isShopOwner(shopId);
       }
 
       match /chairWeeklyProfits/{docId} {
-        allow read: if canEnterData(shopId);
+        allow read: if isManager(shopId);
         allow write: if isShopOwner(shopId);
       }
 
       match /loyaltyRules/{docId} {
-        allow read: if canEnterData(shopId);
+        allow read: if isManager(shopId);
         allow write: if isShopOwner(shopId);
       }
 
       match /loyaltyGifts/{docId} {
-        allow read: if canEnterData(shopId);
+        allow read: if isManager(shopId);
         allow write: if isShopOwner(shopId);
       }
     }
 
-    // User profile: each account may read/write its own doc only.
-    // (used to remember which shop a non-owner joined)
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
     }
 
-    // No other top-level collections are part of the application data model.
     match /{document=**} {
       allow read, write: if false;
     }
