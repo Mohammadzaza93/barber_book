@@ -4,7 +4,10 @@ class AuthService {
   AuthService._();
   static final instance = AuthService._();
 
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  // Resolved lazily on purpose. `FirebaseAuth.instance` throws [core/no-app]
+  // when the app was not initialized, and this singleton is constructed while
+  // the provider tree is built, before the config error screen can be shown.
+  FirebaseAuth get _auth => FirebaseAuth.instance;
 
   User? get currentUser => _auth.currentUser;
 

@@ -28,6 +28,38 @@ class DefaultFirebaseOptions {
     }
   }
 
+  /// True when [options] are still the unedited placeholders that
+  /// `flutterfire configure` leaves behind.
+  ///
+  /// Passing those to `Firebase.initializeApp` produces an opaque platform
+  /// error, so the app detects them and reports which platform is missing.
+  static bool isPlaceholder(FirebaseOptions options) =>
+      options.apiKey.startsWith('YOUR_') ||
+      options.projectId.startsWith('YOUR_') ||
+      options.appId.startsWith('YOUR_');
+
+  /// Platform label used in diagnostics.
+  static String get platformName =>
+      kIsWeb ? 'web' : defaultTargetPlatform.name;
+
+  /// Throws a descriptive [UnsupportedError] when the current platform has no
+  /// real Firebase configuration.
+  static void requireConfigured() =>
+      requireConfiguredFor(currentPlatform, platformName: platformName);
+
+  /// Same as [requireConfigured] but for an explicit target, so the check can
+  /// be exercised for platforms this test host does not run on.
+  static void requireConfiguredFor(
+      FirebaseOptions options, {required String platformName}) {
+    if (!isPlaceholder(options)) return;
+    throw UnsupportedError(
+      'Firebase is not configured for $platformName. This build of '
+      'firebase_options.dart still contains placeholders. Run '
+      '"flutterfire configure" to generate the real values for project '
+      'barber-book-lycb.',
+    );
+  }
+
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDOyYgnAkz0HjDK3jZW6imW3TyEUX-KoDU',
     appId: '1:21464729425:android:aba5121a2d77be6b813570',

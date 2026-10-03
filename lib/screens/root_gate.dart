@@ -20,11 +20,13 @@ class RootGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-
+    // Checked before watching AuthProvider so a failed Firebase init shows the
+    // config error screen instead of reaching into a missing app instance.
     if (!firebaseReady) {
-      return const ConfigErrorScreen();
+      return ConfigErrorScreen(message: firebaseError);
     }
+
+    final auth = context.watch<AuthProvider>();
 
     if (auth.initializing) {
       return const SplashScreen();

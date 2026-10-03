@@ -8,12 +8,12 @@ import '../../models/enums.dart';
 import '../../models/service.dart';
 import '../../providers/appointment_provider.dart';
 import '../../providers/business_tools_provider.dart';
-import '../../providers/discount_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/booking_calc.dart';
 import '../../services/calendar_service.dart';
-import '../../services/firestore_service.dart';
 import '../../services/reminder_service.dart';
+import '../../services/secure_api.dart';
+import '../../services/secure_error_text.dart';
 import '../../services/shop_manager.dart';
 import '../../widgets/confirm.dart';
 import '../../widgets/service_picker.dart';
@@ -142,111 +142,36 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
     }
 
     setState(() => _busy = true);
-    final provider = context.read<AppointmentProvider>();
-    final discountProvider = context.read<DiscountProvider>();
     final shopId = ShopManager.shopId!;
-    if (provider.hasConflict(
-      employeeId: _employeeId!,
-      chairId: _chairId,
-      start: _slot!,
-      end: _slot!.add(Duration(minutes: _totalDuration)),
-      excludeId: _a?.id,
-    )) {
-      if (mounted) showSnack(context, 'الحلاق أو الكرسي مرتبط بموعد آخر في هذا الوقت');
-      if (mounted) setState(() => _busy = false);
-      return;
-    }
 
-    final selected = shop.services
-        .where((s) => _serviceIds.contains(s.id))
-        .toList();
-    final total = selected.fold(0.0, (sum, s) => sum + s.price);
-    final deposit = computeDeposit(settings, selected, total);
-
-    double discountAmount = 0;
-    String? code;
-    if (_promo.text.trim().isNotEmpty) {
-      final d = discountProvider.findActiveByCode(_promo.text);
-      if (d != null && d.isUsable(total)) {
-        discountAmount = computeDiscount(d, total);
-        code = d.code;
-        await discountProvider.recordUsage(d.id, shopId);
-      } else if (mounted) {
-        showSnack(context, t(context).invalidCode);
-      }
-    }
-    final payable = total - discountAmount;
-
-    final start = _slot!;
-    final end = start.add(Duration(minutes: _totalDuration));
-    final reference = FirestoreService.genReference();
-    final status = settings.autoConfirm
-        ? AppointmentStatus.confirmed
-        : AppointmentStatus.requested;
-
-    if (_recurring) {
-      final seriesId = newAppointmentId();
-      final occurrences = expandWeeklySeries(first: start, count: 4);
-      for (final occ in occurrences) {
-        final occEnd = occ.add(Duration(minutes: _totalDuration));
-        await provider.add(
-          Appointment(
-            id: newAppointmentId(),
-            shopId: shopId,
-            reference: reference,
-            customerId: _normalizePhone(_phone.text),
-            customerName: _name.text.trim(),
-            customerPhone: _phone.text.trim(),
-            customerEmail: _email.text.trim(),
-            employeeId: _employeeId!,
-            chairId: _chairId,
-            serviceIds: _serviceIds,
-            startTime: occ,
-            endTime: occEnd,
-            status: status,
-            paymentStatus:
-                deposit > 0 ? PaymentStatus.depositPaid : PaymentStatus.unpaid,
-            totalAmount: payable,
-            depositAmount: deposit,
-            discountCode: code,
-            discountAmount: discountAmount,
-            notes: _notes.text.trim(),
-            recurring: true,
-            seriesId: seriesId,
-            createdById: null,
-            createdAt: DateTime.now(),
-          ),
-          shopId,
-        );
-      }
-    } else {
-      final appt = Appointment(
-        id: newAppointmentId(),
+    // The server owns the reference, the duration, the discount, the deposit
+    // and the resulting payment status, so the client only sends intent.
+    List<Map<String, dynamic>> created;
+    try {
+      created = await SecureApi.instance.createAppointment(
         shopId: shopId,
-        reference: reference,
-        customerId: _normalizePhone(_phone.text),
-        customerName: _name.text.trim(),
-        customerPhone: _phone.text.trim(),
-        customerEmail: _email.text.trim(),
         employeeId: _employeeId!,
         chairId: _chairId,
         serviceIds: _serviceIds,
-        startTime: start,
-        endTime: end,
-        status: status,
-        paymentStatus:
-            deposit > 0 ? PaymentStatus.depositPaid : PaymentStatus.unpaid,
-        totalAmount: payable,
-        depositAmount: deposit,
-        discountCode: code,
-        discountAmount: discountAmount,
+        startTime: _slot!.toUtc().toIso8601String(),
+        requestId: SecureApi.instance.newRequestId(),
+        customerName: _name.text.trim(),
+        customerPhone: _phone.text.trim(),
+        customerEmail: _email.text.trim(),
         notes: _notes.text.trim(),
-        recurring: false,
-        createdById: null,
-        createdAt: DateTime.now(),
+        discountCode: _promo.text.trim().isEmpty ? null : _promo.text.trim(),
+        recurring: _recurring,
       );
-      await provider.add(appt, shopId);
-      ReminderService.instance.scheduleLocalReminders(settings, appt);
+    } on SecureApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      showSnack(context, describeSecureError(context, error));
+      return;
+    }
+
+    for (final item in created) {
+      await ReminderService.instance.scheduleLocalReminders(
+          settings, Appointment.fromMap(item['id'] as String, item));
     }
 
     if (!mounted) return;
@@ -510,20 +435,19 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
           ),
         ]),
         _section(context, t(context).paymentStatus, [
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: PaymentStatus.values.map((p) {
-              return ChoiceChip(
-                label: Text(_paymentLabel(context, p)),
-                selected: a.paymentStatus == p,
-                onSelected: (_) async {
-                  await context
-                      .read<AppointmentProvider>()
-                      .setPayment(a, p, ShopManager.shopId!);
-                },
-              );
-            }).toList(),
+          Row(
+            children: [
+              ChoiceChip(
+                label: Text(_paymentLabel(context, a.paymentStatus)),
+                selected: true,
+                onSelected: (_) => _recordPayment(a),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(t(context).paymentDerivedByServer,
+                    style: Theme.of(context).textTheme.bodySmall),
+              ),
+            ],
           ),
         ]),
         _section(context, t(context).reminderSettings, [
@@ -621,16 +545,88 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
   Future<void> _changeStatus(AppointmentStatus status) async {
     final a = _a!;
     final provider = context.read<AppointmentProvider>();
-    if (a.recurring && a.seriesId != null) {
-      final applyToSeries = await confirmDialog(
-        context,
-        title: t(context).applyToSeries,
-        message: t(context).recurring,
-      );
-      await provider.setStatus(a, status, ShopManager.shopId!,
-          applyToSeries: applyToSeries);
-    } else {
-      await provider.setStatus(a, status, ShopManager.shopId!);
+    try {
+      if (a.recurring && a.seriesId != null) {
+        final applyToSeries = await confirmDialog(
+          context,
+          title: t(context).applyToSeries,
+          message: t(context).recurring,
+        );
+        if (!context.mounted) return;
+        await provider.setStatus(a, status, ShopManager.shopId!,
+            applyToSeries: applyToSeries);
+      } else {
+        await provider.setStatus(a, status, ShopManager.shopId!);
+      }
+    } on SecureApiException catch (error) {
+      if (!context.mounted) return;
+      showSnack(context, describeSecureError(context, error));
+    }
+  }
+
+  /// Records a payment and lets the server derive the payment status from the
+  /// amount collected so far, so the two can never be set independently.
+  Future<void> _recordPayment(Appointment a) async {
+    final remaining = (a.totalAmount - a.collectedAmount).clamp(0.0, double.infinity);
+    final amount = TextEditingController(text: remaining.toStringAsFixed(2));
+    var method = 'cash';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text(t(context).recordPayment),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: amount,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(labelText: t(context).amountCollected),
+                ),
+                DropdownButtonFormField<String>(
+                  value: method,
+                  items: [
+                    DropdownMenuItem(value: 'cash', child: Text(t(context).payCash)),
+                    DropdownMenuItem(value: 'card', child: Text(t(context).payCard)),
+                    DropdownMenuItem(
+                        value: 'transfer', child: Text(t(context).payTransfer)),
+                  ],
+                  onChanged: (value) => setState(() => method = value ?? 'cash'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(t(context).cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(t(context).save),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final value = double.tryParse(amount.text.trim());
+    if (value == null || value <= 0) {
+      showSnack(context, t(context).enterValidAmount);
+      return;
+    }
+    try {
+      await context.read<AppointmentProvider>().recordPayment(
+            a,
+            ShopManager.shopId!,
+            method: method,
+            amount: value,
+          );
+    } on SecureApiException catch (error) {
+      if (!mounted) return;
+      showSnack(context, describeSecureError(context, error));
     }
   }
 
@@ -651,8 +647,6 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
       ],
     );
   }
-
-  String _normalizePhone(String value) => value.replaceAll(RegExp(r'[^0-9+]'), '');
 
   Widget _field(String label, TextEditingController controller, {IconData? icon, TextInputType? keyboard, bool optional = false}) {
     return Padding(

@@ -11,7 +11,10 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin _local =
       FlutterLocalNotificationsPlugin();
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  // Lazy on purpose: `NotificationService.instance` is reachable from the
+  // provider tree, and `FirebaseMessaging.instance` throws [core/no-app] when
+  // Firebase failed to initialize.
+  FirebaseMessaging get _messaging => FirebaseMessaging.instance;
   bool _initialized = false;
 
   Future<void> init() async {

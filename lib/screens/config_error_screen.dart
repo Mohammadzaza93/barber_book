@@ -8,9 +8,10 @@ class ConfigErrorScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final error = (message ?? '').trim();
     return Scaffold(
       body: Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -22,12 +23,22 @@ class ConfigErrorScreen extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
-              if (message != null && message!.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  message!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+              if (error.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                // The concrete reason matters more than the headline: the
+                // headline is the same for every failure mode.
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SelectableText(
+                    error,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                 ),
               ],
             ],

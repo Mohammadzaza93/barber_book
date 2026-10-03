@@ -7,6 +7,7 @@ import '../models/appointment.dart';
 import '../models/enums.dart';
 import '../models/unavailability_request.dart';
 import '../services/firestore_service.dart';
+import '../services/secure_api.dart';
 
 class AppointmentProvider extends ChangeNotifier {
   List<Appointment> appointments = [];
@@ -83,16 +84,56 @@ class AppointmentProvider extends ChangeNotifier {
     });
   }
 
-  Future<void> add(Appointment a, String shopId) async {
-    await FirestoreService.instance.addAppointment(shopId, a);
+  /// Creates the booking on the server and returns the authoritative rows.
+  Future<List<Map<String, dynamic>>> create({
+    required String shopId,
+    required String employeeId,
+    String? chairId,
+    required List<String> serviceIds,
+    required DateTime start,
+    required String customerName,
+    String? customerPhone,
+    String? customerEmail,
+    String? notes,
+    String? discountCode,
+    bool recurring = false,
+    bool outOfHours = false,
+    String? requestId,
+  }) {
+    return SecureApi.instance.createAppointment(
+      shopId: shopId,
+      employeeId: employeeId,
+      chairId: chairId,
+      serviceIds: serviceIds,
+      startTime: start.toUtc().toIso8601String(),
+      requestId: requestId ?? SecureApi.instance.newRequestId(),
+      customerName: customerName,
+      customerPhone: customerPhone,
+      customerEmail: customerEmail,
+      notes: notes,
+      discountCode: discountCode,
+      recurring: recurring,
+      outOfHours: outOfHours,
+    );
   }
 
-  Future<void> update(Appointment a, String shopId) async {
-    await FirestoreService.instance.updateAppointment(shopId, a);
+  Future<void> updateContact(Appointment a, String shopId,
+      {String? customerName, String? customerPhone, String? customerEmail, String? notes}) async {
+    await SecureApi.instance.updateContact(
+      shopId: shopId,
+      appointmentId: a.id,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      customerEmail: customerEmail,
+      notes: notes,
+    );
   }
 
-  Future<void> delete(String id, String shopId) async {
-    await FirestoreService.instance.deleteAppointment(shopId, id);
+  Future<void> delete(Appointment a, String shopId) async {
+    await SecureApi.instance.deleteAppointment(
+      shopId: shopId,
+      appointmentId: a.id,
+    );
   }
 
   Future<void> setStatus(Appointment a, AppointmentStatus s, String shopId,
@@ -102,29 +143,47 @@ class AppointmentProvider extends ChangeNotifier {
         if (item.seriesId == a.seriesId &&
             (item.status == AppointmentStatus.confirmed ||
                 item.status == AppointmentStatus.requested)) {
-          await FirestoreService.instance
-              .updateAppointment(shopId, item.copyWith(status: s));
+          await SecureApi.instance.setStatus(
+            shopId: shopId,
+            appointmentId: item.id,
+            status: s.name,
+          );
         }
       }
     } else {
-      await FirestoreService.instance
-          .updateAppointment(shopId, a.copyWith(status: s));
+      await SecureApi.instance.setStatus(
+        shopId: shopId,
+        appointmentId: a.id,
+        status: s.name,
+      );
     }
   }
 
-  Future<void> setPayment(Appointment a, PaymentStatus p, String shopId) async {
-    await FirestoreService.instance
-        .updateAppointment(shopId, a.copyWith(paymentStatus: p));
+  /// Records a payment against the appointment. The server owns the resulting
+  /// payment status, so the client only supplies the amount and the method.
+  Future<void> recordPayment(Appointment a, String shopId,
+      {required String method, required double amount}) async {
+    await SecureApi.instance.recordPayment(
+      shopId: shopId,
+      appointmentId: a.id,
+      method: method,
+      amount: amount,
+    );
   }
 
   Future<void> markReminderSent(Appointment a, String shopId) async {
-    await FirestoreService.instance
-        .updateAppointment(shopId, a.copyWith(reminderSent: true));
+    await SecureApi.instance.markReminderSent(
+      shopId: shopId,
+      appointmentId: a.id,
+    );
   }
 
   Future<void> setRating(Appointment a, int rating, String shopId) async {
-    await FirestoreService.instance
-        .updateAppointment(shopId, a.copyWith(rating: rating));
+    await SecureApi.instance.setRating(
+      shopId: shopId,
+      appointmentId: a.id,
+      rating: rating,
+    );
   }
 
   Future<void> addRequest(

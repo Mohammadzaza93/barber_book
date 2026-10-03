@@ -39,46 +39,6 @@ service cloud.firestore {
       return isShopOwner(shopId) || isShopMember(shopId);
     }
 
-    function belongsToShop(data, shopId) {
-      return data.shopId == shopId;
-    }
-
-    function appointmentMutableFields() {
-      return [
-        'customerName', 'customerPhone', 'customerEmail',
-        'employeeId', 'chairId', 'serviceIds', 'startTime', 'endTime',
-        'status', 'paymentStatus', 'totalAmount', 'depositAmount',
-        'discountCode', 'discountAmount', 'notes', 'recurring', 'seriesId',
-        'outOfHours', 'reminderSent', 'rating'
-      ];
-    }
-
-    function isAppointmentManagerUpdate(shopId) {
-      return isManager(shopId)
-        && belongsToShop(request.resource.data, shopId)
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.createdById == resource.data.createdById
-        && request.resource.data.reference == resource.data.reference
-        && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(appointmentMutableFields());
-    }
-
-    // Staff can only edit the customer-facing notes/contact details of an
-    // appointment they created. Status, payment and schedule changes belong
-    // to a manager. This also makes future customer/employee identity checks
-    // possible without widening write access again.
-    function isStaffAppointmentUpdate(shopId) {
-      return isStaff(shopId)
-        && resource.data.createdById == request.auth.uid
-        && belongsToShop(request.resource.data, shopId)
-        && request.resource.data.createdById == resource.data.createdById
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.reference == resource.data.reference
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'customerName', 'customerPhone', 'customerEmail', 'notes'
-        ]);
-    }
-
     match /shops/{shopId} {
       allow create: if signedIn()
         && request.resource.data.ownerId == request.auth.uid;
@@ -86,28 +46,35 @@ service cloud.firestore {
       allow read: if isShopOwner(shopId) || isShopMember(shopId);
       allow update, delete: if isShopOwner(shopId);
 
+      // Membership is granted only by the joinShopByCode callable, which
+      // resolves the join code server side and always writes the lowest role.
+      // A client can no longer insert or promote its own member document.
       match /members/{memberId} {
         allow read: if isShopOwner(shopId)
           || (signedIn() && request.auth.uid == memberId);
-        allow create: if signedIn()
-          && request.auth.uid == memberId
-          && request.resource.data.uid == memberId
-          && request.resource.data.role == 'staff';
         allow update, delete: if isShopOwner(shopId);
       }
 
-      // The current client loads the operational calendar for shop members.
-      // Until customer-facing public reads are moved behind a server endpoint,
-      // keep reads compatible while restricting all sensitive writes below.
+      // Appointments are fully server authoritative: pricing, duration,
+      // status, payment state, reminders and ratings are all written by the
+      // callables with the Admin SDK, which bypasses these rules. Blocking
+      // client writes is what makes that guarantee hold, so there is no
+      // partial-write path left to reason about.
       match /appointments/{docId} {
         allow read: if canReadShopData(shopId);
-        allow create: if belongsToShop(request.resource.data, shopId)
-          && (isManager(shopId)
-            || (isStaff(shopId)
-              && request.resource.data.createdById == request.auth.uid));
-        allow update: if isAppointmentManagerUpdate(shopId)
-          || isStaffAppointmentUpdate(shopId);
-        allow delete: if isManager(shopId);
+        allow create, update, delete: if false;
+      }
+
+      // Booking locks are internal to the conflict detector. A client that can
+      // write them could clear or forge a lock and double book a slot.
+      match /bookingLocks/{docId} {
+        allow read, write: if false;
+      }
+
+      // Idempotency claims. Server only, otherwise a client could reserve a
+      // requestId and suppress a legitimate retry from another device.
+      match /bookingRequests/{docId} {
+        allow read, write: if false;
       }
 
       // Financial records are manager-owned. A staff member must not create,
@@ -118,10 +85,13 @@ service cloud.firestore {
         allow delete: if isManager(shopId);
       }
 
+      // Payment records are created, corrected and deleted exclusively by the
+      // updateAppointment callable, so that collectedAmount and the derived
+      // paymentStatus can never disagree and no client can invent a collection.
+      // Managers keep read access for the reports screens.
       match /payments/{docId} {
         allow read: if isManager(shopId);
-        allow create, update: if isManager(shopId);
-        allow delete: if isManager(shopId);
+        allow write: if false;
       }
 
       // A staff member may submit an out-of-hours request, but only a manager
@@ -161,6 +131,20 @@ service cloud.firestore {
         allow delete: if isManager(shopId);
       }
 
+      // Stock levels and the movement log that feeds them. Movements are
+      // append-only from the client so a staff account cannot quietly rewrite
+      // the history behind a quantity, and both are manager scoped because the
+      // admin home exposes the inventory tab to every role.
+      match /inventory/{docId} {
+        allow read, create, update, delete: if isManager(shopId);
+      }
+
+      match /inventoryMovements/{docId} {
+        allow read: if isManager(shopId);
+        allow create: if isManager(shopId);
+        allow update, delete: if false;
+      }
+
       // Catalog and configuration writes remain owner-only. This prevents a
       // staff account from changing prices, services, staff definitions, or
       // reward rules even if the UI is bypassed.
@@ -174,9 +158,17 @@ service cloud.firestore {
         allow write: if isShopOwner(shopId);
       }
 
+      // The owner edits the coupon, but never its redemption counter. Usage is
+      // incremented by the createAppointment callable inside the booking
+      // transaction, so a client cannot mint extra discounts.
       match /discounts/{docId} {
         allow read: if canReadShopData(shopId);
-        allow write: if isShopOwner(shopId);
+        allow create: if isShopOwner(shopId)
+          && (!('usageCount' in request.resource.data)
+            || request.resource.data.usageCount == 0);
+        allow update: if isShopOwner(shopId)
+          && request.resource.data.usageCount == resource.data.usageCount;
+        allow delete: if isShopOwner(shopId);
       }
 
       match /portfolio/{docId} {
@@ -200,18 +192,22 @@ service cloud.firestore {
       }
 
       match /loyaltyRules/{docId} {
-        allow read: if isManager(shopId);
+        allow read: if canReadShopData(shopId);
         allow write: if isShopOwner(shopId);
       }
 
       match /loyaltyGifts/{docId} {
-        allow read: if isManager(shopId);
+        allow read: if canReadShopData(shopId);
         allow write: if isShopOwner(shopId);
       }
     }
 
+    // A user profile is readable by its owner and writable by nobody on the
+    // client. The shop binding (joinedShopId) is written by joinShopByCode,
+    // which is the only place membership is granted.
     match /users/{uid} {
-      allow read, write: if signedIn() && request.auth.uid == uid;
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
     }
 
     match /{document=**} {

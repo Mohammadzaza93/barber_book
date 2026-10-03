@@ -17,6 +17,9 @@ class Appointment {
   final PaymentStatus paymentStatus;
   final double totalAmount;
   final double depositAmount;
+  /// Total actually collected so far. Owned by the server and derived
+  /// together with [paymentStatus], so the client only ever reads it.
+  final double collectedAmount;
   final String? discountCode;
   final double discountAmount;
   final String notes;
@@ -45,6 +48,7 @@ class Appointment {
     this.paymentStatus = PaymentStatus.unpaid,
     this.totalAmount = 0,
     this.depositAmount = 0,
+    this.collectedAmount = 0,
     this.discountCode,
     this.discountAmount = 0,
     this.notes = '',
@@ -71,6 +75,7 @@ class Appointment {
     PaymentStatus? paymentStatus,
     double? totalAmount,
     double? depositAmount,
+    double? collectedAmount,
     String? discountCode,
     double? discountAmount,
     String? notes,
@@ -97,6 +102,7 @@ class Appointment {
       paymentStatus: paymentStatus ?? this.paymentStatus,
       totalAmount: totalAmount ?? this.totalAmount,
       depositAmount: depositAmount ?? this.depositAmount,
+      collectedAmount: collectedAmount ?? this.collectedAmount,
       discountCode: discountCode ?? this.discountCode,
       discountAmount: discountAmount ?? this.discountAmount,
       notes: notes ?? this.notes,
@@ -126,6 +132,7 @@ class Appointment {
         'paymentStatus': paymentStatus.name,
         'totalAmount': totalAmount,
         'depositAmount': depositAmount,
+        'collectedAmount': collectedAmount,
         'discountCode': discountCode,
         'discountAmount': discountAmount,
         'notes': notes,
@@ -162,6 +169,7 @@ class Appointment {
                 orElse: () => PaymentStatus.unpaid),
         totalAmount: ((m['totalAmount'] as num?) ?? 0).toDouble(),
         depositAmount: ((m['depositAmount'] as num?) ?? 0).toDouble(),
+        collectedAmount: ((m['collectedAmount'] as num?) ?? 0).toDouble(),
         discountCode: m['discountCode'] as String?,
         discountAmount: ((m['discountAmount'] as num?) ?? 0).toDouble(),
         notes: (m['notes'] as String?) ?? '',

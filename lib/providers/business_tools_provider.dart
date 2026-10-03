@@ -7,6 +7,7 @@ import '../models/appointment.dart';
 import '../models/business_features.dart';
 import '../models/enums.dart';
 import '../services/firestore_service.dart';
+import '../services/secure_api.dart';
 
 class BusinessToolsProvider extends ChangeNotifier {
   String? _shopId;
@@ -136,8 +137,18 @@ class BusinessToolsProvider extends ChangeNotifier {
   Future<void> addQueue(QueueEntry entry) =>
       FirestoreService.instance.saveQueueEntry(shopId, entry);
 
+  /// Records a payment through the callable so the appointment total and its
+  /// derived payment status can never disagree, then applies the loyalty
+  /// points that the shop rules award for the same sale.
   Future<void> addPayment(Payment payment) async {
-    await FirestoreService.instance.addPayment(shopId, payment);
+    final appointmentId =
+        payment.appointmentId.trim().isEmpty ? null : payment.appointmentId.trim();
+    await SecureApi.instance.recordPayment(
+      shopId: shopId,
+      appointmentId: appointmentId,
+      method: payment.method,
+      amount: payment.amount,
+    );
     final phone = payment.customerPhone.trim();
     if (phone.isEmpty) return;
     final matchingRules = loyaltyRules.where((rule) => rule.enabled);
@@ -167,7 +178,7 @@ class BusinessToolsProvider extends ChangeNotifier {
   }
 
   Future<void> deletePayment(String id) =>
-      FirestoreService.instance.deletePayment(shopId, id);
+      SecureApi.instance.deletePayment(shopId: shopId, paymentId: id);
 
   Future<void> saveInventoryItem(InventoryItem item) =>
       FirestoreService.instance.saveInventoryItem(shopId, item);

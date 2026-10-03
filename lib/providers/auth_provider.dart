@@ -3,8 +3,10 @@ import 'package:flutter/foundation.dart';
 
 import '../models/app_role.dart';
 import '../services/auth_service.dart';
+import '../services/firebase_status.dart';
 import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
+import '../services/secure_api.dart';
 import '../services/shop_manager.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -15,6 +17,12 @@ class AuthProvider extends ChangeNotifier {
   String? error;
 
   AuthProvider() {
+    // When Firebase failed to initialize there is no auth stream to listen to,
+    // and touching it here would throw before the config error screen renders.
+    if (!firebaseReady) {
+      initializing = false;
+      return;
+    }
     AuthService.instance.authStateChanges.listen(_onAuthChanged);
   }
 
@@ -96,11 +104,7 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> joinShopByCode(String code) async {
     error = null;
     try {
-      await FirestoreService.instance.joinShopByCode(
-        uid: user!.uid,
-        email: user!.email ?? '',
-        code: code,
-      );
+      await SecureApi.instance.joinShopByCode(code);
       final resolved =
           await FirestoreService.instance.resolveShopForUser(user!.uid);
       shopId = resolved.shopId;

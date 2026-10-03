@@ -3,12 +3,11 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../l10n/strings.dart';
-import '../../models/appointment.dart';
-import '../../models/enums.dart';
 import '../../models/unavailability_request.dart';
 import '../../providers/appointment_provider.dart';
 import '../../providers/shop_provider.dart';
-import '../../services/firestore_service.dart';
+import '../../services/secure_api.dart';
+import '../../services/secure_error_text.dart';
 import '../../services/shop_manager.dart';
 import '../../widgets/confirm.dart';
 import '../../widgets/empty_state.dart';
@@ -48,29 +47,27 @@ class UnavailabilityScreen extends StatelessWidget {
     final shopId = ShopManager.shopId!;
 
     if (approve) {
-      final total = r.serviceIds.fold<double>(0, (sum, id) {
-        return sum + (shop.serviceById(id)?.price ?? 0);
-      });
-      final appt = Appointment(
-        id: newAppointmentId(),
-        shopId: shopId,
-        reference: FirestoreService.genReference(),
-        customerName: r.customerName,
-        customerPhone: r.customerPhone,
-        employeeId: shop.activeEmployees.isNotEmpty
-            ? shop.activeEmployees.first.id
-            : '',
-        serviceIds: r.serviceIds,
-        startTime: r.requestedStart,
-        endTime: r.requestedEnd,
-        status: AppointmentStatus.confirmed,
-        totalAmount: total,
-        notes: r.reason,
-        outOfHours: true,
-        createdById: null,
-        createdAt: DateTime.now(),
-      );
-      await provider.add(appt, shopId);
+      // Approving turns the request into a real booking, so it goes through
+      // the callable that prices it and takes the slot lock.
+      try {
+        await provider.create(
+          shopId: shopId,
+          employeeId: shop.activeEmployees.isNotEmpty
+              ? shop.activeEmployees.first.id
+              : '',
+          serviceIds: r.serviceIds,
+          start: r.requestedStart,
+          customerName: r.customerName,
+          customerPhone: r.customerPhone,
+          notes: r.reason,
+          outOfHours: true,
+        );
+      } on SecureApiException catch (error) {
+        if (context.mounted) {
+          showSnack(context, describeSecureError(context, error));
+        }
+        return;
+      }
       await provider.updateRequest(
           r.copyWith(status: 'approved'), shopId);
     } else {

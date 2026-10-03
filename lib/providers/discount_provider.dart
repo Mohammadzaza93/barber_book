@@ -38,8 +38,8 @@ class DiscountProvider extends ChangeNotifier {
   Future<void> delete(String id, String shopId) =>
       FirestoreService.instance.deleteDiscount(shopId, id);
 
-  Future<void> recordUsage(String id, String shopId) =>
-      FirestoreService.instance.incrementDiscountUsage(shopId, id);
+  // The redemption counter is incremented by the createAppointment callable
+  // inside the booking transaction, so there is no client usage path.
 
   Discount? findActiveByCode(String code) {
     for (final d in discounts) {

@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../l10n/strings.dart';
 import '../../models/appointment.dart';
-import '../../models/enums.dart';
 import '../../models/service.dart';
 import '../../models/unavailability_request.dart';
 import '../../providers/appointment_provider.dart';
@@ -15,9 +13,10 @@ import '../../providers/discount_provider.dart';
 import '../../providers/feedback_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/booking_calc.dart';
-import '../../services/firestore_service.dart';
 import '../../services/reminder_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/secure_api.dart';
+import '../../services/secure_error_text.dart';
 import '../../services/shop_manager.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/confirm.dart';
@@ -182,8 +181,6 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     }
   }
 
-  String _normalizePhone(String value) => value.replaceAll(RegExp(r'[^0-9+]'), '');
-
   double get _totalAmount {
     final shop = context.read<ShopProvider>();
     return shop.services
@@ -223,11 +220,6 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     final selected = shop.services
         .where((s) => _serviceIds.contains(s.id))
         .toList();
-    final total = selected.fold(0.0, (sum, s) => sum + s.price);
-    final deposit = computeDeposit(settings, selected, total);
-    final payable = total - _appliedDiscount;
-
-    final reference = FirestoreService.genReference();
 
     if (_outOfHours) {
       final request = UnavailabilityRequest(
@@ -246,7 +238,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => BookingSuccessScreen(
-            reference: reference,
+            reference: '-',
             isRequest: true,
           ),
         ),
@@ -254,102 +246,42 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
       return;
     }
 
-    final status = settings.autoConfirm
-        ? AppointmentStatus.confirmed
-        : AppointmentStatus.requested;
-    final occurrences = _recurring
-        ? expandWeeklySeries(first: _slot!, count: 4)
-        : <DateTime>[_slot!];
-    if (occurrences.any((occ) => provider.hasConflict(
-          employeeId: _employeeId!,
-          chairId: _chairId,
-          start: occ,
-          end: occ.add(Duration(minutes: _totalDuration)),
-        ))) {
-      setState(() => _busy = false);
-      if (mounted) {
-        showSnack(context, FeatureLabels.text(context,
-            'هذا الحلاق أو الكرسي محجوز في الوقت المختار.',
-            'This barber or chair is already booked at that time.'));
-      }
-      return;
-    }
-
-    if (_recurring) {
-      final seriesId = newAppointmentId();
-      for (final occ in occurrences) {
-        final appt = Appointment(
-          id: newAppointmentId(),
-          shopId: shopId,
-          reference: reference,
-          customerId: _normalizePhone(_phone.text),
-          customerName: _name.text.trim(),
-          customerPhone: _phone.text.trim(),
-          customerEmail: _email.text.trim(),
-          employeeId: _employeeId!,
-          chairId: _chairId,
-          serviceIds: _serviceIds,
-          startTime: occ,
-          endTime: occ.add(Duration(minutes: _totalDuration)),
-          status: status,
-          paymentStatus:
-              deposit > 0 ? PaymentStatus.depositPaid : PaymentStatus.unpaid,
-          totalAmount: payable,
-          depositAmount: deposit,
-          discountCode: _appliedCode,
-          discountAmount: _appliedDiscount,
-          notes: _notes.text.trim(),
-          recurring: true,
-          seriesId: seriesId,
-          createdById: FirebaseAuth.instance.currentUser?.uid,
-          createdAt: DateTime.now(),
-        );
-        await provider.add(appt, shopId);
-        await ReminderService.instance.scheduleLocalReminders(settings, appt);
-      }
-    } else {
-      final appt = Appointment(
-        id: newAppointmentId(),
+    // The server owns the reference, the duration, the discount, the deposit
+    // and the resulting payment status, so the client sends intent only and
+    // then renders whatever the server decided.
+    List<Map<String, dynamic>> created;
+    try {
+      created = await provider.create(
         shopId: shopId,
-        reference: reference,
-        customerId: _normalizePhone(_phone.text),
+        employeeId: _employeeId!,
+        chairId: _chairId,
+        serviceIds: _serviceIds,
+        start: _slot!,
         customerName: _name.text.trim(),
         customerPhone: _phone.text.trim(),
         customerEmail: _email.text.trim(),
-            employeeId: _employeeId!,
-            chairId: _chairId,
-            serviceIds: _serviceIds,
-        startTime: _slot!,
-        endTime: _slot!.add(Duration(minutes: _totalDuration)),
-        status: status,
-        paymentStatus:
-            deposit > 0 ? PaymentStatus.depositPaid : PaymentStatus.unpaid,
-        totalAmount: payable,
-        depositAmount: deposit,
-        discountCode: _appliedCode,
-        discountAmount: _appliedDiscount,
         notes: _notes.text.trim(),
-        recurring: false,
-        createdById: FirebaseAuth.instance.currentUser?.uid,
-        createdAt: DateTime.now(),
+        discountCode: _appliedCode,
+        recurring: _recurring,
       );
-      await provider.add(appt, shopId);
-      await ReminderService.instance.scheduleLocalReminders(settings, appt);
+    } on SecureApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      showSnack(context, describeSecureError(context, error));
+      return;
+    }
+
+    final reference = created.first['reference'] as String? ?? '';
+    final first = Appointment.fromMap(created.first['id'] as String, created.first);
+    for (final item in created) {
+      await ReminderService.instance.scheduleLocalReminders(
+          settings, Appointment.fromMap(item['id'] as String, item));
     }
 
     await NotificationService.instance.show(
-      'تم إنشاء الحجز',
-      'المرجع: $reference',
+      FeatureLabels.text(context, 'تم إنشاء الحجز', 'Booking created'),
+      FeatureLabels.text(context, 'المرجع: $reference', 'Reference: $reference'),
     );
-
-    if (_appliedCode != null) {
-      if (!mounted) return;
-      final discounts = context.read<DiscountProvider>();
-      final d = discounts.findActiveByCode(_appliedCode!);
-      if (d != null) {
-        await discounts.recordUsage(d.id, shopId);
-      }
-    }
 
     if (!mounted) return;
     Navigator.pushReplacement(
@@ -357,11 +289,11 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
       MaterialPageRoute(
         builder: (_) => BookingSuccessScreen(
           reference: reference,
-          startTime: _slot,
-          endTime: _slot!.add(Duration(minutes: _totalDuration)),
+          startTime: first.startTime,
+          endTime: first.endTime,
           services: selected,
-          totalAmount: payable,
-          depositAmount: deposit,
+          totalAmount: first.totalAmount,
+          depositAmount: first.depositAmount,
         ),
       ),
     );

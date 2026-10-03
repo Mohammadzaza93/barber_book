@@ -16,7 +16,11 @@ class FirestoreService {
   FirestoreService._();
   static final instance = FirestoreService._();
 
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  // Lazy on purpose: this singleton is created while the provider tree is
+  // built, and `FirebaseFirestore.instance` throws [core/no-app] if Firebase
+  // was never initialized. Deferring the lookup keeps the config error screen
+  // reachable instead of crashing during build.
+  FirebaseFirestore get _db => FirebaseFirestore.instance;
 
   CollectionReference<Map<String, dynamic>> _shops() =>
       _db.collection('shops');
@@ -128,17 +132,9 @@ class FirestoreService {
               .map((d) => Appointment.fromMap(d.id, d.data()))
               .toList());
 
-  Future<void> addAppointment(String shopId, Appointment a) async {
-    await _coll(shopId, 'appointments').doc(a.id).set(a.toMap());
-  }
-
-  Future<void> updateAppointment(String shopId, Appointment a) async {
-    await _coll(shopId, 'appointments').doc(a.id).set(a.toMap());
-  }
-
-  Future<void> deleteAppointment(String shopId, String id) async {
-    await _coll(shopId, 'appointments').doc(id).delete();
-  }
+  // Appointment writes are intentionally absent: they are owned by the
+  // createAppointment, updateAppointment and deleteAppointment callables so
+  // pricing, duration, payment status and locks stay server authoritative.
 
   Future<Appointment?> findAppointment(
       String shopId, String reference) async {
@@ -182,11 +178,8 @@ class FirestoreService {
     await _coll(shopId, 'discounts').doc(id).delete();
   }
 
-  Future<void> incrementDiscountUsage(String shopId, String id) async {
-    await _coll(shopId, 'discounts').doc(id).update({
-      'usageCount': FieldValue.increment(1),
-    });
-  }
+  // The redemption counter is owned by the createAppointment callable. A
+  // client cannot increment it, so usage can never be minted locally.
 
   // ---------- Expenses ----------
 
@@ -422,10 +415,8 @@ class FirestoreService {
           .map((snap) => snap.docs
               .map((d) => Payment.fromMap(d.id, d.data()))
               .toList());
-  Future<void> addPayment(String shopId, Payment payment) =>
-      _coll(shopId, 'payments').doc(payment.id).set(payment.toMap());
-  Future<void> deletePayment(String shopId, String id) =>
-      _coll(shopId, 'payments').doc(id).delete();
+  // Payment writes are owned by the updateAppointment callable so the
+  // collected total and the derived payment status cannot disagree.
 
   // ---------- Members / Roles ----------
 
@@ -471,43 +462,8 @@ class FirestoreService {
     return snap.exists ? snap.data() : null;
   }
 
-  Future<void> _setUserProfile(
-      String uid, String email, String? joinedShopId) async {
-    await _users().doc(uid).set({
-      'email': email,
-      if (joinedShopId != null) 'joinedShopId': joinedShopId,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-  }
-
-  /// انضمام المستخدم إلى محل عبر كود الانضمام.
-  /// العضو الجديد يحصل على دور [AppRole.staff] دائماً (أقل صلاحية).
-  Future<void> joinShopByCode({
-    required String uid,
-    required String email,
-    required String code,
-  }) async {
-    final clean = code.trim().toUpperCase();
-    if (clean.isEmpty) throw StateError('joinCodeRequired');
-    final snap = await _shops()
-        .where('joinCode', isEqualTo: clean)
-        .limit(1)
-        .get();
-    if (snap.docs.isEmpty) throw StateError('joinCodeNotFound');
-    final shop = snap.docs.first;
-
-    // منع الانضمام مرتين أو انضمام المالك لمحله بكود.
-    final existing = await getMember(shop.id, uid);
-    if (existing != null) throw StateError('alreadyMember');
-
-    await _members(shop.id).doc(uid).set(Member(
-          uid: uid,
-          email: email,
-          role: AppRole.staff,
-          createdAt: DateTime.now(),
-        ).toMap());
-    await _setUserProfile(uid, email, shop.id);
-  }
+  // Membership is granted by the joinShopByCode callable. The client only
+  // sends the code; it never writes a member document or a shop binding.
 
   Future<void> updateMemberRole(
       String shopId, String uid, AppRole role) async {
@@ -515,15 +471,10 @@ class FirestoreService {
   }
 
   Future<void> removeMember(String shopId, String uid) async {
+    // The user profile stays server owned, so the shop binding is left alone.
+    // resolveShopForUser re-reads the membership and treats a removed member as
+    // having no shop, which makes clearing the binding unnecessary.
     await _members(shopId).doc(uid).delete();
-    // إزالة الربط من ملف المستخدم إن كان يشير لنفس المحل.
-    final profile = await getUserProfile(uid);
-    if (profile?['joinedShopId'] == shopId) {
-      await _users().doc(uid).set({
-        'joinedShopId': FieldValue.delete(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    }
   }
 
   Future<String> rotateJoinCode(String shopId) async {
