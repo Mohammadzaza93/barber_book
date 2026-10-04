@@ -1,3 +1,5 @@
+import 'firestore_date.dart';
+
 class Expense {
   final String id;
   final String title;
@@ -28,7 +30,7 @@ class Expense {
         title: (m['title'] as String?) ?? '',
         category: (m['category'] as String?) ?? 'other',
         amount: ((m['amount'] as num?) ?? 0).toDouble(),
-        date: (m['date'] as dynamic).toDate(),
+        date: readFirestoreDateOrNow(m['date']),
         notes: (m['notes'] as String?) ?? '',
       );
 }

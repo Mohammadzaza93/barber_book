@@ -1,24 +1,13 @@
+import 'firestore_date.dart';
+
 enum QueueStatus { waiting, inService, completed, cancelled }
 
-DateTime _readDate(dynamic value, [DateTime? fallback]) {
-  if (value is DateTime) return value;
-  if (value == null) return fallback ?? DateTime.now();
-  try {
-    return (value as dynamic).toDate() as DateTime;
-  } catch (_) {
-    return fallback ?? DateTime.now();
-  }
-}
+/// Falls back to [fallback], then to now, so legacy documents missing a date
+/// field still render instead of throwing.
+DateTime _readDate(dynamic value, [DateTime? fallback]) =>
+    readFirestoreDate(value, fallback) ?? DateTime.now().toUtc();
 
-DateTime? _readNullableDate(dynamic value) {
-  if (value is DateTime) return value;
-  if (value == null) return null;
-  try {
-    return (value as dynamic).toDate() as DateTime;
-  } catch (_) {
-    return null;
-  }
-}
+DateTime? _readNullableDate(dynamic value) => readFirestoreDate(value);
 
 class PortfolioItem {
   final String id;

@@ -1,4 +1,5 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
@@ -17,12 +18,23 @@ class NotificationService {
   FirebaseMessaging get _messaging => FirebaseMessaging.instance;
   bool _initialized = false;
 
+  /// Timezone used to schedule local reminder notifications. Matches the
+  /// server-side default offset in `functions/src/lib/time.js`.
+  static const String _shopTimeZone = 'Asia/Riyadh';
+
   Future<void> init() async {
     if (_initialized) return;
     tzdata.initializeTimeZones();
     try {
-      tz.setLocalLocation(tz.getLocation('Asia/Riyadh'));
-    } catch (_) {
+      tz.setLocalLocation(tz.getLocation(_shopTimeZone));
+    } catch (e) {
+      // Previously silent: every reminder then fired at device-local
+      // wall-clock time instead of the shop's timezone, with no signal that
+      // the fallback had been taken.
+      debugPrint(
+        'NotificationService: failed to load $_shopTimeZone ($e); '
+        'falling back to device timezone for reminders',
+      );
       tz.setLocalLocation(tz.local);
     }
 
@@ -43,12 +55,16 @@ class NotificationService {
       alert: true, badge: true, sound: true,
     );
 
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      final n = message.notification;
-      if (n != null) {
-        show(n.title ?? '', n.body ?? '');
-      }
-    });
+    FirebaseMessaging.onMessage.listen(
+      (RemoteMessage message) {
+        final n = message.notification;
+        if (n != null) {
+          show(n.title ?? '', n.body ?? '');
+        }
+      },
+      onError: (Object e, StackTrace _) =>
+          debugPrint('NotificationService: foreground stream error: $e'),
+    );
 
     _initialized = true;
   }

@@ -43,3 +43,22 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Release signing material. Credentials are supplied per machine and must never
+# reach the repository. With no key.properties the release build is unsigned.
+/android/key.properties
+/android/keystore.properties
+/key.properties
+/keystore.properties
+*.jks
+*.keystore
+
+# Service account / private key material
+/service-account*.json
+service-account*.json
+serviceAccount*.json
+*serviceAccount*.json
+serviceaccount*.json
+*-key.json
+*-key*.json
+*.pem

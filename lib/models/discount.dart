@@ -1,3 +1,5 @@
+import 'firestore_date.dart';
+
 class Discount {
   final String id;
   final String code;
@@ -83,12 +85,8 @@ class Discount {
         value: ((m['value'] as num?) ?? 0).toDouble(),
         minValue: ((m['minValue'] as num?) ?? 0).toDouble(),
         maxDiscount: ((m['maxDiscount'] as num?) ?? 0).toDouble(),
-        validFrom: m['validFrom'] is DateTime
-            ? m['validFrom'] as DateTime
-            : (m['validFrom'] as dynamic)?.toDate(),
-        validTo: m['validTo'] is DateTime
-            ? m['validTo'] as DateTime
-            : (m['validTo'] as dynamic)?.toDate(),
+        validFrom: readFirestoreDate(m['validFrom']),
+        validTo: readFirestoreDate(m['validTo']),
         active: (m['active'] as bool?) ?? true,
         usageLimit: (m['usageLimit'] as num?)?.toInt() ?? 0,
         usageCount: (m['usageCount'] as num?)?.toInt() ?? 0,

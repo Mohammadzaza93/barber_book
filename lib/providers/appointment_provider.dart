@@ -1,18 +1,24 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseException;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/appointment.dart';
 import '../models/enums.dart';
+import '../models/shop_time.dart';
 import '../models/unavailability_request.dart';
 import '../services/firestore_service.dart';
 import '../services/secure_api.dart';
+import '../services/shop_manager.dart';
 
 class AppointmentProvider extends ChangeNotifier {
   List<Appointment> appointments = [];
   List<UnavailabilityRequest> requests = [];
   bool loading = true;
+
+  /// First non-permission stream failure, surfaced instead of hanging.
+  String? error;
 
   String? _boundShopId;
   final List<StreamSubscription> _subs = [];
@@ -25,25 +31,48 @@ class AppointmentProvider extends ChangeNotifier {
     }
     _subs.clear();
     loading = true;
-    _subs.add(FirestoreService.instance
-        .watchAppointments(shopId)
-        .listen((list) {
+    error = null;
+    _listen(FirestoreService.instance.watchAppointments(shopId), (list) {
       appointments = list;
       loading = false;
-      notifyListeners();
-    }));
-    _subs.add(FirestoreService.instance
-        .watchUnavailabilityRequests(shopId)
-        .listen((list) {
+    }, gatesLoading: true);
+    _listen(FirestoreService.instance.watchUnavailabilityRequests(shopId),
+        (list) {
       requests = list;
-      notifyListeners();
-    }));
+    });
+  }
+
+  /// Subscribes [stream] with a shared error path so a denied or offline read
+  /// clears [loading] instead of spinning forever.
+  void _listen<T>(
+    Stream<List<T>> stream,
+    void Function(List<T> value) onData, {
+    bool gatesLoading = false,
+  }) {
+    _subs.add(stream.listen(
+      (value) {
+        onData(value);
+        if (gatesLoading) loading = false;
+        notifyListeners();
+      },
+      onError: (Object e, StackTrace _) {
+        final code = e is FirebaseException ? e.code : '';
+        if (code != 'permission-denied' && error == null) {
+          error = e.toString();
+        }
+        if (gatesLoading) loading = false;
+        notifyListeners();
+      },
+    ));
   }
 
   List<Appointment> get todayAppointments {
     final now = DateTime.now();
-    final start = DateTime(now.year, now.month, now.day);
-    final end = start.add(const Duration(days: 1));
+    // Window boundaries come from the shop's UTC offset, not the device zone,
+    // so "today" matches the shop's calendar day on any device.
+    final offset = ShopManager.timezoneOffsetMinutes;
+    final start = shopDayStart(now, offset);
+    final end = shopDayEnd(now, offset);
     return appointments.where((a) {
       final d = a.startTime;
       return !d.isBefore(start) && d.isBefore(end);
@@ -196,6 +225,21 @@ class AppointmentProvider extends ChangeNotifier {
       UnavailabilityRequest r, String shopId) async {
     await FirestoreService.instance
         .updateUnavailabilityRequest(shopId, r);
+  }
+
+  /// Drops the bound shop and all cached appointments/requests. Used on
+  /// sign-out so customer PII never survives into the next session.
+  void reset() {
+    for (final s in _subs) {
+      s.cancel();
+    }
+    _subs.clear();
+    _boundShopId = null;
+    appointments = [];
+    requests = [];
+    loading = true;
+    error = null;
+    notifyListeners();
   }
 
   @override

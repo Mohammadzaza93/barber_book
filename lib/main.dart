@@ -28,7 +28,13 @@ Future<void> main() async {
   if (firebaseReady) {
     try {
       await NotificationService.instance.init();
-    } catch (_) {}
+    } catch (e, stack) {
+      // Non-fatal: the app is fully usable without reminders, but an empty
+      // catch here left no trace of *why* notifications were dead.
+      developer.log('NotificationService.init() failed: $e',
+          name: 'notifications');
+      developer.log('$stack', name: 'notifications', level: 1000);
+    }
   }
   runApp(const BarberApp());
 }

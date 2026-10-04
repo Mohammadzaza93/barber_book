@@ -1,4 +1,5 @@
 import 'enums.dart';
+import 'firestore_date.dart';
 
 class Appointment {
   final String id;
@@ -159,8 +160,8 @@ class Appointment {
         serviceIds: (m['serviceIds'] as List<dynamic>? ?? const [])
             .map((e) => e.toString())
             .toList(),
-        startTime: (m['startTime'] as dynamic).toDate(),
-        endTime: (m['endTime'] as dynamic).toDate(),
+        startTime: readFirestoreDateOrNow(m['startTime']),
+        endTime: readFirestoreDateOrNow(m['endTime']),
         status: AppointmentStatus.values
             .firstWhere((e) => e.name == m['status'],
                 orElse: () => AppointmentStatus.requested),
@@ -177,7 +178,7 @@ class Appointment {
         seriesId: m['seriesId'] as String?,
         outOfHours: (m['outOfHours'] as bool?) ?? false,
         createdById: m['createdById'] as String?,
-        createdAt: (m['createdAt'] as dynamic).toDate(),
+        createdAt: readFirestoreDateOrNow(m['createdAt']),
         reminderSent: (m['reminderSent'] as bool?) ?? false,
         rating: (m['rating'] as num?)?.toInt(),
       );

@@ -1,3 +1,5 @@
+import 'firestore_date.dart';
+
 class UnavailabilityRequest {
   final String id;
   final String customerName;
@@ -52,10 +54,10 @@ class UnavailabilityRequest {
         serviceIds: (m['serviceIds'] as List<dynamic>? ?? const [])
             .map((e) => e.toString())
             .toList(),
-        requestedStart: (m['requestedStart'] as dynamic).toDate(),
-        requestedEnd: (m['requestedEnd'] as dynamic).toDate(),
+        requestedStart: readFirestoreDateOrNow(m['requestedStart']),
+        requestedEnd: readFirestoreDateOrNow(m['requestedEnd']),
         reason: (m['reason'] as String?) ?? '',
         status: (m['status'] as String?) ?? 'pending',
-        createdAt: (m['createdAt'] as dynamic).toDate(),
+        createdAt: readFirestoreDateOrNow(m['createdAt']),
       );
 }

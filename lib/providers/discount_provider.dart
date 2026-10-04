@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseException;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
@@ -9,6 +10,9 @@ import '../services/firestore_service.dart';
 class DiscountProvider extends ChangeNotifier {
   List<Discount> discounts = [];
   bool loading = true;
+
+  /// First non-permission stream failure, surfaced instead of hanging.
+  String? error;
   String? _boundShopId;
   final List<StreamSubscription> _subs = [];
 
@@ -20,13 +24,22 @@ class DiscountProvider extends ChangeNotifier {
     }
     _subs.clear();
     loading = true;
-    _subs.add(FirestoreService.instance
-        .watchDiscounts(shopId)
-        .listen((list) {
-      discounts = list;
-      loading = false;
-      notifyListeners();
-    }));
+    error = null;
+    _subs.add(FirestoreService.instance.watchDiscounts(shopId).listen(
+      (list) {
+        discounts = list;
+        loading = false;
+        notifyListeners();
+      },
+      // Discount management is manager-only; a denied read must clear `loading`.
+      onError: (Object e, StackTrace _) {
+        if (e is! FirebaseException || e.code != 'permission-denied') {
+          if (error == null) error = e.toString();
+        }
+        loading = false;
+        notifyListeners();
+      },
+    ));
   }
 
   Future<void> add(Discount d, String shopId) =>
@@ -46,6 +59,19 @@ class DiscountProvider extends ChangeNotifier {
       if (d.code.toLowerCase() == code.trim().toLowerCase()) return d;
     }
     return null;
+  }
+
+  /// Drops the bound shop and cached discounts. Used on sign-out.
+  void reset() {
+    for (final s in _subs) {
+      s.cancel();
+    }
+    _subs.clear();
+    _boundShopId = null;
+    discounts = [];
+    loading = true;
+    error = null;
+    notifyListeners();
   }
 
   @override

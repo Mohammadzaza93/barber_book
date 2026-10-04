@@ -35,6 +35,7 @@
   "optional": "(optional)",
   "home": "Home",
   "logout": "Log out",
+  "logoutDone": "You have been logged out.",
   "language": "Language",
   "arabic": "Arabic",
   "english": "English",

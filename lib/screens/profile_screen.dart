@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/strings.dart';
+import '../providers/appointment_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/business_tools_provider.dart';
+import '../providers/discount_provider.dart';
+import '../providers/expense_provider.dart';
+import '../providers/feedback_provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/shop_provider.dart';
 import '../services/auth_service.dart';
+import '../services/shop_manager.dart';
 import '../widgets/confirm.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -93,7 +100,8 @@ class ProfileScreen extends StatelessWidget {
                   title: t(context).logoutConfirm,
                   confirmText: t(context).logout,
                   destructive: true);
-              if (ok) await auth.signOut();
+              if (!ok || !context.mounted) return;
+              await _signOut(context);
             },
             style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
             icon: const Icon(Icons.logout_rounded),
@@ -102,6 +110,50 @@ class ProfileScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Signs out and fully tears down the previous session.
+  ///
+  /// `RootGate` is the `home:` route, so any screen pushed on top of it (this
+  /// one included) survives a plain `signOut()` and would keep rendering the old
+  /// shop's data over the login screen. Popping to the first route and clearing
+  /// every shop-scoped provider plus the cached favourite barber closes that.
+  Future<void> _signOut(BuildContext context) async {
+    // Everything that needs a BuildContext is captured before the first await
+    // so no lookup happens across an async gap.
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final auth = context.read<AuthProvider>();
+    final shopProvider = context.read<ShopProvider>();
+    final appointmentProvider = context.read<AppointmentProvider>();
+    final businessTools = context.read<BusinessToolsProvider>();
+    final discountProvider = context.read<DiscountProvider>();
+    final expenseProvider = context.read<ExpenseProvider>();
+    final feedbackProvider = context.read<FeedbackProvider>();
+    final shopId = ShopManager.shopId;
+
+    await auth.signOut();
+
+    shopProvider.reset();
+    appointmentProvider.reset();
+    businessTools.reset();
+    discountProvider.reset();
+    expenseProvider.reset();
+    feedbackProvider.reset();
+
+    if (shopId != null) {
+      // Best effort: a preference-write failure must not block sign-out.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('favorite_barber_$shopId');
+      } catch (e) {
+        debugPrint('signOut: clearing favourite barber failed: $e');
+      }
+    }
+
+    if (!context.mounted) return;
+    navigator.popUntil((route) => route.isFirst);
+    messenger.showSnackBar(SnackBar(content: Text(t(context).logoutDone)));
   }
 
   Future<void> _changePassword(BuildContext context) async {

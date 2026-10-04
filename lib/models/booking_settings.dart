@@ -1,5 +1,22 @@
 ﻿import 'employee.dart';
 
+/// Fallback for shops that predate the `timezoneOffsetMinutes` field.
+/// Matches `DEFAULT_OFFSET_MINUTES` in `functions/src/lib/time.js`.
+const int defaultTimezoneOffsetMinutes = 180;
+
+/// Clamp to the same +/-840 minute range the server enforces, so a malformed
+/// document cannot push the client outside the server's valid range.
+int _clampOffset(int minutes) => minutes.clamp(-840, 840).toInt();
+
+/// Reads an int from a Firestore value without throwing on a wrong type, which
+/// a bare `as num?` cast does.
+int? _readInt(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value.trim());
+  return null;
+}
+
 class BookingSettings {
   final String shopName;
   final String about;
@@ -32,6 +49,13 @@ class BookingSettings {
   // Booking options
   final bool allowOutOfHours;
   final int maxAdvanceDays;
+
+  /// Minutes east of UTC for the shop's wall clock. Mirrors
+  /// `functions/src/lib/time.js` (`DEFAULT_OFFSET_MINUTES = 180`), which uses
+  /// this same field to validate working hours server-side. Reading it here
+  /// keeps "today" and slot windows on the client aligned with the server's
+  /// notion of the shop's day.
+  final int timezoneOffsetMinutes;
   final bool autoConfirm;
   final bool showRatings;
 
@@ -67,6 +91,7 @@ class BookingSettings {
     this.reminderChannels = const ['whatsapp', 'email'],
     this.allowOutOfHours = true,
     this.maxAdvanceDays = 60,
+    this.timezoneOffsetMinutes = defaultTimezoneOffsetMinutes,
     this.autoConfirm = false,
     this.showRatings = true,
     this.seoTitle = '',
@@ -99,6 +124,7 @@ class BookingSettings {
     List<String>? reminderChannels,
     bool? allowOutOfHours,
     int? maxAdvanceDays,
+    int? timezoneOffsetMinutes,
     bool? autoConfirm,
     bool? showRatings,
     String? seoTitle,
@@ -130,6 +156,8 @@ class BookingSettings {
       reminderChannels: reminderChannels ?? this.reminderChannels,
       allowOutOfHours: allowOutOfHours ?? this.allowOutOfHours,
       maxAdvanceDays: maxAdvanceDays ?? this.maxAdvanceDays,
+    timezoneOffsetMinutes:
+        timezoneOffsetMinutes ?? this.timezoneOffsetMinutes,
       autoConfirm: autoConfirm ?? this.autoConfirm,
       showRatings: showRatings ?? this.showRatings,
       seoTitle: seoTitle ?? this.seoTitle,
@@ -164,6 +192,7 @@ class BookingSettings {
         'reminderChannels': reminderChannels,
         'allowOutOfHours': allowOutOfHours,
         'maxAdvanceDays': maxAdvanceDays,
+    'timezoneOffsetMinutes': timezoneOffsetMinutes,
         'autoConfirm': autoConfirm,
         'showRatings': showRatings,
         'seoTitle': seoTitle,
@@ -214,6 +243,8 @@ class BookingSettings {
               .toList(),
       allowOutOfHours: (m['allowOutOfHours'] as bool?) ?? true,
       maxAdvanceDays: (m['maxAdvanceDays'] as num?)?.toInt() ?? 60,
+    timezoneOffsetMinutes: _clampOffset(
+        _readInt(m['timezoneOffsetMinutes']) ?? defaultTimezoneOffsetMinutes),
       autoConfirm: (m['autoConfirm'] as bool?) ?? false,
       showRatings: (m['showRatings'] as bool?) ?? true,
       seoTitle: (m['seoTitle'] as String?) ?? '',

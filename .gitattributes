@@ -1,0 +1,81 @@
+# Line ending policy for the BarberBook repository.
+#
+# Rationale: this project is developed on Windows but builds and deploys on
+# Linux (Cloud Functions, Firebase Emulator, CI). Without an explicit policy,
+# `core.autocrlf=true` on a Windows checkout converts LF to CRLF in the working
+# tree, which produces noisy diffs, breaks `gradlew` / shell scripts, and lets a
+# rules file or a Node test disagree byte-for-byte between platforms.
+#
+# Audit note: at the time this file was added, every text blob already stored in
+# the Git index was LF-only, so adopting this policy caused NO line-ending churn
+# and required no renormalization commit.
+
+# Default: let Git detect text vs binary, and normalize text to LF in the
+# repository. `auto` keeps binary assets untouched.
+* text=auto
+
+# --- Source: always LF, never CRLF -------------------------------------------
+*.dart        text eol=lf
+*.js          text eol=lf
+*.json        text eol=lf
+*.arb         text eol=lf
+*.rules       text eol=lf
+*.yaml        text eol=lf
+*.yml         text eol=lf
+*.gradle      text eol=lf
+*.properties  text eol=lf
+*.xml         text eol=lf
+*.svg         text eol=lf
+*.md          text eol=lf
+*.sh          text eol=lf
+*.kt          text eol=lf
+*.kts         text eol=lf
+*.swift       text eol=lf
+*.h           text eol=lf
+*.m           text eol=lf
+*.mm          text eol=lf
+*.plist       text eol=lf
+*.pbxproj     text eol=lf
+*.xcconfig    text eol=lf
+*.xcscheme    text eol=lf
+*.xcsettings  text eol=lf
+*.storyboard  text eol=lf
+*.xcworkspacedata text eol=lf
+*.txt         text eol=lf
+*.csv         text eol=lf
+*.toml        text eol=lf
+*.yml         text eol=lf
+*.lock        text eol=lf
+.gitignore    text eol=lf
+.gitattributes text eol=lf
+gradlew       text eol=lf
+gradlew.bat   text eol=crlf
+
+# Windows batch files must keep CRLF to behave correctly under cmd.exe.
+*.bat         text eol=crlf
+
+# --- Binary assets: never touched --------------------------------------------
+*.png         binary
+*.jpg         binary
+*.jpeg        binary
+*.gif         binary
+*.ico         binary
+*.webp        binary
+*.ttf         binary
+*.otf         binary
+*.woff        binary
+*.woff2       binary
+*.pdf         binary
+*.zip         binary
+*.jar         binary
+*.aar         binary
+*.apk         binary
+*.aab         binary
+*.keystore    binary
+*.jks         binary
+*.p12         binary
+*.pem         binary
+
+# Lockfiles and generated dependency trees: keep them LF and diffable.
+pubspec.lock          text eol=lf
+package-lock.json     text eol=lf

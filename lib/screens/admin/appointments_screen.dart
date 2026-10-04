@@ -5,8 +5,10 @@ import 'package:provider/provider.dart';
 import '../../l10n/strings.dart';
 import '../../models/appointment.dart';
 import '../../models/enums.dart';
+import '../../models/shop_time.dart';
 import '../../providers/appointment_provider.dart';
 import '../../providers/shop_provider.dart';
+import '../../services/shop_manager.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/status_chip.dart';
 import 'appointment_edit_screen.dart';
@@ -29,14 +31,14 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     final shop = context.read<ShopProvider>();
 
     final filtered = appointments.where((a) {
-      if (_onlyToday) {
-        final now = DateTime.now();
-        if (a.startTime.year != now.year ||
-            a.startTime.month != now.month ||
-            a.startTime.day != now.day) {
-          return false;
-        }
+if (_onlyToday) {
+      // Compared against the shop's local day, not the device's, and not the
+      // raw UTC components of the appointment.
+      if (!isSameShopDay(
+          a.startTime, DateTime.now(), ShopManager.timezoneOffsetMinutes)) {
+        return false;
       }
+    }
       if (_onlyPending && a.status != AppointmentStatus.requested) {
         return false;
       }

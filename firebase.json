@@ -1,7 +1,10 @@
 {
   "firestore": {
     "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
+    "indexes": "firestore.indexes.json",
+    "predeploy": [
+      "npm --prefix functions run test:rules"
+    ]
   },
   "functions": [
     {
@@ -15,7 +18,8 @@
         "*.local"
       ],
       "predeploy": [
-        "npm --prefix \"$RESOURCE_DIR\" run test:unit"
+        "npm --prefix \"$RESOURCE_DIR\" ci",
+        "npm --prefix \"$RESOURCE_DIR\" run test:all"
       ]
     }
   ],

@@ -348,6 +348,7 @@
   "currentPassword": "كلمة المرور الحالية",
   "newPassword": "كلمة المرور الجديدة",
   "logoutConfirm": "تسجيل الخروج من هذا الجهاز؟",
+  "logoutDone": "تم تسجيل الخروج بنجاح.",
   "appVersion": "الإصدار 1.0.0",
   "notifications": "الإشعارات",
   "enableNotifications": "تفعيل إشعارات الدفع لهذا الجهاز",

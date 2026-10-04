@@ -1,0 +1,36 @@
+{
+  "name": "barberbook-functions",
+  "description": "Server-authoritative business logic for the BarberBook app (join, booking, pricing, coupons, payments).",
+  "private": true,
+  "main": "src/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "overrides": {
+    "uuid": "11.1.1",
+    "@grpc/grpc-js": "1.14.5",
+    "serialize-javascript": "7.1.2",
+    "diff": "8.0.3"
+  },
+  "scripts": {
+    "gate:java": "node scripts/require-java.js",
+    "test": "npm run test:all",
+    "test:unit": "mocha --timeout 10000 \"test/unit/**/*.test.js\"",
+    "test:rules": "npm run gate:java && npm run emulators:exec \"mocha --timeout 60000 test/emulator/rules.test.js\"",
+    "test:integration": "npm run gate:java && npm run emulators:exec \"mocha --timeout 60000 test/emulator/booking.test.js test/emulator/mutations.test.js\"",
+    "test:emulator": "npm run gate:java && npm run emulators:exec \"mocha --timeout 60000 test/emulator/booking.test.js test/emulator/mutations.test.js test/emulator/rules.test.js\"",
+    "test:all": "npm run test:unit && npm run test:emulator",
+    "verify": "npm run test:all",
+    "emulators:exec": "firebase emulators:exec --only firestore --project demo-barberbook --config ../firebase.json",
+    "serve": "firebase emulators:start --only firestore,functions",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.2",
+    "firebase-functions": "^6.3.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "mocha": "^11.0.1"
+  }
+}

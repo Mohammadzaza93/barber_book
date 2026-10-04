@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseException;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
@@ -9,6 +10,9 @@ import '../services/firestore_service.dart';
 class FeedbackProvider extends ChangeNotifier {
   List<Feedback> feedback = [];
   bool loading = true;
+
+  /// First non-permission stream failure, surfaced instead of hanging.
+  String? error;
   String? _boundShopId;
   final List<StreamSubscription> _subs = [];
 
@@ -20,13 +24,22 @@ class FeedbackProvider extends ChangeNotifier {
     }
     _subs.clear();
     loading = true;
-    _subs.add(FirestoreService.instance
-        .watchFeedback(shopId)
-        .listen((list) {
-      feedback = list;
-      loading = false;
-      notifyListeners();
-    }));
+    error = null;
+    _subs.add(FirestoreService.instance.watchFeedback(shopId).listen(
+      (list) {
+        feedback = list;
+        loading = false;
+        notifyListeners();
+      },
+      // Feedback is manager-only; a denied read must clear `loading`.
+      onError: (Object e, StackTrace _) {
+        if (e is! FirebaseException || e.code != 'permission-denied') {
+          if (error == null) error = e.toString();
+        }
+        loading = false;
+        notifyListeners();
+      },
+    ));
   }
 
   List<Feedback> get approved =>
@@ -46,6 +59,19 @@ class FeedbackProvider extends ChangeNotifier {
 
   Future<void> delete(String id, String shopId) =>
       FirestoreService.instance.deleteFeedback(shopId, id);
+
+  /// Drops the bound shop and cached feedback. Used on sign-out.
+  void reset() {
+    for (final s in _subs) {
+      s.cancel();
+    }
+    _subs.clear();
+    _boundShopId = null;
+    feedback = [];
+    loading = true;
+    error = null;
+    notifyListeners();
+  }
 
   @override
   void dispose() {

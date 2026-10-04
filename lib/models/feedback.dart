@@ -1,3 +1,5 @@
+import 'firestore_date.dart';
+
 class Feedback {
   final String id;
   final String appointmentId;
@@ -43,6 +45,6 @@ class Feedback {
         rating: (m['rating'] as num?)?.toInt() ?? 5,
         comment: (m['comment'] as String?) ?? '',
         showOnPage: (m['showOnPage'] as bool?) ?? false,
-        createdAt: (m['createdAt'] as dynamic).toDate(),
+        createdAt: readFirestoreDateOrNow(m['createdAt']),
       );
 }

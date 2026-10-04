@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseException;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
@@ -26,6 +27,15 @@ class BusinessToolsProvider extends ChangeNotifier {
   List<InventoryItem> inventory = [];
   List<InventoryMovement> inventoryMovements = [];
   bool loading = true;
+
+  /// First unrecoverable stream error, surfaced in the UI instead of hanging.
+  String? error;
+
+  /// True when Firestore rejected a read for this role. Staff legitimately
+  /// lack access to the manager-only collections, so this is expected rather
+  /// than exceptional.
+  bool permissionDenied = false;
+
   List<Appointment> _appointments = [];
 
   void bind(String shopId) {
@@ -36,63 +46,66 @@ class BusinessToolsProvider extends ChangeNotifier {
     }
     _subs.clear();
     loading = true;
+    error = null;
+    permissionDenied = false;
     final db = FirestoreService.instance;
-    _subs.add(db.watchPortfolio(shopId).listen((value) {
-      portfolio = value;
-      notifyListeners();
-    }));
-    _subs.add(db.watchCustomers(shopId).listen((value) {
-      customers = value;
-      notifyListeners();
-    }));
-    _subs.add(db.watchLoyalty(shopId).listen((value) {
-      loyalty = value;
-      notifyListeners();
-    }));
-    _subs.add(db.watchLoyaltyRules(shopId).listen((value) {
-      loyaltyRules = value;
-      notifyListeners();
-    }));
-    _subs.add(db.watchLoyaltyGifts(shopId).listen((value) {
-      loyaltyGifts = value;
-      notifyListeners();
-    }));
-    _subs.add(db.watchChairs(shopId).listen((value) {
-      chairs = value;
-      notifyListeners();
-    }));
-    _subs.add(db.watchChairSupplies(shopId).listen((value) {
-      chairSupplies = value;
-      notifyListeners();
-    }));
-    _subs.add(db.watchChairWeeklyProfits(shopId).listen((value) {
-      weeklyProfits = value;
-      notifyListeners();
-    }));
-    _subs.add(db.watchQueue(shopId).listen((value) {
-      queue = value;
-      notifyListeners();
-    }));
-    _subs.add(db.watchInventory(shopId).listen((value) {
-      inventory = value;
-      notifyListeners();
-    }));
-    _subs.add(db.watchInventoryMovements(shopId).listen((value) {
-      inventoryMovements = value;
-      notifyListeners();
-    }));
-    _subs.add(db.watchPayments(shopId).listen((value) {
-      payments = value;
-      loading = false;
-      notifyListeners();
-    }));
-    _subs.add(db.watchAppointments(shopId).listen((value) {
-      _appointments = value;
-      _syncCustomerProfiles(value);
-    }));
+
+    _listen(db.watchPortfolio(shopId), (v) => portfolio = v);
+    _listen(db.watchCustomers(shopId), (v) => customers = v);
+    _listen(db.watchLoyalty(shopId), (v) => loyalty = v);
+    _listen(db.watchLoyaltyRules(shopId), (v) => loyaltyRules = v);
+    _listen(db.watchLoyaltyGifts(shopId), (v) => loyaltyGifts = v);
+    _listen(db.watchChairs(shopId), (v) => chairs = v);
+    _listen(db.watchChairSupplies(shopId), (v) => chairSupplies = v);
+    _listen(db.watchChairWeeklyProfits(shopId), (v) => weeklyProfits = v);
+    _listen(db.watchQueue(shopId), (v) => queue = v);
+    _listen(db.watchInventory(shopId), (v) => inventory = v);
+    _listen(db.watchInventoryMovements(shopId), (v) => inventoryMovements = v);
+    _listen(db.watchPayments(shopId), (v) => payments = v);
+
+    // `appointments` is the gating stream: it is readable by every shop role
+    // (firestore.rules canReadShopData), so `loading` always resolves. The
+    // previously-gated `payments` stream is manager-only, which left staff
+    // spinning forever.
+    _listen(
+      db.watchAppointments(shopId),
+      (v) {
+        _appointments = v;
+        _syncCustomerProfiles(v);
+      },
+      gatesLoading: true,
+    );
   }
 
-  String get shopId => _shopId!;
+  /// Subscribes [stream], funnelling both data and failures through one path so
+  /// a single denied collection can never leave the screen on a spinner.
+  void _listen<T>(
+    Stream<List<T>> stream,
+    void Function(List<T> value) onData, {
+    bool gatesLoading = false,
+  }) {
+    _subs.add(stream.listen(
+      (value) {
+        onData(value);
+        if (gatesLoading) loading = false;
+        notifyListeners();
+      },
+      onError: (Object e, StackTrace _) {
+        final code = e is FirebaseException ? e.code : '';
+        if (code == 'permission-denied') {
+          permissionDenied = true;
+        } else if (error == null) {
+          error = e.toString();
+        }
+        // Never leave the caller waiting on a stream that can no longer deliver.
+        if (gatesLoading) loading = false;
+        notifyListeners();
+      },
+    ));
+  }
+
+  bool get isBound => _shopId != null;
+  String get shopId => _shopId ?? '';
   List<Appointment> get appointments => List.unmodifiable(_appointments);
   String newId() => const Uuid().v4();
 
@@ -350,6 +363,33 @@ class BusinessToolsProvider extends ChangeNotifier {
       if (a[i] != b[i]) return false;
     }
     return true;
+  }
+
+  /// Drops the bound shop and all twelve cached collections. Used on sign-out so
+  /// customer profiles and financials never survive into the next session.
+  void reset() {
+    for (final sub in _subs) {
+      sub.cancel();
+    }
+    _subs.clear();
+    _shopId = null;
+    portfolio = [];
+    customers = [];
+    loyalty = [];
+    loyaltyRules = [];
+    loyaltyGifts = [];
+    chairs = [];
+    chairSupplies = [];
+    weeklyProfits = [];
+    queue = [];
+    payments = [];
+    inventory = [];
+    inventoryMovements = [];
+    _appointments = [];
+    loading = true;
+    error = null;
+    permissionDenied = false;
+    notifyListeners();
   }
 
   @override

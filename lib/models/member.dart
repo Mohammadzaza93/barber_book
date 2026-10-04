@@ -1,4 +1,5 @@
 import 'app_role.dart';
+import 'firestore_date.dart';
 
 /// عضو فريق المحل (حساب مستخدم مرتبط بالمحل بدور وصلاحيات محددة).
 class Member {
@@ -29,7 +30,7 @@ class Member {
         'email': email,
         'name': name,
         'role': role.name,
-        'createdAt': createdAt?.toIso8601String(),
+        'createdAt': createdAt,
       };
 
   factory Member.fromMap(String uid, Map<String, dynamic> m) => Member(
@@ -37,5 +38,6 @@ class Member {
         email: (m['email'] as String?) ?? '',
         name: (m['name'] as String?) ?? '',
         role: AppRoleX.fromName(m['role'] as String?),
+        createdAt: readFirestoreDate(m['createdAt']),
       );
 }

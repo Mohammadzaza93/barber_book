@@ -5,6 +5,24 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+// Release signing is credential driven and never falls back to the debug key.
+// android/key.properties is git ignored. When it is absent the release variant
+// is built UNSIGNED, which keeps `flutter build apk --release` reproducible on
+// a clean machine instead of silently producing a debug signed artifact.
+def releaseSigningProperties = new Properties()
+def releaseSigningFile = rootProject.file("key.properties")
+def hasReleaseSigning = releaseSigningFile.exists()
+if (hasReleaseSigning) {
+    releaseSigningFile.withInputStream { releaseSigningProperties.load(it) }
+    def required = ["storeFile", "storePassword", "keyAlias", "keyPassword"]
+    def missing = required.findAll { !releaseSigningProperties[it] }
+    if (!missing.isEmpty()) {
+        throw new GradleException(
+            "android/key.properties is present but incomplete. Missing: ${missing.join(', ')}"
+        )
+    }
+}
+
 android {
     namespace = "com.barberbook.barberbook"
     compileSdk = flutter.compileSdkVersion
@@ -32,11 +50,23 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile = file(releaseSigningProperties["storeFile"])
+                storePassword = releaseSigningProperties["storePassword"]
+                keyAlias = releaseSigningProperties["keyAlias"]
+                keyPassword = releaseSigningProperties["keyPassword"]
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.debug
+            // Only ever a real release key, or nothing at all. Never signingConfigs.debug.
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.release
+            }
         }
     }
 }
