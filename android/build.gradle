@@ -1,6 +1,5 @@
 buildscript {
     repositories {
-        maven { url = uri("file:///C:/Users/HP/AppData/Local/Temp/opencode/maven-local") }
         maven { url = uri("https://maven.aliyun.com/repository/google") }
         maven { url = uri("https://maven.aliyun.com/repository/central") }
         google()
@@ -10,7 +9,6 @@ buildscript {
 
 allprojects {
     repositories {
-        maven { url = uri("file:///C:/Users/HP/AppData/Local/Temp/opencode/maven-local") }
         maven { url = uri("https://maven.aliyun.com/repository/google") }
         maven { url = uri("https://maven.aliyun.com/repository/central") }
         google()
@@ -25,7 +23,6 @@ subprojects {
 subprojects {
     buildscript {
         repositories {
-            maven { url = uri("file:///C:/Users/HP/AppData/Local/Temp/opencode/maven-local") }
             maven { url = uri("https://maven.aliyun.com/repository/google") }
             maven { url = uri("https://maven.aliyun.com/repository/central") }
             google()
