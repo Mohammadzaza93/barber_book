@@ -62,3 +62,8 @@ serviceaccount*.json
 *-key.json
 *-key*.json
 *.pem
+
+# Local environment files (never commit credentials)
+.env
+.env.*
+!.env.example
