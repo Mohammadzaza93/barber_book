@@ -696,7 +696,7 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
               ));
             }),
           const SizedBox(height: 16),
-          _SectionHeader(title: 'ربحية الكراسي — الأسبوع المحدد', actionLabel: '', onPressed: null),
+          const _SectionHeader(title: 'ربحية الكراسي — الأسبوع المحدد', actionLabel: '', onPressed: null),
           Card(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

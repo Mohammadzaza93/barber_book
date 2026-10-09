@@ -9,6 +9,7 @@ import '../../providers/shop_provider.dart';
 import '../../services/analytics_service.dart';
 import '../../services/shop_manager.dart';
 import '../../widgets/confirm.dart';
+import '../../widgets/data_state_view.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/labeled_field.dart';
 import '../../widgets/stat_card.dart';
@@ -27,7 +28,12 @@ class ExpensesScreen extends StatelessWidget {
         analytics.totalExpenses(expenses.expenses, from: monthStart);
 
     return Scaffold(
-      body: Column(
+      body: DataStateView(
+        loading: expenses.loading,
+        permissionDenied: expenses.permissionDenied,
+        error: expenses.error,
+        onRetry: () => context.read<ExpenseProvider>().retry(),
+        child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
@@ -113,12 +119,15 @@ class ExpensesScreen extends StatelessWidget {
                   ),
           ),
         ],
+        ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _edit(context),
-        icon: const Icon(Icons.add_rounded),
-        label: Text(t(context).addExpense),
-      ),
+      floatingActionButton: (expenses.permissionDenied || expenses.error != null)
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => _edit(context),
+              icon: const Icon(Icons.add_rounded),
+              label: Text(t(context).addExpense),
+            ),
     );
   }
 

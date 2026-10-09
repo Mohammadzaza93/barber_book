@@ -5,6 +5,7 @@ import '../../l10n/strings.dart';
 import '../../models/feedback.dart' as fb;
 import '../../providers/feedback_provider.dart';
 import '../../services/shop_manager.dart';
+import '../../widgets/data_state_view.dart';
 import '../../widgets/empty_state.dart';
 
 class FeedbackScreen extends StatelessWidget {
@@ -16,7 +17,12 @@ class FeedbackScreen extends StatelessWidget {
     final avg = feedback.averageRating;
 
     return Scaffold(
-      body: Column(
+      body: DataStateView(
+        loading: feedback.loading,
+        permissionDenied: feedback.permissionDenied,
+        error: feedback.error,
+        onRetry: () => context.read<FeedbackProvider>().retry(),
+        child: Column(
         children: [
           if (feedback.approved.isNotEmpty)
             Container(
@@ -71,6 +77,7 @@ class FeedbackScreen extends StatelessWidget {
                   ),
           ),
         ],
+        ),
       ),
     );
   }

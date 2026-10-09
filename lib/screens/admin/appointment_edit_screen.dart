@@ -559,7 +559,7 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
         await provider.setStatus(a, status, ShopManager.shopId!);
       }
     } on SecureApiException catch (error) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       showSnack(context, describeSecureError(context, error));
     }
   }

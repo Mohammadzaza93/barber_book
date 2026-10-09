@@ -43,12 +43,20 @@ class ExpenseProvider extends ChangeNotifier {
         if (e is FirebaseException && e.code == 'permission-denied') {
           permissionDenied = true;
         } else {
-          if (error == null) error = e.toString();
+          error ??= e.toString();
         }
         loading = false;
         notifyListeners();
       },
     ));
+  }
+
+  /// Re-subscribes to the bound shop after a transient error.
+  void retry() {
+    final shop = _boundShopId;
+    if (shop == null) return;
+    _boundShopId = null;
+    bind(shop);
   }
 
   Future<void> add(Expense e, String shopId) =>

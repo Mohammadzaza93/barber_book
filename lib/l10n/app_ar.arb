@@ -393,5 +393,9 @@
   "enterValidAmount": "أدخل مبلغاً صحيحاً",
   "payCash": "نقدي",
   "payCard": "بطاقة",
-  "payTransfer": "تحويل"
+  "payTransfer": "تحويل",
+
+  "accessDeniedTitle": "الوصول مقيّد",
+  "accessDeniedMessage": "هذا القسم متاح للمالك والمدير فقط.",
+  "restrictedValue": "مقيّد"
 }

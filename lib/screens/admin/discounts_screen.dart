@@ -8,6 +8,7 @@ import '../../providers/discount_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/shop_manager.dart';
 import '../../widgets/confirm.dart';
+import '../../widgets/data_state_view.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/labeled_field.dart';
 
@@ -18,7 +19,12 @@ class DiscountsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final discounts = context.watch<DiscountProvider>();
     return Scaffold(
-      body: discounts.discounts.isEmpty
+      body: DataStateView(
+        loading: discounts.loading,
+        permissionDenied: discounts.permissionDenied,
+        error: discounts.error,
+        onRetry: () => context.read<DiscountProvider>().retry(),
+        child: discounts.discounts.isEmpty
           ? EmptyState(
               icon: Icons.local_offer_outlined,
               title: t(context).discounts,
@@ -89,11 +95,14 @@ class DiscountsScreen extends StatelessWidget {
                 );
               },
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _edit(context),
-        icon: const Icon(Icons.add_rounded),
-        label: Text(t(context).addDiscount),
       ),
+      floatingActionButton: (discounts.permissionDenied || discounts.error != null)
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => _edit(context),
+              icon: const Icon(Icons.add_rounded),
+              label: Text(t(context).addDiscount),
+            ),
     );
   }
 

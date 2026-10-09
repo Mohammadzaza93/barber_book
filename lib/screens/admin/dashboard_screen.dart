@@ -33,6 +33,11 @@ class DashboardScreen extends StatelessWidget {
     final revenueMonth = analytics.revenue(appointments.appointments, from: monthStart);
     final expenseMonth = analytics.totalExpenses(expenses.expenses, from: monthStart);
     final profitMonth = revenueMonth - expenseMonth;
+    // Net profit depends on manager-only expense data. When the viewer cannot
+    // read expenses (or the read has not resolved), showing revenue as "profit"
+    // would mislead staff, so the value must be reported as restricted instead.
+    final expensesAuthoritative =
+        !expenses.loading && !expenses.permissionDenied && expenses.error == null;
     final weekStart = DateTime(now.year, now.month, now.day)
         .subtract(const Duration(days: 6));
     final daily = analytics.dailyRevenue(appointments.appointments, weekStart, 7);
@@ -86,7 +91,9 @@ class DashboardScreen extends StatelessWidget {
             StatCard(
               icon: Icons.trending_up_rounded,
               label: t(context).netProfit,
-              value: fmtPrice(profitMonth, currency),
+              value: expensesAuthoritative
+                  ? fmtPrice(profitMonth, currency)
+                  : t(context).restrictedValue,
               color: const Color(0xFF7C3AED),
             ),
             StatCard(
@@ -124,7 +131,7 @@ class DashboardScreen extends StatelessWidget {
         SectionHeader(
           title: FeatureLabels.text(context, 'الحجوزات (آخر 7 أيام)', 'Bookings (last 7 days)'),
           trailing: Text(
-            FeatureLabels.text(context, 'مكتمل', 'Completed') + ': ${analytics.completionRate(appointments.appointments).toStringAsFixed(0)}%',
+            '${FeatureLabels.text(context, 'مكتمل', 'Completed')}: ${analytics.completionRate(appointments.appointments).toStringAsFixed(0)}%',
             style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
           ),
         ),

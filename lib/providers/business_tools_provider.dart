@@ -107,8 +107,8 @@ class BusinessToolsProvider extends ChangeNotifier {
         final code = e is FirebaseException ? e.code : '';
         if (code == 'permission-denied') {
           permissionDenied = true;
-        } else if (error == null) {
-          error = e.toString();
+        } else {
+          error ??= e.toString();
         }
         // Never leave the caller waiting on a stream that can no longer deliver.
         if (gatesLoading) loading = false;

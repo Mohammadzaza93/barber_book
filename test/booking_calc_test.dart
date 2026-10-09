@@ -8,7 +8,7 @@ import 'package:barber_app/services/booking_calc.dart';
 void main() {
   group('computeDiscount', () {
     test('calculates a percentage discount and caps it at the total', () {
-      final discount = Discount(
+      const discount = Discount(
         id: 'd1',
         code: 'SAVE20',
         type: 'percent',
@@ -23,7 +23,7 @@ void main() {
     });
 
     test('honours the maximum discount limit', () {
-      final discount = Discount(
+      const discount = Discount(
         id: 'd2',
         code: 'CAP',
         type: 'percent',
@@ -39,12 +39,12 @@ void main() {
 
   group('computeDeposit', () {
     test('returns zero when deposits are disabled', () {
-      final settings = BookingSettings(depositsEnabled: false);
+      const settings = BookingSettings(depositsEnabled: false);
       expect(computeDeposit(settings, const [], 100), 0);
     });
 
     test('calculates a percentage deposit for regular bookings', () {
-      final settings = BookingSettings(
+      const settings = BookingSettings(
         depositsEnabled: true,
         depositPercent: 25,
         depositHighDemandOnly: false,
@@ -53,12 +53,12 @@ void main() {
     });
 
     test('uses the fixed amount for a high-demand service when present', () {
-      final settings = BookingSettings(
+      const settings = BookingSettings(
         depositsEnabled: true,
         depositPercent: 25,
         depositHighDemandOnly: true,
       );
-      final service = Service(
+      const service = Service(
         id: 's1',
         name: 'Premium Cut',
         price: 100,

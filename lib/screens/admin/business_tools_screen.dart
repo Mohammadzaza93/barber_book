@@ -25,7 +25,7 @@ class BusinessToolsScreen extends StatelessWidget {
               isScrollable: true,
               tabs: [
                 Tab(text: FeatureLabels.text(context, 'الأعمال', 'Portfolio'), icon: const Icon(Icons.photo_library_outlined)),
-                Tab(text: 'العملاء', icon: const Icon(Icons.people_alt_outlined)),
+                const Tab(text: 'العملاء', icon: Icon(Icons.people_alt_outlined)),
                 Tab(text: FeatureLabels.text(context, 'الولاء', 'Loyalty'), icon: const Icon(Icons.stars_outlined)),
                 Tab(text: FeatureLabels.text(context, 'الكراسي', 'Chairs'), icon: const Icon(Icons.event_seat_outlined)),
                 Tab(text: FeatureLabels.text(context, 'الطابور', 'Queue'), icon: const Icon(Icons.people_alt_outlined)),

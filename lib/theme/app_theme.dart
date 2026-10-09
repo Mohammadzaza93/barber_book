@@ -49,19 +49,19 @@ ThemeData buildAppTheme({
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: const Color(0xFFF1F2F4),
-    appBarTheme: AppBarTheme(
+    appBarTheme: const AppBarTheme(
       backgroundColor: kBlackBg,
       foregroundColor: kSilver,
       elevation: 0,
       centerTitle: true,
-      titleTextStyle: const TextStyle(
+      titleTextStyle: TextStyle(
         color: Colors.white,
         fontSize: 17,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.3,
       ),
-      iconTheme: const IconThemeData(color: kSilver),
-      shape: const Border(
+      iconTheme: IconThemeData(color: kSilver),
+      shape: Border(
         bottom: BorderSide(color: Color(0xFF1E2025), width: 1),
       ),
     ),

@@ -13,6 +13,11 @@ class DiscountProvider extends ChangeNotifier {
 
   /// First non-permission stream failure, surfaced instead of hanging.
   String? error;
+
+  /// True when Firestore rejected the discounts read for this role. Discount
+  /// management is manager-only, so a denial is an expected capability boundary
+  /// rather than an exceptional error.
+  bool permissionDenied = false;
   String? _boundShopId;
   final List<StreamSubscription> _subs = [];
 
@@ -25,21 +30,33 @@ class DiscountProvider extends ChangeNotifier {
     _subs.clear();
     loading = true;
     error = null;
+    permissionDenied = false;
     _subs.add(FirestoreService.instance.watchDiscounts(shopId).listen(
       (list) {
         discounts = list;
         loading = false;
         notifyListeners();
       },
-      // Discount management is manager-only; a denied read must clear `loading`.
+      // Discount management is manager-only; a denied read must clear `loading`
+      // and surface an explicit access state instead of an empty list.
       onError: (Object e, StackTrace _) {
-        if (e is! FirebaseException || e.code != 'permission-denied') {
-          if (error == null) error = e.toString();
+        if (e is FirebaseException && e.code == 'permission-denied') {
+          permissionDenied = true;
+        } else {
+          error ??= e.toString();
         }
         loading = false;
         notifyListeners();
       },
     ));
+  }
+
+  /// Re-subscribes to the bound shop after a transient error.
+  void retry() {
+    final shop = _boundShopId;
+    if (shop == null) return;
+    _boundShopId = null;
+    bind(shop);
   }
 
   Future<void> add(Discount d, String shopId) =>
@@ -71,6 +88,7 @@ class DiscountProvider extends ChangeNotifier {
     discounts = [];
     loading = true;
     error = null;
+    permissionDenied = false;
     notifyListeners();
   }
 

@@ -393,5 +393,9 @@
   "enterValidAmount": "Enter a valid amount",
   "payCash": "Cash",
   "payCard": "Card",
-  "payTransfer": "Transfer"
+  "payTransfer": "Transfer",
+
+  "accessDeniedTitle": "Access restricted",
+  "accessDeniedMessage": "This section is available to owners and managers only.",
+  "restrictedValue": "Restricted"
 }

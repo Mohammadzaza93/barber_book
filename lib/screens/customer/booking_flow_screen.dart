@@ -213,8 +213,8 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     setState(() => _busy = true);
     final shop = context.read<ShopProvider>();
     final settings = shop.settings!;
-    await _saveFavoriteBarber();
     final provider = context.read<AppointmentProvider>();
+    await _saveFavoriteBarber();
     final shopId = ShopManager.shopId!;
 
     final selected = shop.services
@@ -237,7 +237,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => BookingSuccessScreen(
+          builder: (_) => const BookingSuccessScreen(
             reference: '-',
             isRequest: true,
           ),
@@ -273,15 +273,17 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
 
     final reference = created.first['reference'] as String? ?? '';
     final first = Appointment.fromMap(created.first['id'] as String, created.first);
+    if (!mounted) return;
+    final createdTitle =
+        FeatureLabels.text(context, 'تم إنشاء الحجز', 'Booking created');
+    final createdBody = FeatureLabels.text(
+        context, 'المرجع: $reference', 'Reference: $reference');
     for (final item in created) {
       await ReminderService.instance.scheduleLocalReminders(
           settings, Appointment.fromMap(item['id'] as String, item));
     }
 
-    await NotificationService.instance.show(
-      FeatureLabels.text(context, 'تم إنشاء الحجز', 'Booking created'),
-      FeatureLabels.text(context, 'المرجع: $reference', 'Reference: $reference'),
-    );
+    await NotificationService.instance.show(createdTitle, createdBody);
 
     if (!mounted) return;
     Navigator.pushReplacement(
