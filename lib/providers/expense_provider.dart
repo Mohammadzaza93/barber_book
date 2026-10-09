@@ -11,6 +11,11 @@ class ExpenseProvider extends ChangeNotifier {
   List<Expense> expenses = [];
   bool loading = true;
 
+  /// True when Firestore rejected the expenses read for this role. Staff
+  /// legitimately lack access to the manager-only expenses collection, so this
+  /// is an expected capability boundary rather than an exceptional error.
+  bool permissionDenied = false;
+
   /// First non-permission stream failure, surfaced instead of hanging.
   String? error;
   String? _boundShopId;
@@ -25,6 +30,7 @@ class ExpenseProvider extends ChangeNotifier {
     _subs.clear();
     loading = true;
     error = null;
+    permissionDenied = false;
     _subs.add(FirestoreService.instance.watchExpenses(shopId).listen(
       (list) {
         expenses = list;
@@ -34,7 +40,9 @@ class ExpenseProvider extends ChangeNotifier {
       // Expenses are manager-only. A denied read must clear `loading` rather
       // than leave the tab spinning forever.
       onError: (Object e, StackTrace _) {
-        if (e is! FirebaseException || e.code != 'permission-denied') {
+        if (e is FirebaseException && e.code == 'permission-denied') {
+          permissionDenied = true;
+        } else {
           if (error == null) error = e.toString();
         }
         loading = false;
@@ -62,6 +70,7 @@ class ExpenseProvider extends ChangeNotifier {
     expenses = [];
     loading = true;
     error = null;
+    permissionDenied = false;
     notifyListeners();
   }
 

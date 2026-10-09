@@ -76,7 +76,14 @@ class AuthProvider extends ChangeNotifier {
   void _clearSession() {
     shopId = null;
     role = AppRole.staff;
-    ShopManager.shopId = null;
+    ShopManager.reset();
+    // Best-effort: a failure to unsubscribe must never block sign-out or leave
+    // the previous account subscribed to the previous shop's topic.
+    try {
+      NotificationService.instance.unsubscribeFromShop();
+    } catch (e) {
+      debugPrint('_clearSession: unsubscribeFromShop failed: $e');
+    }
   }
 
   Future<bool> signIn(String email, String password) async {

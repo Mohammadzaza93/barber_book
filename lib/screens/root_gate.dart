@@ -44,7 +44,7 @@ class RootGate extends StatelessWidget {
     final shopId = auth.shopId!;
     context.read<ShopProvider>().bind(shopId);
     context.read<AppointmentProvider>().bind(shopId);
-    context.read<BusinessToolsProvider>().bind(shopId);
+    context.read<BusinessToolsProvider>().bind(shopId, auth.role);
     context.read<DiscountProvider>().bind(shopId);
     context.read<ExpenseProvider>().bind(shopId);
     context.read<FeedbackProvider>().bind(shopId);

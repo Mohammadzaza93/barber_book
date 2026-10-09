@@ -4,14 +4,23 @@ import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseException;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/app_role.dart';
 import '../models/appointment.dart';
 import '../models/business_features.dart';
 import '../models/enums.dart';
 import '../services/firestore_service.dart';
 import '../services/secure_api.dart';
 
+/// The `customers` collection is manager/owner-only in firestore.rules, so only
+/// those roles may run the appointment-derived customer-profile synchronisation.
+/// A null role means "unknown/not provided" and preserves the previous behaviour
+/// for callers that bind without a role (e.g. older tests).
+bool canSyncCustomerProfiles(AppRole? role) =>
+    role == null || role == AppRole.owner || role == AppRole.manager;
+
 class BusinessToolsProvider extends ChangeNotifier {
   String? _shopId;
+  AppRole? _role;
   final List<StreamSubscription> _subs = [];
 
   List<PortfolioItem> portfolio = [];
@@ -38,9 +47,13 @@ class BusinessToolsProvider extends ChangeNotifier {
 
   List<Appointment> _appointments = [];
 
-  void bind(String shopId) {
-    if (_shopId == shopId) return;
+  void bind(String shopId, [AppRole? role]) {
+    if (_shopId == shopId) {
+      _role = role;
+      return;
+    }
     _shopId = shopId;
+    _role = role;
     for (final sub in _subs) {
       sub.cancel();
     }
@@ -241,6 +254,9 @@ class BusinessToolsProvider extends ChangeNotifier {
       value.replaceAll(RegExp(r'[^0-9+]'), '');
 
   Future<void> _syncCustomerProfiles(List<Appointment> appointments) async {
+    // Skipping the sync for staff avoids a stream of denied writes instead of
+    // relying on catching each one after Firestore rejects it.
+    if (!canSyncCustomerProfiles(_role)) return;
     if (_shopId == null) return;
     final grouped = <String, List<Appointment>>{};
     for (final appointment in appointments) {
@@ -306,7 +322,13 @@ class BusinessToolsProvider extends ChangeNotifier {
         updatedAt: DateTime.now(),
       );
       if (existing == null || !_sameComputedFields(existing, profile)) {
-        await FirestoreService.instance.saveCustomer(shopId, profile);
+        try {
+          await FirestoreService.instance.saveCustomer(shopId, profile);
+        } on FirebaseException catch (e) {
+          // A permission-denied here is an expected capability boundary; any
+          // other failure is a real problem and must stay observable.
+          if (e.code != 'permission-denied') rethrow;
+        }
       }
     }
   }
