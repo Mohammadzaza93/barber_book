@@ -96,9 +96,7 @@ class DiscountsScreen extends StatelessWidget {
               },
             ),
       ),
-      floatingActionButton: (discounts.permissionDenied || discounts.error != null)
-          ? null
-          : FloatingActionButton.extended(
+      floatingActionButton: (discounts.permissionDenied || discounts.error != null) ? null : FloatingActionButton.extended(heroTag: 'discounts_fab', 
               onPressed: () => _edit(context),
               icon: const Icon(Icons.add_rounded),
               label: Text(t(context).addDiscount),
@@ -247,3 +245,6 @@ class DiscountsScreen extends StatelessWidget {
     );
   }
 }
+
+
+

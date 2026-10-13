@@ -121,9 +121,7 @@ class ExpensesScreen extends StatelessWidget {
         ],
         ),
       ),
-      floatingActionButton: (expenses.permissionDenied || expenses.error != null)
-          ? null
-          : FloatingActionButton.extended(
+      floatingActionButton: (expenses.permissionDenied || expenses.error != null) ? null : FloatingActionButton.extended(heroTag: 'expenses_fab', 
               onPressed: () => _edit(context),
               icon: const Icon(Icons.add_rounded),
               label: Text(t(context).addExpense),
@@ -245,3 +243,6 @@ class ExpensesScreen extends StatelessWidget {
     );
   }
 }
+
+
+
