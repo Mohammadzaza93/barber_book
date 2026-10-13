@@ -115,10 +115,9 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
       firstDate: now,
       lastDate: max,
     );
-    if (picked != null) {
-      setState(() => _date = picked);
-      _recomputeSlots();
-    }
+    if (!mounted || picked == null) return;
+    setState(() => _date = picked);
+    _recomputeSlots();
   }
 
   Future<void> _submit() async {

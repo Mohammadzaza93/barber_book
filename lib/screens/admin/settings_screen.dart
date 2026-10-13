@@ -111,22 +111,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
     );
     final shop = context.read<ShopProvider>();
-    await shop.saveSettings(updated, ShopManager.shopId!);
-    if (!mounted) return;
-    setState(() => _busy = false);
-    showSnack(context, t(context).settingsSaved);
+    try {
+      await shop.saveSettings(updated, ShopManager.shopId!);
+      if (!mounted) return;
+      showSnack(context, t(context).settingsSaved);
+    } catch (e) {
+      // A denied/failed write must surface and release the busy flag, not leave
+      // the Save button disabled forever.
+      if (!mounted) return;
+      showSnack(context, t(context).error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _uploadLogo() async {
     final picker = ImagePicker();
     final file = await picker.pickImage(source: ImageSource.gallery);
     if (file == null) return;
-    final bytes = File(file.path);
-    final ref = FirebaseStorage.instance
-        .ref('shops/${ShopManager.shopId}/logo');
-    await ref.putFile(bytes);
-    final url = await ref.getDownloadURL();
-    _set((s) => s.copyWith(logoUrl: url));
+    try {
+      final bytes = File(file.path);
+      final ref = FirebaseStorage.instance
+          .ref('shops/${ShopManager.shopId}/logo');
+      await ref.putFile(bytes);
+      final url = await ref.getDownloadURL();
+      if (!mounted) return;
+      _set((s) => s.copyWith(logoUrl: url));
+    } catch (e) {
+      if (!mounted) return;
+      showSnack(context, t(context).error);
+    }
   }
 
   Future<void> _shareLink() async {
@@ -445,11 +459,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       context: context,
                       builder: (ctx) => _TimingDialog(),
                     );
-                    if (picked != null) {
-                      _set((s) => s.copyWith(
-                          reminderTimings: [...s.reminderTimings, picked]
-                            ..sort()));
-                    }
+                    if (!mounted || picked == null) return;
+                    _set((s) => s.copyWith(
+                        reminderTimings: [...s.reminderTimings, picked]
+                          ..sort()));
                   },
                 ),
               ],

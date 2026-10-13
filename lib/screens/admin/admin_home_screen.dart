@@ -9,6 +9,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/language_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/feature_labels.dart';
 import '../customer/booking_flow_screen.dart';
 import '../profile_screen.dart';
 import 'dashboard_screen.dart';
@@ -197,7 +198,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                     ),
                   if (_visibleFor(context, 8)) _item(context, 8, Icons.insights_outlined, Icons.insights, t(context).reports),
                   if (_visibleFor(context, 9)) _item(context, 9, Icons.tune_rounded, Icons.tune, t(context).bookingPageSettings),
-                  if (_visibleFor(context, 10)) _item(context, 10, Icons.business_center_outlined, Icons.business_center, 'أدوات الأعمال'),
+                  if (_visibleFor(context, 10)) _item(context, 10, Icons.business_center_outlined, Icons.business_center, FeatureLabels.text(context, 'أدوات الأعمال', 'Business Tools')),
                   if (_visibleFor(context, 11)) _item(context, 11, Icons.person_outline_rounded, Icons.person_rounded, t(context).profile),
                 ],
               ),

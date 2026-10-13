@@ -40,14 +40,20 @@ class _TrackBookingScreenState extends State<TrackBookingScreen> {
     if (_ref.text.trim().isEmpty) return;
     setState(() => _searching = true);
     final shopId = ShopManager.shopId!;
-    final all = await FirestoreService.instance
-        .findAppointmentsByPhone(shopId, _phone.text.trim());
-    final filtered = all.where((a) =>
-        a.reference.toUpperCase() == _ref.text.trim().toUpperCase());
-    setState(() {
-      _results = filtered.toList();
-      _searching = false;
-    });
+    try {
+      final all = await FirestoreService.instance
+          .findAppointmentsByPhone(shopId, _phone.text.trim());
+      if (!mounted) return;
+      final filtered = all.where((a) =>
+          a.reference.toUpperCase() == _ref.text.trim().toUpperCase());
+      setState(() => _results = filtered.toList());
+    } catch (e) {
+      // A rejected query must not strand the screen on a spinner or crash it.
+      if (!mounted) return;
+      showSnack(context, t(context).error);
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
   }
 
   Future<void> _rate(Appointment a) async {

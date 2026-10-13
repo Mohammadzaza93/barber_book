@@ -54,7 +54,7 @@ class _WorkHoursEditorState extends State<WorkHoursEditor> {
       minute: (start ? current.startMinutes : current.endMinutes) % 60,
     );
     final picked = await showTimePicker(context: context, initialTime: initial);
-    if (picked == null) return;
+    if (!mounted || picked == null) return;
     final minutes = picked.hour * 60 + picked.minute;
     final next = List<WorkSlot>.from(slots);
     if (start) {

@@ -52,24 +52,31 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
     }
     setState(() => _busy = true);
     final auth = context.read<AuthProvider>();
-    final shopId = await auth.createShop(
-      shopName: _shopName.text.trim(),
-      phone: _phone.text.trim(),
-      address: _address.text.trim(),
-      currency: _currency.text.trim(),
-      primaryColorHex: _primaryHex,
-      accentColorHex: _accentHex,
-    );
-    for (final s in _services) {
-      await FirestoreService.instance.addService(shopId, s);
+    try {
+      final shopId = await auth.createShop(
+        shopName: _shopName.text.trim(),
+        phone: _phone.text.trim(),
+        address: _address.text.trim(),
+        currency: _currency.text.trim(),
+        primaryColorHex: _primaryHex,
+        accentColorHex: _accentHex,
+      );
+      for (final s in _services) {
+        await FirestoreService.instance.addService(shopId, s);
+      }
+      for (final e in _staff) {
+        await FirestoreService.instance.addEmployee(shopId, e);
+      }
+      await SeedService.instance.seedIfEmpty(shopId);
+      if (!mounted) return;
+      showSnack(context, t(context).shopCreated);
+    } catch (e) {
+      // Any failed post-create write must not leave the Finish button disabled.
+      if (!mounted) return;
+      showSnack(context, t(context).error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-    for (final e in _staff) {
-      await FirestoreService.instance.addEmployee(shopId, e);
-    }
-    await SeedService.instance.seedIfEmpty(shopId);
-    if (!mounted) return;
-    setState(() => _busy = false);
-    showSnack(context, t(context).shopCreated);
   }
 
   void _addService() {

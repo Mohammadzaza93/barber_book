@@ -12,8 +12,15 @@ import '../../services/shop_manager.dart';
 import '../../widgets/confirm.dart';
 import '../../widgets/empty_state.dart';
 
-class UnavailabilityScreen extends StatelessWidget {
+class UnavailabilityScreen extends StatefulWidget {
   const UnavailabilityScreen({super.key});
+
+  @override
+  State<UnavailabilityScreen> createState() => _UnavailabilityScreenState();
+}
+
+class _UnavailabilityScreenState extends State<UnavailabilityScreen> {
+  bool _busy = false;
 
   @override
   Widget build(BuildContext context) {
@@ -32,8 +39,8 @@ class UnavailabilityScreen extends StatelessWidget {
                 final r = provider.requests[i];
                 return _RequestCard(
                   request: r,
-                  onApprove: () => _decide(context, r, true),
-                  onReject: () => _decide(context, r, false),
+                  onApprove: _busy ? null : () => _decide(context, r, true),
+                  onReject: _busy ? null : () => _decide(context, r, false),
                 );
               },
             ),
@@ -42,48 +49,58 @@ class UnavailabilityScreen extends StatelessWidget {
 
   Future<void> _decide(
       BuildContext context, UnavailabilityRequest r, bool approve) async {
+    if (_busy) return;
+    setState(() => _busy = true);
     final provider = context.read<AppointmentProvider>();
     final shop = context.read<ShopProvider>();
     final shopId = ShopManager.shopId!;
 
-    if (approve) {
-      // Approving turns the request into a real booking, so it goes through
-      // the callable that prices it and takes the slot lock.
-      try {
-        await provider.create(
-          shopId: shopId,
-          employeeId: shop.activeEmployees.isNotEmpty
-              ? shop.activeEmployees.first.id
-              : '',
-          serviceIds: r.serviceIds,
-          start: r.requestedStart,
-          customerName: r.customerName,
-          customerPhone: r.customerPhone,
-          notes: r.reason,
-          outOfHours: true,
-        );
-      } on SecureApiException catch (error) {
-        if (context.mounted) {
-          showSnack(context, describeSecureError(context, error));
+    try {
+      if (approve) {
+        // Approving turns the request into a real booking, so it goes through
+        // the callable that prices it and takes the slot lock.
+        try {
+          await provider.create(
+            shopId: shopId,
+            employeeId: shop.activeEmployees.isNotEmpty
+                ? shop.activeEmployees.first.id
+                : '',
+            serviceIds: r.serviceIds,
+            start: r.requestedStart,
+            customerName: r.customerName,
+            customerPhone: r.customerPhone,
+            notes: r.reason,
+            outOfHours: true,
+          );
+        } on SecureApiException catch (error) {
+          if (context.mounted) {
+            showSnack(context, describeSecureError(context, error));
+          }
+          return;
         }
-        return;
+        await provider.updateRequest(
+            r.copyWith(status: 'approved'), shopId);
+      } else {
+        await provider.updateRequest(
+            r.copyWith(status: 'rejected'), shopId);
       }
-      await provider.updateRequest(
-          r.copyWith(status: 'approved'), shopId);
-    } else {
-      await provider.updateRequest(
-          r.copyWith(status: 'rejected'), shopId);
-    }
-    if (context.mounted) {
-      showSnack(context, approve ? t(context).approved : t(context).rejected);
+      if (context.mounted) {
+        showSnack(context, approve ? t(context).approved : t(context).rejected);
+      }
+    } catch (error) {
+      // A denied/failed decision must surface and release the buttons instead
+      // of leaving the card stuck.
+      if (context.mounted) showSnack(context, t(context).error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 }
 
 class _RequestCard extends StatelessWidget {
   final UnavailabilityRequest request;
-  final VoidCallback onApprove;
-  final VoidCallback onReject;
+  final VoidCallback? onApprove;
+  final VoidCallback? onReject;
   const _RequestCard({
     required this.request,
     required this.onApprove,

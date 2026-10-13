@@ -2,6 +2,7 @@ import 'dart:developer' as developer;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'app.dart';
 import 'firebase_options.dart';
@@ -10,6 +11,10 @@ import 'services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // DateFormat resolves against Intl's default locale. Without loading the
+  // locale data, every DateFormat falls back to en_US, so dates rendered in the
+  // Arabic UI came out in English. Load it before the first frame.
+  await initializeDateFormatting();
   try {
     DefaultFirebaseOptions.requireConfigured();
     await Firebase.initializeApp(

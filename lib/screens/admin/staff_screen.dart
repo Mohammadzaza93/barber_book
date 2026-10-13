@@ -126,6 +126,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
   late Map<int, List<WorkSlot>> _hours;
   late List<String> _serviceIds;
   late bool _active;
+  bool _busy = false;
 
   @override
   void initState() {
@@ -148,12 +149,14 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
   }
 
   Future<void> _save() async {
+    if (_busy) return;
     final shop = context.read<ShopProvider>();
     final shopId = ShopManager.shopId!;
     if (_name.text.trim().isEmpty) {
       showSnack(context, t(context).fillRequiredFields);
       return;
     }
+    setState(() => _busy = true);
     final e = Employee(
       id: widget.employee?.id ?? const Uuid().v4(),
       name: _name.text.trim(),
@@ -164,12 +167,19 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
       active: _active,
       colorValue: widget.employee?.colorValue ?? 0xFF26A69A,
     );
-    if (widget.employee == null) {
-      await shop.addEmployee(e, shopId);
-    } else {
-      await shop.updateEmployee(e, shopId);
+    try {
+      if (widget.employee == null) {
+        await shop.addEmployee(e, shopId);
+      } else {
+        await shop.updateEmployee(e, shopId);
+      }
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      showSnack(context, t(context).error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-    if (mounted) Navigator.pop(context);
   }
 
   @override
@@ -254,7 +264,9 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
             onChanged: (v) => setState(() => _active = v),
           ),
           const SizedBox(height: 16),
-          FilledButton(onPressed: _save, child: Text(t(context).save)),
+          FilledButton(
+              onPressed: _busy ? null : _save,
+              child: Text(t(context).save)),
         ],
       ),
     );

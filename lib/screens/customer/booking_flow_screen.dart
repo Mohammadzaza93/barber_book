@@ -135,10 +135,9 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
       firstDate: now,
       lastDate: max,
     );
-    if (picked != null) {
-      setState(() => _date = picked);
-      _recomputeSlots();
-    }
+    if (!mounted || picked == null) return;
+    setState(() => _date = picked);
+    _recomputeSlots();
   }
 
   Future<void> _pickOutOfHoursTime() async {
@@ -157,7 +156,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
       context: context,
       initialTime: const TimeOfDay(hour: 11, minute: 0),
     );
-    if (pickedTime == null) return;
+    if (!mounted || pickedTime == null) return;
     setState(() {
       _date = DateTime(pickedDate.year, pickedDate.month, pickedDate.day,
           pickedTime.hour, pickedTime.minute);
