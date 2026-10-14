@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'providers/appointment_provider.dart';
 import 'providers/business_tools_provider.dart';
 import 'providers/auth_provider.dart';
+import 'providers/connection_provider.dart';
 import 'providers/discount_provider.dart';
 import 'providers/expense_provider.dart';
 import 'providers/feedback_provider.dart';
@@ -29,6 +30,7 @@ class BarberApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => DiscountProvider()),
         ChangeNotifierProvider(create: (_) => ExpenseProvider()),
         ChangeNotifierProvider(create: (_) => FeedbackProvider()),
+        ChangeNotifierProvider(create: (_) => ConnectionProvider()..start()),
       ],
       child: const _Material(),
     );

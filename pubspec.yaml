@@ -53,6 +53,10 @@ dependencies:
 
   # Brand assets
   flutter_svg: ^2.0.10+1
+  # Pinned to the 6.x line: 7.x requires AGP >= 8.12.1 / compileSdk 36
+  # (androidx.core 1.18.0), which this project's AGP 8.3.0 / compileSdk 35
+  # toolchain does not support. The 6.x API used here is identical.
+  connectivity_plus: ^6.1.5
 
 dev_dependencies:
   flutter_test:

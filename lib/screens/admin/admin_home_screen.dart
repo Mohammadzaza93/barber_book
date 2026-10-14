@@ -9,6 +9,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/language_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/connection_banner.dart';
 import '../../widgets/feature_labels.dart';
 import '../customer/booking_flow_screen.dart';
 import '../profile_screen.dart';
@@ -107,11 +108,20 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               ],
             ),
             drawer: _buildDrawer(context, pendingCount),
-            body: IndexedStack(
-              index: _index,
+            body: Column(
               children: [
-                for (var i = 0; i < _screens.length; i++)
-                  _visited.contains(i) ? _screens[i] : const SizedBox.shrink(),
+                const ConnectionBanner(),
+                Expanded(
+                  child: IndexedStack(
+                    index: _index,
+                    children: [
+                      for (var i = 0; i < _screens.length; i++)
+                        _visited.contains(i)
+                            ? _screens[i]
+                            : const SizedBox.shrink(),
+                    ],
+                  ),
+                ),
               ],
             ),
           );

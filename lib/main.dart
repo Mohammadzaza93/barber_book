@@ -7,6 +7,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'app.dart';
 import 'firebase_options.dart';
 import 'services/firebase_status.dart';
+import 'services/firestore_service.dart';
 import 'services/notification_service.dart';
 
 Future<void> main() async {
@@ -31,6 +32,15 @@ Future<void> main() async {
     developer.log('$stack', name: 'firebase-init', level: 1000);
   }
   if (firebaseReady) {
+    // Enable the on-disk offline cache before the first Firestore operation.
+    // Guarded separately so a settings failure never blocks app startup.
+    try {
+      FirestoreService.instance.configureOfflinePersistence();
+    } catch (e, stack) {
+      developer.log('Firestore offline persistence setup failed: $e',
+          name: 'firestore-init');
+      developer.log('$stack', name: 'firestore-init', level: 1000);
+    }
     try {
       await NotificationService.instance.init();
     } catch (e, stack) {

@@ -604,5 +604,8 @@
   },
   "computedLabel": "Computed",
   "manualApprovedLabel": "Manually approved",
-  "editProfit": "Edit profit"
+  "editProfit": "Edit profit",
+  "offlineBannerMessage": "You're offline. Your changes are saved on this device and will sync when the connection returns.",
+  "syncingMessage": "Syncing pending changes…",
+  "syncErrorBanner": "Some changes couldn't sync. They stay saved on this device and will retry."
 }

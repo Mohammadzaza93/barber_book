@@ -22,6 +22,33 @@ class FirestoreService {
   // reachable instead of crashing during build.
   FirebaseFirestore get _db => FirebaseFirestore.instance;
 
+  /// On-disk cache bound for offline persistence.
+  ///
+  /// Firestore rejects any value outside 1 MB..100 MB, and leaving the cache
+  /// unlimited risks unbounded storage growth on low-end or shared devices, so
+  /// a modest, documented bound is used instead of [Settings.CACHE_SIZE_UNLIMITED].
+  static const int offlineCacheSizeBytes = 40 * 1024 * 1024;
+
+  bool _offlineConfigured = false;
+
+  /// Enables Firestore's on-disk offline cache exactly once.
+  ///
+  /// Must be called after `Firebase.initializeApp` and before the first
+  /// Firestore operation — setting [Settings] afterwards throws
+  /// `[core/failed-precondition]`. Once enabled, supported reads fall back to
+  /// the cache when the device is offline and supported direct writes
+  /// (`.set()`/`.delete()` on stable document ids) are queued locally and
+  /// replayed on reconnection. Cloud Functions callables and `runTransaction`
+  /// calls remain server-only and are not queued.
+  void configureOfflinePersistence() {
+    if (_offlineConfigured) return;
+    _db.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: offlineCacheSizeBytes,
+    );
+    _offlineConfigured = true;
+  }
+
   CollectionReference<Map<String, dynamic>> _shops() =>
       _db.collection('shops');
 
