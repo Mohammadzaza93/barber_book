@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../l10n/strings.dart';
 import '../../models/employee.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/shop_manager.dart';
 import '../../widgets/confirm.dart';
@@ -16,19 +17,25 @@ class StaffScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shop = context.watch<ShopProvider>();
+    // Employees are an owner-only collection in firestore.rules, so manager and
+    // staff get a read-only roster. The rules stay authoritative regardless.
+    final canManage = context.watch<AuthProvider>().canManageRules;
     return Scaffold(
       body: shop.employees.isEmpty
           ? EmptyState(
-              icon: Icons.people_rounded,
+              icon: Icons.content_cut_rounded,
               title: t(context).noStaff,
-              action: FilledButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const StaffEditScreen()),
-                ),
-                icon: const Icon(Icons.add_rounded),
-                label: Text(t(context).addStaff),
-              ),
+              action: canManage
+                  ? FilledButton.icon(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const StaffEditScreen()),
+                      ),
+                      icon: const Icon(Icons.add_rounded),
+                      label: Text(t(context).addStaff),
+                    )
+                  : null,
             )
           : ListView.builder(
               padding: const EdgeInsets.all(16),
@@ -38,11 +45,13 @@ class StaffScreen extends StatelessWidget {
                 return Card(
                   margin: const EdgeInsets.only(bottom: 10),
                   child: ListTile(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => StaffEditScreen(employee: e)),
-                    ),
+                    onTap: canManage
+                        ? () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => StaffEditScreen(employee: e)),
+                            )
+                        : null,
                     leading: CircleAvatar(
                       backgroundColor: Color(e.colorValue).withOpacity(0.15),
                       child: Text(
@@ -81,32 +90,36 @@ class StaffScreen extends StatelessWidget {
                       style:
                           TextStyle(color: Colors.grey.shade600, fontSize: 12),
                     ),
-                    trailing: IconButton(
-                      onPressed: () async {
-                        final ok = await confirmDialog(context,
-                            title: t(context).deleteStaffConfirm,
-                            confirmText: t(context).delete,
-                            destructive: true);
-                        if (ok && context.mounted) {
-                          await context
-                              .read<ShopProvider>()
-                              .deleteEmployee(e.id, ShopManager.shopId!);
-                        }
-                      },
-                      icon: const Icon(Icons.delete_outline_rounded),
-                    ),
+                    trailing: canManage
+                        ? IconButton(
+                            onPressed: () async {
+                              final ok = await confirmDialog(context,
+                                  title: t(context).deleteStaffConfirm,
+                                  confirmText: t(context).delete,
+                                  destructive: true);
+                              if (ok && context.mounted) {
+                                await context
+                                    .read<ShopProvider>()
+                                    .deleteEmployee(e.id, ShopManager.shopId!);
+                              }
+                            },
+                            icon: const Icon(Icons.delete_outline_rounded),
+                          )
+                        : null,
                   ),
                 );
               },
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const StaffEditScreen()),
-        ),
-        icon: const Icon(Icons.add_rounded),
-        label: Text(t(context).addStaff),
-      ),
+      floatingActionButton: canManage
+          ? FloatingActionButton.extended(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const StaffEditScreen()),
+              ),
+              icon: const Icon(Icons.add_rounded),
+              label: Text(t(context).addStaff),
+            )
+          : null,
     );
   }
 }
@@ -150,6 +163,9 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
 
   Future<void> _save() async {
     if (_busy) return;
+    // Defensive: never attempt an owner-only write from a non-owner session,
+    // even if this screen was reached through an unguarded route.
+    if (!context.read<AuthProvider>().canManageRules) return;
     final shop = context.read<ShopProvider>();
     final shopId = ShopManager.shopId!;
     if (_name.text.trim().isEmpty) {

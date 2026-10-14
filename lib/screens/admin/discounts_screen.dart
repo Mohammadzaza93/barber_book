@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../l10n/strings.dart';
 import '../../models/discount.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/discount_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/shop_manager.dart';
@@ -18,6 +19,9 @@ class DiscountsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final discounts = context.watch<DiscountProvider>();
+    // Discount writes are owner-only in firestore.rules. Managers can still
+    // reach this tab to review codes, so the controls are gated to owners.
+    final canManage = context.watch<AuthProvider>().canManageRules;
     return Scaffold(
       body: DataStateView(
         loading: discounts.loading,
@@ -28,11 +32,13 @@ class DiscountsScreen extends StatelessWidget {
           ? EmptyState(
               icon: Icons.local_offer_outlined,
               title: t(context).discounts,
-              action: FilledButton.icon(
-                onPressed: () => _edit(context),
-                icon: const Icon(Icons.add_rounded),
-                label: Text(t(context).addDiscount),
-              ),
+              action: canManage
+                  ? FilledButton.icon(
+                      onPressed: () => _edit(context),
+                      icon: const Icon(Icons.add_rounded),
+                      label: Text(t(context).addDiscount),
+                    )
+                  : null,
             )
           : ListView.builder(
               padding: const EdgeInsets.all(16),
@@ -43,7 +49,7 @@ class DiscountsScreen extends StatelessWidget {
                 return Card(
                   margin: const EdgeInsets.only(bottom: 10),
                   child: ListTile(
-                    onTap: () => _edit(context, discount: d),
+                    onTap: canManage ? () => _edit(context, discount: d) : null,
                     leading: CircleAvatar(
                       backgroundColor: Colors.pink.withOpacity(0.12),
                       child: Icon(Icons.local_offer_rounded,
@@ -77,30 +83,32 @@ class DiscountsScreen extends StatelessWidget {
                       style:
                           TextStyle(color: Colors.grey.shade600, fontSize: 12),
                     ),
-                    trailing: IconButton(
-                      onPressed: () async {
-                        final ok = await confirmDialog(context,
-                            title: t(context).deleteDiscountConfirm,
-                            confirmText: t(context).delete,
-                            destructive: true);
-                        if (ok && context.mounted) {
-                          await context
-                              .read<DiscountProvider>()
-                              .delete(d.id, ShopManager.shopId!);
-                        }
-                      },
-                      icon: const Icon(Icons.delete_outline_rounded),
-                    ),
+                    trailing: canManage
+                        ? IconButton(
+                            onPressed: () async {
+                              final ok = await confirmDialog(context,
+                                  title: t(context).deleteDiscountConfirm,
+                                  confirmText: t(context).delete,
+                                  destructive: true);
+                              if (ok && context.mounted) {
+                                await context
+                                    .read<DiscountProvider>()
+                                    .delete(d.id, ShopManager.shopId!);
+                              }
+                            },
+                            icon: const Icon(Icons.delete_outline_rounded),
+                          )
+                        : null,
                   ),
                 );
               },
             ),
       ),
-      floatingActionButton: (discounts.permissionDenied || discounts.error != null) ? null : FloatingActionButton.extended(heroTag: 'discounts_fab', 
+      floatingActionButton: (canManage && !discounts.permissionDenied && discounts.error == null) ? FloatingActionButton.extended(heroTag: 'discounts_fab', 
               onPressed: () => _edit(context),
               icon: const Icon(Icons.add_rounded),
               label: Text(t(context).addDiscount),
-            ),
+            ) : null,
     );
   }
 

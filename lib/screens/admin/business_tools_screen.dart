@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../l10n/strings.dart';
 import '../../models/business_features.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/business_tools_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../widgets/feature_labels.dart';
@@ -98,12 +99,16 @@ class _PortfolioTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tools = context.watch<BusinessToolsProvider>();
+    // The portfolio collection is owner-only; managers keep read-only access.
+    final canManage = context.watch<AuthProvider>().canManageRules;
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _add(context),
-        icon: const Icon(Icons.add_photo_alternate_outlined),
-        label: const Text('إضافة صورة'),
-      ),
+      floatingActionButton: canManage
+          ? FloatingActionButton.extended(
+              onPressed: () => _add(context),
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              label: const Text('إضافة صورة'),
+            )
+          : null,
       body: tools.portfolio.isEmpty
           ? const Center(child: Text('أضف صور قصات الشعر وتسريحات اللحية لعرض مستوى الصالون.'))
           : GridView.builder(
@@ -124,7 +129,8 @@ class _PortfolioTab extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
                       child: Row(children: [
                         Expanded(child: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700))),
-                        IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => tools.deletePortfolio(item.id)),
+                        if (canManage)
+                          IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => tools.deletePortfolio(item.id)),
                       ]),
                     ),
                   ]),

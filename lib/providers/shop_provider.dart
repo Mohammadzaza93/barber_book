@@ -11,6 +11,21 @@ import '../services/firestore_service.dart';
 import '../services/shop_manager.dart';
 
 class ShopProvider extends ChangeNotifier {
+  ShopProvider({
+    Stream<BookingSettings> Function(String shopId)? watchSettings,
+    Stream<List<Service>> Function(String shopId)? watchServices,
+    Stream<List<Employee>> Function(String shopId)? watchEmployees,
+  })  : _watchSettings =
+            watchSettings ?? FirestoreService.instance.watchSettings,
+        _watchServices =
+            watchServices ?? FirestoreService.instance.watchServices,
+        _watchEmployees =
+            watchEmployees ?? FirestoreService.instance.watchEmployees;
+
+  final Stream<BookingSettings> Function(String shopId) _watchSettings;
+  final Stream<List<Service>> Function(String shopId) _watchServices;
+  final Stream<List<Employee>> Function(String shopId) _watchEmployees;
+
   BookingSettings? settings;
   List<Service> services = [];
   List<Employee> employees = [];
@@ -31,17 +46,17 @@ class ShopProvider extends ChangeNotifier {
     _subs.clear();
     loading = true;
     error = null;
-    _listen(FirestoreService.instance.watchSettings(shopId), (s) {
+    _listen(_watchSettings(shopId), (s) {
       settings = s;
       // Publish the shop's UTC offset so day-bucketing in providers and screens
       // agrees with the server's working-hours validation.
       ShopManager.timezoneOffsetMinutes = s.timezoneOffsetMinutes;
       loading = false;
     }, gatesLoading: true);
-    _listen(FirestoreService.instance.watchServices(shopId), (list) {
+    _listen(_watchServices(shopId), (list) {
       services = list;
     });
-    _listen(FirestoreService.instance.watchEmployees(shopId), (list) {
+    _listen(_watchEmployees(shopId), (list) {
       employees = list;
     });
   }

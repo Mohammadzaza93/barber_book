@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../l10n/strings.dart';
 import '../../models/unavailability_request.dart';
 import '../../providers/appointment_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/secure_api.dart';
 import '../../services/secure_error_text.dart';
@@ -25,6 +26,9 @@ class _UnavailabilityScreenState extends State<UnavailabilityScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppointmentProvider>();
+    // Staff may raise and read out-of-hours requests, but only owner/manager can
+    // approve or reject them (firestore.rules `requests` update = manager).
+    final canDecide = context.watch<AuthProvider>().canManageOperations;
     return Scaffold(
       body: provider.requests.isEmpty
           ? EmptyState(
@@ -39,6 +43,7 @@ class _UnavailabilityScreenState extends State<UnavailabilityScreen> {
                 final r = provider.requests[i];
                 return _RequestCard(
                   request: r,
+                  canDecide: canDecide,
                   onApprove: _busy ? null : () => _decide(context, r, true),
                   onReject: _busy ? null : () => _decide(context, r, false),
                 );
@@ -50,6 +55,8 @@ class _UnavailabilityScreenState extends State<UnavailabilityScreen> {
   Future<void> _decide(
       BuildContext context, UnavailabilityRequest r, bool approve) async {
     if (_busy) return;
+    // Defensive: decisions are a manager-only write.
+    if (!context.read<AuthProvider>().canManageOperations) return;
     setState(() => _busy = true);
     final provider = context.read<AppointmentProvider>();
     final shop = context.read<ShopProvider>();
@@ -99,10 +106,12 @@ class _UnavailabilityScreenState extends State<UnavailabilityScreen> {
 
 class _RequestCard extends StatelessWidget {
   final UnavailabilityRequest request;
+  final bool canDecide;
   final VoidCallback? onApprove;
   final VoidCallback? onReject;
   const _RequestCard({
     required this.request,
+    required this.canDecide,
     required this.onApprove,
     required this.onReject,
   });
@@ -171,7 +180,7 @@ class _RequestCard extends StatelessWidget {
               Text(r.reason,
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
             ],
-            if (r.status == 'pending') ...[
+            if (r.status == 'pending' && canDecide) ...[
               const SizedBox(height: 10),
               Row(
                 children: [

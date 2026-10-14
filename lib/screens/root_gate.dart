@@ -15,8 +15,59 @@ import 'auth/setup_wizard_screen.dart';
 import 'config_error_screen.dart';
 import 'splash_screen.dart';
 
-class RootGate extends StatelessWidget {
+/// Owns the auth/session lifecycle for the shop-scoped data providers.
+///
+/// `AuthProvider` clears its own fields on sign-out, but the data providers
+/// keep their Firestore subscriptions and cached tenant data. This gate watches
+/// the authenticated uid and, whenever it changes (sign-out, auth expiry, or an
+/// account switch), tears every data provider down so a previous session's
+/// data can never render in the next one. When a session is present it binds
+/// the providers to the resolved shop.
+class RootGate extends StatefulWidget {
   const RootGate({super.key});
+
+  @override
+  State<RootGate> createState() => _RootGateState();
+}
+
+class _RootGateState extends State<RootGate> {
+  AuthProvider? _auth;
+  String? _lastUid;
+
+  @override
+  void initState() {
+    super.initState();
+    // When Firebase failed to initialise there is no AuthProvider stream to
+    // observe, and build() renders the config error screen instead.
+    if (!firebaseReady) return;
+    _auth = context.read<AuthProvider>();
+    _lastUid = _auth!.user?.uid;
+    _auth!.addListener(_onAuthChanged);
+  }
+
+  @override
+  void dispose() {
+    _auth?.removeListener(_onAuthChanged);
+    super.dispose();
+  }
+
+  void _onAuthChanged() {
+    if (!mounted) return;
+    final uid = _auth?.user?.uid;
+    if (uid == _lastUid) return;
+    _lastUid = uid;
+    // A different (or absent) identity means the previous session is over.
+    _resetDataProviders();
+  }
+
+  void _resetDataProviders() {
+    context.read<ShopProvider>().reset();
+    context.read<AppointmentProvider>().reset();
+    context.read<BusinessToolsProvider>().reset();
+    context.read<DiscountProvider>().reset();
+    context.read<ExpenseProvider>().reset();
+    context.read<FeedbackProvider>().reset();
+  }
 
   @override
   Widget build(BuildContext context) {

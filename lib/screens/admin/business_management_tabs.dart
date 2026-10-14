@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../l10n/strings.dart';
 import '../../models/business_features.dart';
 import '../../models/enums.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/business_tools_provider.dart';
 import '../../providers/shop_provider.dart';
 
@@ -360,6 +361,9 @@ class LoyaltyProgramTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tools = context.watch<BusinessToolsProvider>();
+    // Loyalty rules and gifts are owner-only collections; the loyalty ledger
+    // itself stays manager-scoped, so managers keep earning/redeeming controls.
+    final canManage = context.watch<AuthProvider>().canManageRules;
     final activeRules = tools.loyaltyRules.where((r) => r.enabled).length;
     final totalPoints = tools.loyalty.fold<int>(0, (sum, account) => sum + account.points);
     return Scaffold(
@@ -376,7 +380,7 @@ class LoyaltyProgramTab extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          _SectionHeader(title: 'قواعد كسب النقاط', actionLabel: 'إضافة قاعدة', onPressed: () => _showRuleDialog(context)),
+          _SectionHeader(title: 'قواعد كسب النقاط', actionLabel: 'إضافة قاعدة', onPressed: canManage ? () => _showRuleDialog(context) : null),
           if (tools.loyaltyRules.isEmpty)
             const Card(child: ListTile(title: Text('لا توجد قواعد بعد'), subtitle: Text('أضف قاعدة لتحديد نقاط الزيارة والفاتورة والتنبيه عن الغياب.')))
           else
@@ -388,20 +392,21 @@ class LoyaltyProgramTab extends StatelessWidget {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Switch(value: rule.enabled, onChanged: (value) => tools.saveLoyaltyRule(rule.copyWith(enabled: value, updatedAt: DateTime.now()))),
-                        PopupMenuButton<String>(
-                          onSelected: (value) {
-                            if (value == 'edit') _showRuleDialog(context, existing: rule);
-                            if (value == 'delete') tools.deleteLoyaltyRule(rule.id);
-                          },
-                          itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('تعديل')), PopupMenuItem(value: 'delete', child: Text('حذف'))],
-                        ),
+                        Switch(value: rule.enabled, onChanged: canManage ? (value) => tools.saveLoyaltyRule(rule.copyWith(enabled: value, updatedAt: DateTime.now())) : null),
+                        if (canManage)
+                          PopupMenuButton<String>(
+                            onSelected: (value) {
+                              if (value == 'edit') _showRuleDialog(context, existing: rule);
+                              if (value == 'delete') tools.deleteLoyaltyRule(rule.id);
+                            },
+                            itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('تعديل')), PopupMenuItem(value: 'delete', child: Text('حذف'))],
+                          ),
                       ],
                     ),
                   ),
                 )),
           const SizedBox(height: 16),
-          _SectionHeader(title: 'هدايا العملاء المميزين', actionLabel: 'إضافة هدية', onPressed: () => _showGiftDialog(context)),
+          _SectionHeader(title: 'هدايا العملاء المميزين', actionLabel: 'إضافة هدية', onPressed: canManage ? () => _showGiftDialog(context) : null),
           if (tools.loyaltyGifts.isEmpty)
             const Card(child: ListTile(title: Text('لا توجد هدايا بعد'), subtitle: Text('أضف مكافآت يمكن استبدالها بالنقاط مع تحديد المستوى والمخزون.')))
           else
@@ -410,13 +415,15 @@ class LoyaltyProgramTab extends StatelessWidget {
                     leading: const Icon(Icons.card_giftcard_outlined),
                     title: Text(gift.name),
                     subtitle: Text('${gift.pointsCost} نقطة  •  من مستوى ${gift.minimumTier}  •  ${gift.stock < 0 ? 'غير محدود' : '${gift.redeemedCount}/${gift.stock} مستخدم'}'),
-                    trailing: PopupMenuButton<String>(
-                      onSelected: (value) {
-                        if (value == 'edit') _showGiftDialog(context, existing: gift);
-                        if (value == 'delete') tools.deleteLoyaltyGift(gift.id);
-                      },
-                      itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('تعديل')), PopupMenuItem(value: 'delete', child: Text('حذف'))],
-                    ),
+                    trailing: canManage
+                        ? PopupMenuButton<String>(
+                            onSelected: (value) {
+                              if (value == 'edit') _showGiftDialog(context, existing: gift);
+                              if (value == 'delete') tools.deleteLoyaltyGift(gift.id);
+                            },
+                            itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('تعديل')), PopupMenuItem(value: 'delete', child: Text('حذف'))],
+                          )
+                        : null,
                   ),
                 )),
           const SizedBox(height: 16),
@@ -653,6 +660,8 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
   @override
   Widget build(BuildContext context) {
     final tools = context.watch<BusinessToolsProvider>();
+    // Chairs, their supplies and weekly profits are owner-only collections.
+    final canManage = context.watch<AuthProvider>().canManageRules;
     final currency = context.watch<ShopProvider>().settings?.currency ?? 'SAR';
     final totalProfit = tools.chairs.fold<double>(0, (sum, chair) => sum + _computedReport(tools, chair).profit);
     final lowStock = tools.chairSupplies.where((supply) => supply.lowStock).length;
@@ -668,7 +677,7 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
             Expanded(child: _MetricCard(label: 'مواد منخفضة', value: '$lowStock', icon: Icons.inventory_2_outlined)),
           ]),
           const SizedBox(height: 16),
-          _SectionHeader(title: 'الكراسي والحلاقون', actionLabel: 'إضافة كرسي', onPressed: () => _showChairDialog(context)),
+          _SectionHeader(title: 'الكراسي والحلاقون', actionLabel: 'إضافة كرسي', onPressed: canManage ? () => _showChairDialog(context) : null),
           if (tools.chairs.isEmpty)
             const Card(child: ListTile(title: Text('لم تتم إضافة كراسي بعد'), subtitle: Text('أضف رقم واسم كل كرسي واربطه بالحلاق المسؤول.')))
           else
@@ -678,11 +687,11 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                 leading: CircleAvatar(child: Text(chair.number.isEmpty ? '—' : chair.number)),
                 title: Text(_chairLabel(chair)),
                 subtitle: Text('${employee == null ? 'غير مربوط بحلاق' : 'الحلاق: ${employee.name}'}  •  ${chair.active ? 'نشط' : 'متوقف'}'),
-                trailing: PopupMenuButton<String>(onSelected: (value) { if (value == 'edit') _showChairDialog(context, existing: chair); if (value == 'delete') tools.deleteChair(chair.id); }, itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('تعديل')), PopupMenuItem(value: 'delete', child: Text('حذف'))]),
+                trailing: canManage ? PopupMenuButton<String>(onSelected: (value) { if (value == 'edit') _showChairDialog(context, existing: chair); if (value == 'delete') tools.deleteChair(chair.id); }, itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('تعديل')), PopupMenuItem(value: 'delete', child: Text('حذف'))]) : null,
               ));
             }),
           const SizedBox(height: 16),
-          _SectionHeader(title: 'مستلزمات كل كرسي', actionLabel: 'إضافة مادة', onPressed: () => _showSupplyDialog(context)),
+          _SectionHeader(title: 'مستلزمات كل كرسي', actionLabel: 'إضافة مادة', onPressed: canManage ? () => _showSupplyDialog(context) : null),
           if (tools.chairSupplies.isEmpty)
             const Card(child: ListTile(title: Text('لا توجد مواد مسجلة'), subtitle: Text('سجّل الشفرات والمناشف والمواد والمستلزمات مع تكلفة الوحدة.')))
           else
@@ -692,7 +701,7 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                 leading: Icon(supply.lowStock ? Icons.warning_amber_rounded : Icons.inventory_2_outlined, color: supply.lowStock ? Colors.orange : null),
                 title: Text(supply.name),
                 subtitle: Text('${chair == null ? 'كرسي غير معروف' : _chairLabel(chair)}  •  ${supply.quantity} ${supply.unit}  •  تكلفة الوحدة ${supply.unitCost}'),
-                trailing: PopupMenuButton<String>(onSelected: (value) { if (value == 'delete') tools.deleteChairSupply(supply.id); }, itemBuilder: (_) => const [PopupMenuItem(value: 'delete', child: Text('حذف'))]),
+                trailing: canManage ? PopupMenuButton<String>(onSelected: (value) { if (value == 'delete') tools.deleteChairSupply(supply.id); }, itemBuilder: (_) => const [PopupMenuItem(value: 'delete', child: Text('حذف'))]) : null,
               ));
             }),
           const SizedBox(height: 16),
@@ -714,11 +723,16 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
               title: Text(_chairLabel(chair)),
               subtitle: Text('زيارات مكتملة: ${report.completedVisits}  •  إشغال تقريبي: ${report.utilizationPercent.toStringAsFixed(1)}%\nإيراد ${fmtPrice(report.revenue, currency)}  •  مواد ${fmtPrice(report.supplyCost, currency)}'),
               isThreeLine: true,
-              trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text(fmtPrice(report.profit, currency), style: const TextStyle(fontWeight: FontWeight.w800)),
-                Text(report.manualProfit == null ? 'محسوب' : 'معتمد يدويًا', style: TextStyle(fontSize: 11, color: report.manualProfit == null ? Colors.grey : Colors.green)),
-                TextButton(onPressed: () => _showProfitDialog(context, chair, report), child: const Text('تعديل الربح')),
-              ]),
+              trailing: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: AlignmentDirectional.centerEnd,
+                child: Column(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text(fmtPrice(report.profit, currency), style: const TextStyle(fontWeight: FontWeight.w800)),
+                  Text(report.manualProfit == null ? 'محسوب' : 'معتمد يدويًا', style: TextStyle(fontSize: 11, color: report.manualProfit == null ? Colors.grey : Colors.green)),
+                  if (canManage)
+                    TextButton(onPressed: () => _showProfitDialog(context, chair, report), child: const Text('تعديل الربح')),
+                ]),
+              ),
             ));
           }),
         ],

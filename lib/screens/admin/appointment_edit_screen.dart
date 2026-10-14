@@ -7,6 +7,7 @@ import '../../models/appointment.dart';
 import '../../models/enums.dart';
 import '../../models/service.dart';
 import '../../providers/appointment_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/business_tools_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/booking_calc.dart';
@@ -345,6 +346,11 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
   Widget _buildView(
       BuildContext context, ShopProvider shop, BusinessToolsProvider tools, settings, String currency) {
     final a = _a!;
+    // Status changes and payments are owner/manager-only; a staff member may
+    // only touch appointments they created (matches updateAppointment).
+    final auth = context.watch<AuthProvider>();
+    final canManage = auth.canManageOperations;
+    final isOwn = a.createdById != null && a.createdById == auth.user?.uid;
     final services = a.serviceIds
         .map((id) => shop.serviceById(id))
         .whereType<Service>()
@@ -409,7 +415,8 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        _section(context, t(context).actions, [
+        if (canManage)
+          _section(context, t(context).actions, [
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -433,7 +440,8 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
             ],
           ),
         ]),
-        _section(context, t(context).paymentStatus, [
+        if (canManage)
+          _section(context, t(context).paymentStatus, [
           Row(
             children: [
               ChoiceChip(
@@ -449,7 +457,8 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
             ],
           ),
         ]),
-        _section(context, t(context).reminderSettings, [
+        if (canManage || isOwn)
+          _section(context, t(context).reminderSettings, [
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -507,8 +516,9 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
           ),
         ]),
         const SizedBox(height: 8),
-        OutlinedButton(
-          onPressed: () => confirmDialog(
+        if (canManage)
+          OutlinedButton(
+            onPressed: () => confirmDialog(
             context,
             title: t(context).cancelAppointment,
             message: t(context).cancelPolicyNote('${settings.cancelFreeHours}'),
@@ -542,6 +552,8 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
   }
 
   Future<void> _changeStatus(AppointmentStatus status) async {
+    // Defensive: only owner/manager may change an appointment's status.
+    if (!context.read<AuthProvider>().canManageOperations) return;
     final a = _a!;
     final provider = context.read<AppointmentProvider>();
     try {
@@ -566,6 +578,8 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
   /// Records a payment and lets the server derive the payment status from the
   /// amount collected so far, so the two can never be set independently.
   Future<void> _recordPayment(Appointment a) async {
+    // Defensive: recording a payment requires owner/manager.
+    if (!context.read<AuthProvider>().canManageOperations) return;
     final remaining = (a.totalAmount - a.collectedAmount).clamp(0.0, double.infinity);
     final amount = TextEditingController(text: remaining.toStringAsFixed(2));
     var method = 'cash';

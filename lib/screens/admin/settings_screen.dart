@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../l10n/strings.dart';
 import '../../models/booking_settings.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/shop_manager.dart';
 import '../../widgets/color_picker.dart';
@@ -89,10 +90,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'https://barberbook.app/${_draft.slug.isEmpty ? 'book' : _draft.slug}';
 
   void _set(BuildingSettingsBuilder fn) {
+    // Shop settings live on the owner-only `shops` document, so non-owners can
+    // view this screen but cannot change the local draft.
+    if (!context.read<AuthProvider>().canManageRules) return;
     setState(() => _draft = fn(_draft));
   }
 
   Future<void> _save() async {
+    // Defensive: saving writes the owner-only `shops` document.
+    if (!context.read<AuthProvider>().canManageRules) return;
     setState(() => _busy = true);
     final updated = _draft.copyWith(
       shopName: _shopName.text.trim(),
@@ -126,6 +132,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _uploadLogo() async {
+    // The logo URL is written back to the owner-only `shops` document.
+    if (!context.read<AuthProvider>().canManageRules) return;
     final picker = ImagePicker();
     final file = await picker.pickImage(source: ImageSource.gallery);
     if (file == null) return;
@@ -158,6 +166,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final shop = context.watch<ShopProvider>();
+    final canManage = context.watch<AuthProvider>().canManageRules;
     if (shop.settings == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -276,7 +285,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       style: const TextStyle(fontWeight: FontWeight.w600)),
                 ),
                 IconButton(
-                  onPressed: _uploadLogo,
+                  onPressed: canManage ? _uploadLogo : null,
                   icon: const Icon(Icons.image_outlined),
                 ),
                 if (_draft.logoUrl != null)
@@ -565,7 +574,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
           const SizedBox(height: 16),
           FilledButton(
-            onPressed: _busy ? null : _save,
+            onPressed: (canManage && !_busy) ? _save : null,
             child: _busy
                 ? const SizedBox(
                     width: 20,

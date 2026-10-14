@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../l10n/strings.dart';
 import '../../models/service.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/shop_manager.dart';
 import '../../widgets/confirm.dart';
@@ -16,16 +17,22 @@ class ServicesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shop = context.watch<ShopProvider>();
+    // firestore.rules keeps catalog writes owner-only, so manager/staff get a
+    // read-only view. Hiding the controls is a UX affordance; the rules remain
+    // the authority and reject any write that bypasses the UI.
+    final canManage = context.watch<AuthProvider>().canManageRules;
     return Scaffold(
       body: shop.services.isEmpty
           ? EmptyState(
               icon: Icons.content_cut_rounded,
               title: t(context).noServices,
-              action: FilledButton.icon(
-                onPressed: () => _editService(context),
-                icon: const Icon(Icons.add_rounded),
-                label: Text(t(context).addService),
-              ),
+              action: canManage
+                  ? FilledButton.icon(
+                      onPressed: () => _editService(context),
+                      icon: const Icon(Icons.add_rounded),
+                      label: Text(t(context).addService),
+                    )
+                  : null,
             )
           : ListView.builder(
               padding: const EdgeInsets.all(16),
@@ -35,7 +42,9 @@ class ServicesScreen extends StatelessWidget {
                 return Card(
                   margin: const EdgeInsets.only(bottom: 10),
                   child: ListTile(
-                    onTap: () => _editService(context, service: s),
+                    onTap: canManage
+                        ? () => _editService(context, service: s)
+                        : null,
                     leading: CircleAvatar(
                       backgroundColor: Color(s.colorValue).withOpacity(0.15),
                       child: Icon(Icons.content_cut_rounded,
@@ -71,29 +80,33 @@ class ServicesScreen extends StatelessWidget {
                       style:
                           TextStyle(color: Colors.grey.shade600, fontSize: 12),
                     ),
-                    trailing: IconButton(
-                      onPressed: () async {
-                        final ok = await confirmDialog(context,
-                            title: t(context).deleteServiceConfirm,
-                            confirmText: t(context).delete,
-                            destructive: true);
-                        if (ok && context.mounted) {
-                          await context
-                              .read<ShopProvider>()
-                              .deleteService(s.id, ShopManager.shopId!);
-                        }
-                      },
-                      icon: const Icon(Icons.delete_outline_rounded),
-                    ),
+                    trailing: canManage
+                        ? IconButton(
+                            onPressed: () async {
+                              final ok = await confirmDialog(context,
+                                  title: t(context).deleteServiceConfirm,
+                                  confirmText: t(context).delete,
+                                  destructive: true);
+                              if (ok && context.mounted) {
+                                await context
+                                    .read<ShopProvider>()
+                                    .deleteService(s.id, ShopManager.shopId!);
+                              }
+                            },
+                            icon: const Icon(Icons.delete_outline_rounded),
+                          )
+                        : null,
                   ),
                 );
               },
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _editService(context),
-        icon: const Icon(Icons.add_rounded),
-        label: Text(t(context).addService),
-      ),
+      floatingActionButton: canManage
+          ? FloatingActionButton.extended(
+              onPressed: () => _editService(context),
+              icon: const Icon(Icons.add_rounded),
+              label: Text(t(context).addService),
+            )
+          : null,
     );
   }
 

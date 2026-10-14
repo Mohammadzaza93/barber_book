@@ -257,7 +257,12 @@ class BusinessToolsProvider extends ChangeNotifier {
     // Skipping the sync for staff avoids a stream of denied writes instead of
     // relying on catching each one after Firestore rejects it.
     if (!canSyncCustomerProfiles(_role)) return;
-    if (_shopId == null) return;
+    // Pin the shop this sync belongs to. If a sign-out / account switch rebinds
+    // the provider mid-sync, the bound shop changes and every remaining write
+    // is abandoned so one tenant's derived profiles are never written into the
+    // next session's shop.
+    final boundShop = _shopId;
+    if (boundShop == null) return;
     final grouped = <String, List<Appointment>>{};
     for (final appointment in appointments) {
       final phone = normalizePhone(appointment.customerPhone);
@@ -270,6 +275,7 @@ class BusinessToolsProvider extends ChangeNotifier {
     }
 
     for (final entry in grouped.entries) {
+      if (_shopId != boundShop) return;
       final phone = entry.key;
       final history = entry.value;
       final completed = history
@@ -323,7 +329,7 @@ class BusinessToolsProvider extends ChangeNotifier {
       );
       if (existing == null || !_sameComputedFields(existing, profile)) {
         try {
-          await FirestoreService.instance.saveCustomer(shopId, profile);
+          await FirestoreService.instance.saveCustomer(boundShop, profile);
         } on FirebaseException catch (e) {
           // A permission-denied here is an expected capability boundary; any
           // other failure is a real problem and must stay observable.
