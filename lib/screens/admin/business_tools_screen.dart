@@ -7,7 +7,6 @@ import '../../models/business_features.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/business_tools_provider.dart';
 import '../../providers/shop_provider.dart';
-import '../../widgets/feature_labels.dart';
 import 'discounts_screen.dart';
 import 'business_management_tabs.dart';
 
@@ -25,12 +24,12 @@ class BusinessToolsScreen extends StatelessWidget {
             child: TabBar(
               isScrollable: true,
               tabs: [
-                Tab(text: FeatureLabels.text(context, 'الأعمال', 'Portfolio'), icon: const Icon(Icons.photo_library_outlined)),
-                const Tab(text: 'العملاء', icon: Icon(Icons.people_alt_outlined)),
-                Tab(text: FeatureLabels.text(context, 'الولاء', 'Loyalty'), icon: const Icon(Icons.stars_outlined)),
-                Tab(text: FeatureLabels.text(context, 'الكراسي', 'Chairs'), icon: const Icon(Icons.event_seat_outlined)),
-                Tab(text: FeatureLabels.text(context, 'الطابور', 'Queue'), icon: const Icon(Icons.people_alt_outlined)),
-                Tab(text: FeatureLabels.text(context, 'المدفوعات', 'Payments'), icon: const Icon(Icons.account_balance_wallet_outlined)),
+                Tab(text: t(context).tabPortfolio, icon: const Icon(Icons.photo_library_outlined)),
+                Tab(text: t(context).tabCustomers, icon: const Icon(Icons.people_alt_outlined)),
+                Tab(text: t(context).tabLoyalty, icon: const Icon(Icons.stars_outlined)),
+                Tab(text: t(context).tabChairs, icon: const Icon(Icons.event_seat_outlined)),
+                Tab(text: t(context).tabQueue, icon: const Icon(Icons.people_alt_outlined)),
+                Tab(text: t(context).tabPayments, icon: const Icon(Icons.account_balance_wallet_outlined)),
               ],
             ),
           ),
@@ -63,23 +62,23 @@ class _PortfolioTab extends StatelessWidget {
     final result = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('إضافة عمل إلى المعرض'),
+        title: Text(t(context).portfolioAddTitle),
         content: SingleChildScrollView(
           child: Column(children: [
-            TextField(controller: title, decoration: const InputDecoration(labelText: 'العنوان')),
-            TextField(controller: url, decoration: const InputDecoration(labelText: 'رابط الصورة')),
-            TextField(controller: category, decoration: const InputDecoration(labelText: 'الفئة')),
-            TextField(controller: description, decoration: const InputDecoration(labelText: 'الوصف')),
+            TextField(controller: title, decoration: InputDecoration(labelText: t(context).portfolioItemTitle)),
+            TextField(controller: url, decoration: InputDecoration(labelText: t(context).portfolioImageUrl)),
+            TextField(controller: category, decoration: InputDecoration(labelText: t(context).category)),
+            TextField(controller: description, decoration: InputDecoration(labelText: t(context).description)),
           ]),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(t(context).cancel)),
           FilledButton(
             onPressed: () {
               if (title.text.trim().isEmpty || url.text.trim().isEmpty) return;
               Navigator.pop(context, true);
             },
-            child: const Text('حفظ'),
+            child: Text(t(context).save),
           ),
         ],
       ),
@@ -106,11 +105,11 @@ class _PortfolioTab extends StatelessWidget {
           ? FloatingActionButton.extended(
               onPressed: () => _add(context),
               icon: const Icon(Icons.add_photo_alternate_outlined),
-              label: const Text('إضافة صورة'),
+              label: Text(t(context).addPhoto),
             )
           : null,
       body: tools.portfolio.isEmpty
-          ? const Center(child: Text('أضف صور قصات الشعر وتسريحات اللحية لعرض مستوى الصالون.'))
+          ? Center(child: Text(t(context).portfolioEmpty))
           : GridView.builder(
               padding: const EdgeInsets.all(16),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -152,20 +151,20 @@ class _QueueTab extends StatelessWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => StatefulBuilder(builder: (context, setState) => AlertDialog(
-        title: const Text('إضافة عميل إلى الطابور'),
+        title: Text(t(context).queueAddTitle),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: name, decoration: const InputDecoration(labelText: 'اسم العميل')),
-          TextField(controller: phone, decoration: const InputDecoration(labelText: 'الهاتف')),
+          TextField(controller: name, decoration: InputDecoration(labelText: t(context).customerNameField)),
+          TextField(controller: phone, decoration: InputDecoration(labelText: t(context).phone)),
           DropdownButtonFormField<String>(
             value: employeeId,
-            decoration: const InputDecoration(labelText: 'الحلاق'),
+            decoration: InputDecoration(labelText: t(context).employee),
             items: shop.activeEmployees.map((e) => DropdownMenuItem(value: e.id, child: Text(e.name))).toList(),
             onChanged: (v) => setState(() => employeeId = v),
           ),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('إضافة')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(t(context).cancel)),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t(context).add)),
         ],
       )),
     );
@@ -186,7 +185,7 @@ class _QueueTab extends StatelessWidget {
     final staff = context.watch<ShopProvider>().activeEmployees;
     final waiting = tools.queue.where((e) => e.status == QueueStatus.waiting).length;
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(onPressed: () => _addQueue(context), icon: const Icon(Icons.person_add), label: Text('إضافة إلى الطابور ($waiting)')),
+      floatingActionButton: FloatingActionButton.extended(onPressed: () => _addQueue(context), icon: const Icon(Icons.person_add), label: Text(t(context).queueAddFab('$waiting'))),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: tools.queue.map((entry) {
@@ -196,7 +195,7 @@ class _QueueTab extends StatelessWidget {
             child: ListTile(
               leading: CircleAvatar(child: Text('${tools.queue.indexOf(entry) + 1}')),
               title: Text(entry.customerName),
-              subtitle: Text('${employee?.name ?? 'غير محدد'} · ${entry.status.name} · ${DateFormat('HH:mm').format(entry.joinedAt)}'),
+              subtitle: Text('${employee?.name ?? t(context).unassigned} · ${entry.status.name} · ${DateFormat('HH:mm').format(entry.joinedAt)}'),
               trailing: IconButton(icon: Icon(next == QueueStatus.inService ? Icons.play_arrow : Icons.check), onPressed: () => tools.saveQueue(entry.copyWith(status: next, startedAt: next == QueueStatus.inService ? DateTime.now() : entry.startedAt, completedAt: next == QueueStatus.completed ? DateTime.now() : entry.completedAt))),
             ),
           );
@@ -223,25 +222,25 @@ class _PaymentsTab extends StatelessWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => StatefulBuilder(builder: (context, setState) => AlertDialog(
-        title: const Text('تسجيل دفعة ومبيعات الكرسي'),
+        title: Text(t(context).paymentDialogTitle),
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: customer, decoration: const InputDecoration(labelText: 'اسم العميل')),
-          TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'هاتف العميل')),
-          TextField(controller: appointment, decoration: const InputDecoration(labelText: 'رقم الموعد')),
-          TextField(controller: amount, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المبلغ المحصل')),
-          TextField(controller: materialCost, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'تكلفة المواد المستخدمة')),
+          TextField(controller: customer, decoration: InputDecoration(labelText: t(context).customerNameField)),
+          TextField(controller: phone, keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: t(context).customerPhoneField)),
+          TextField(controller: appointment, decoration: InputDecoration(labelText: t(context).appointmentRefField)),
+          TextField(controller: amount, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t(context).amountCollected)),
+          TextField(controller: materialCost, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t(context).materialCostField)),
           if (tools.chairs.isNotEmpty)
-            DropdownButtonFormField<String>(value: chairId, decoration: const InputDecoration(labelText: 'كرسي الحلاقة'), items: tools.chairs.where((chair) => chair.active).map((chair) => DropdownMenuItem(value: chair.id, child: Text(chair.number.isEmpty ? chair.name : 'كرسي ${chair.number} — ${chair.name}'))).toList(), onChanged: (value) => setState(() => chairId = value)),
-          DropdownButtonFormField<String>(value: employeeId, decoration: const InputDecoration(labelText: 'الحلاق'), items: shop.activeEmployees.map((employee) => DropdownMenuItem(value: employee.id, child: Text(employee.name))).toList(), onChanged: (value) => setState(() => employeeId = value)),
-          DropdownButtonFormField<String>(value: method, items: const [
-            DropdownMenuItem(value: 'cash', child: Text('نقدي')),
-            DropdownMenuItem(value: 'card', child: Text('بطاقة')),
-            DropdownMenuItem(value: 'transfer', child: Text('تحويل')),
+            DropdownButtonFormField<String>(value: chairId, decoration: InputDecoration(labelText: t(context).chairField), items: tools.chairs.where((chair) => chair.active).map((chair) => DropdownMenuItem(value: chair.id, child: Text(chair.number.isEmpty ? chair.name : t(context).chairLabel(chair.number, chair.name)))).toList(), onChanged: (value) => setState(() => chairId = value)),
+          DropdownButtonFormField<String>(value: employeeId, decoration: InputDecoration(labelText: t(context).employee), items: shop.activeEmployees.map((employee) => DropdownMenuItem(value: employee.id, child: Text(employee.name))).toList(), onChanged: (value) => setState(() => employeeId = value)),
+          DropdownButtonFormField<String>(value: method, items: [
+            DropdownMenuItem(value: 'cash', child: Text(t(context).payCash)),
+            DropdownMenuItem(value: 'card', child: Text(t(context).payCard)),
+            DropdownMenuItem(value: 'transfer', child: Text(t(context).payTransfer)),
             ], onChanged: (v) => setState(() => method = v ?? 'cash')),
         ])),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('حفظ')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(t(context).cancel)),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t(context).save)),
         ],
       )),
     );
@@ -259,26 +258,26 @@ class _PaymentsTab extends StatelessWidget {
     final materialTotal = tools.payments.fold<double>(0, (sum, p) => sum + p.materialCost);
     final currency = context.watch<ShopProvider>().settings?.currency ?? 'SAR';
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(onPressed: () => _addPayment(context), icon: const Icon(Icons.add_card), label: const Text('تسجيل دفعة')),
+      floatingActionButton: FloatingActionButton.extended(onPressed: () => _addPayment(context), icon: const Icon(Icons.add_card), label: Text(t(context).recordPayment)),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
           Row(children: [
-            Expanded(child: Card(child: ListTile(leading: const Icon(Icons.account_balance_wallet), title: const Text('المبيعات'), subtitle: Text(fmtPrice(total, currency)),))),
-            Expanded(child: Card(child: ListTile(leading: const Icon(Icons.inventory_2_outlined), title: const Text('المواد'), subtitle: Text(fmtPrice(materialTotal, currency)),))),
-            Expanded(child: Card(child: ListTile(leading: const Icon(Icons.trending_up), title: const Text('الصافي'), subtitle: Text(fmtPrice(total - materialTotal, currency)),))),
+            Expanded(child: Card(child: ListTile(leading: const Icon(Icons.account_balance_wallet), title: Text(t(context).salesCard), subtitle: Text(fmtPrice(total, currency)),))),
+            Expanded(child: Card(child: ListTile(leading: const Icon(Icons.inventory_2_outlined), title: Text(t(context).materialsCard), subtitle: Text(fmtPrice(materialTotal, currency)),))),
+            Expanded(child: Card(child: ListTile(leading: const Icon(Icons.trending_up), title: Text(t(context).netCard), subtitle: Text(fmtPrice(total - materialTotal, currency)),))),
           ]),
-          Card(child: ListTile(leading: const Icon(Icons.local_offer_outlined), title: const Text('الترويج للخدمات'), subtitle: const Text('أنشئ عروضًا وأكواد خصم وشاركها مع العملاء.'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscountsScreen())))),
+          Card(child: ListTile(leading: const Icon(Icons.local_offer_outlined), title: Text(t(context).promoServicesTitle), subtitle: Text(t(context).promoServicesSubtitle), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscountsScreen())))),
           const SizedBox(height: 8),
           ...tools.payments.map(
             (payment) => Card(
               child: ListTile(
                 leading: const Icon(Icons.payments_outlined),
                 title: Text(
-                  payment.customerName.isEmpty ? 'عميل' : payment.customerName,
+                  payment.customerName.isEmpty ? t(context).anonymousCustomer : payment.customerName,
                 ),
                 subtitle: Text(
-                  '${payment.method} · ${DateFormat('yyyy/MM/dd HH:mm').format(payment.paidAt)} · صافي ${fmtPrice(payment.profit, currency)}',
+                  '${payment.method} · ${DateFormat('yyyy/MM/dd HH:mm').format(payment.paidAt)} · ${t(context).netShort} ${fmtPrice(payment.profit, currency)}',
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,

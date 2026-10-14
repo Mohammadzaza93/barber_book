@@ -41,7 +41,7 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Text(existing == null ? 'إضافة عميل' : 'تعديل ملف العميل'),
+          title: Text(existing == null ? t(context).addCustomer : t(context).editCustomerProfile),
           content: Form(
             key: formKey,
             child: SingleChildScrollView(
@@ -50,32 +50,32 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
                 children: [
                   TextFormField(
                     controller: name,
-                    decoration: const InputDecoration(labelText: 'اسم العميل'),
-                    validator: (v) => v == null || v.trim().isEmpty ? 'اكتب اسم العميل' : null,
+                    decoration: InputDecoration(labelText: t(context).customerNameField),
+                    validator: (v) => v == null || v.trim().isEmpty ? t(context).customerNameRequired : null,
                   ),
                   TextFormField(
                     controller: phone,
                     keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(labelText: 'رقم الهاتف'),
-                    validator: (v) => _normalize(v ?? '').isEmpty ? 'اكتب رقم الهاتف' : null,
+                    decoration: InputDecoration(labelText: t(context).phoneNumberField),
+                    validator: (v) => _normalize(v ?? '').isEmpty ? t(context).phoneRequired : null,
                   ),
                   TextFormField(
                     controller: email,
                     keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(labelText: 'البريد الإلكتروني'),
+                    decoration: InputDecoration(labelText: t(context).email),
                   ),
                   TextFormField(
                     controller: preferredTime,
-                    decoration: const InputDecoration(labelText: 'الوقت المفضل'),
+                    decoration: InputDecoration(labelText: t(context).preferredTimeField),
                   ),
                   TextFormField(
                     controller: notes,
                     maxLines: 3,
-                    decoration: const InputDecoration(labelText: 'ملاحظات وتفضيلات خاصة'),
+                    decoration: InputDecoration(labelText: t(context).customerNotesField),
                   ),
                   SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('السماح برسائل التذكير والعروض'),
+                    title: Text(t(context).marketingOptIn),
                     value: marketingOptIn,
                     onChanged: (value) => setState(() => marketingOptIn = value),
                   ),
@@ -84,12 +84,12 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(t(context).cancel)),
             FilledButton(
               onPressed: () {
                 if (formKey.currentState?.validate() ?? false) Navigator.pop(context, true);
               },
-              child: const Text('حفظ'),
+              child: Text(t(context).save),
             ),
           ],
         ),
@@ -139,7 +139,7 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showCustomerDialog(context),
         icon: const Icon(Icons.person_add_alt_1),
-        label: const Text('إضافة عميل'),
+        label: Text(t(context).addCustomer),
       ),
       body: Column(
         children: [
@@ -147,11 +147,11 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
             child: Row(
               children: [
-                Expanded(child: _MetricCard(label: 'إجمالي العملاء', value: '${tools.customers.length}', icon: Icons.people_alt_outlined)),
+                Expanded(child: _MetricCard(label: t(context).metricTotalCustomers, value: '${tools.customers.length}', icon: Icons.people_alt_outlined)),
                 const SizedBox(width: 8),
-                Expanded(child: _MetricCard(label: 'عملاء دائمون', value: '$permanent', icon: Icons.verified_outlined)),
+                Expanded(child: _MetricCard(label: t(context).metricLoyalCustomers, value: '$permanent', icon: Icons.verified_outlined)),
                 const SizedBox(width: 8),
-                Expanded(child: _MetricCard(label: 'يحتاجون متابعة', value: '$inactive', icon: Icons.notifications_active_outlined)),
+                Expanded(child: _MetricCard(label: t(context).metricNeedFollowUp, value: '$inactive', icon: Icons.notifications_active_outlined)),
               ],
             ),
           ),
@@ -163,17 +163,17 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
                   child: TextField(
                     controller: _search,
                     onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search),
-                      hintText: 'ابحث بالاسم أو الهاتف',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search),
+                      hintText: t(context).searchCustomersHint,
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 FilterChip(
                   selected: _inactiveOnly,
-                  label: const Text('الغائبون'),
+                  label: Text(t(context).filterInactive),
                   avatar: const Icon(Icons.access_time, size: 18),
                   onSelected: (value) => setState(() => _inactiveOnly = value),
                 ),
@@ -182,7 +182,7 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
           ),
           Expanded(
             child: customers.isEmpty
-                ? const Center(child: Text('لا يوجد عملاء مطابقون. سجّل أول عميل أو انتظر اكتمال المواعيد.'))
+                ? Center(child: Text(t(context).customersEmpty))
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 88),
                     itemCount: customers.length,
@@ -191,17 +191,17 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
                       final inactiveCustomer = customer.isInactive(threshold);
                       final preferredServices = customer.preferredServiceIds
                           .map((id) => shop.serviceById(id)?.name ?? id)
-                          .join('، ');
+                          .join(t(context).listSeparator);
                       final preferredBarber = customer.preferredEmployeeId == null
                           ? ''
                           : shop.employeeById(customer.preferredEmployeeId!)?.name ?? '';
                       final status = customer.visitCount == 0
-                          ? 'أول زيارة'
+                          ? t(context).customerStatusFirstVisit
                           : customer.isPermanent
-                              ? 'عميل دائم'
+                              ? t(context).customerStatusLoyal
                               : customer.isReturning
-                                  ? 'عميل متكرر'
-                                  : 'زيارة واحدة';
+                                  ? t(context).customerStatusReturning
+                                  : t(context).customerStatusSingleVisit;
                       return Card(
                         child: ListTile(
                           leading: CircleAvatar(child: Text(customer.name.isEmpty ? '?' : customer.name.characters.first)),
@@ -214,10 +214,20 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
                           subtitle: Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
-                              '${customer.phone}  •  $status\n'
-                              'الزيارات: ${customer.visitCount}  •  آخر زيارة: ${customer.lastVisitAt == null ? 'لا توجد' : DateFormat('yyyy/MM/dd').format(customer.lastVisitAt!)}\n'
-                              'المعدل: ${customer.averageVisitIntervalDays <= 0 ? 'غير معروف' : '${customer.averageVisitIntervalDays.toStringAsFixed(0)} يوم'}  •  الوقت: ${customer.preferredTime.isEmpty ? 'غير محدد' : customer.preferredTime}\n'
-                              'الخدمات المفضلة: ${preferredServices.isEmpty ? 'غير محددة' : preferredServices}  •  الحلاق المفضل: ${preferredBarber.isEmpty ? 'غير محدد' : preferredBarber}',
+                              t(context).customerSummary(
+                                customer.phone,
+                                status,
+                                '${customer.visitCount}',
+                                customer.lastVisitAt == null
+                                    ? t(context).noneValue
+                                    : DateFormat('yyyy/MM/dd').format(customer.lastVisitAt!),
+                                customer.averageVisitIntervalDays <= 0
+                                    ? t(context).unknown
+                                    : t(context).daysCount(customer.averageVisitIntervalDays.toStringAsFixed(0)),
+                                customer.preferredTime.isEmpty ? t(context).notSet : customer.preferredTime,
+                                preferredServices.isEmpty ? t(context).notSpecified : preferredServices,
+                                preferredBarber.isEmpty ? t(context).notSet : preferredBarber,
+                              ),
                             ),
                           ),
                           isThreeLine: true,
@@ -226,9 +236,9 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
                               if (value == 'edit') await _showCustomerDialog(context, existing: customer);
                               if (value == 'delete') await tools.deleteCustomer(customer.id);
                             },
-                            itemBuilder: (_) => const [
-                              PopupMenuItem(value: 'edit', child: Text('تعديل الملف')),
-                              PopupMenuItem(value: 'delete', child: Text('حذف الملف')),
+                            itemBuilder: (_) => [
+                              PopupMenuItem(value: 'edit', child: Text(t(context).menuEditProfile)),
+                              PopupMenuItem(value: 'delete', child: Text(t(context).menuDeleteProfile)),
                             ],
                           ),
                         ),
@@ -246,7 +256,7 @@ class LoyaltyProgramTab extends StatelessWidget {
   const LoyaltyProgramTab({super.key});
 
   Future<void> _showRuleDialog(BuildContext context, {LoyaltyRule? existing}) async {
-    final name = TextEditingController(text: existing?.name ?? 'قاعدة النقاط الأساسية');
+    final name = TextEditingController(text: existing?.name ?? t(context).defaultRuleName);
     final description = TextEditingController(text: existing?.description ?? '');
     final visit = TextEditingController(text: '${existing?.pointsPerVisit ?? 10}');
     final currency = TextEditingController(text: '${existing?.pointsPerCurrency ?? 1}');
@@ -258,25 +268,25 @@ class LoyaltyProgramTab extends StatelessWidget {
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Text(existing == null ? 'إضافة قاعدة ولاء' : 'تعديل قاعدة الولاء'),
+          title: Text(existing == null ? t(context).addLoyaltyRule : t(context).editLoyaltyRule),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: name, decoration: const InputDecoration(labelText: 'اسم القاعدة')),
-                TextField(controller: description, decoration: const InputDecoration(labelText: 'وصف القاعدة')),
-                TextField(controller: visit, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'نقاط لكل زيارة')),
-                TextField(controller: currency, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'نقاط لكل وحدة نقدية')),
-                TextField(controller: minimum, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'الحد الأدنى للفاتورة')),
-                TextField(controller: bonus, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'نقاط إضافية عند تحقق الشرط')),
-                TextField(controller: inactive, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'أيام الغياب لإظهار تنبيه')),
-                SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, title: const Text('القاعدة مفعّلة'), value: enabled, onChanged: (v) => setState(() => enabled = v)),
+                TextField(controller: name, decoration: InputDecoration(labelText: t(context).ruleNameField)),
+                TextField(controller: description, decoration: InputDecoration(labelText: t(context).ruleDescriptionField)),
+                TextField(controller: visit, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t(context).pointsPerVisitField)),
+                TextField(controller: currency, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t(context).pointsPerCurrencyField)),
+                TextField(controller: minimum, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t(context).minimumSpendField)),
+                TextField(controller: bonus, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t(context).bonusPointsField)),
+                TextField(controller: inactive, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t(context).inactiveDaysField)),
+                SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, title: Text(t(context).ruleEnabled), value: enabled, onChanged: (v) => setState(() => enabled = v)),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('حفظ')),
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(t(context).cancel)),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t(context).save)),
           ],
         ),
       ),
@@ -285,7 +295,7 @@ class LoyaltyProgramTab extends StatelessWidget {
     final tools = context.read<BusinessToolsProvider>();
     final rule = LoyaltyRule(
       id: existing?.id ?? tools.newId(),
-      name: name.text.trim().isEmpty ? 'قاعدة ولاء' : name.text.trim(),
+      name: name.text.trim().isEmpty ? t(context).loyaltyRuleFallbackName : name.text.trim(),
       description: description.text.trim(),
       enabled: enabled,
       pointsPerVisit: int.tryParse(visit.text) ?? 0,
@@ -309,18 +319,18 @@ class LoyaltyProgramTab extends StatelessWidget {
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Text(existing == null ? 'إضافة هدية' : 'تعديل الهدية'),
+          title: Text(existing == null ? t(context).addGift : t(context).editGift),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: name, decoration: const InputDecoration(labelText: 'اسم الهدية')),
-                TextField(controller: description, decoration: const InputDecoration(labelText: 'الوصف')),
-                TextField(controller: points, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'تكلفة الهدية بالنقاط')),
-                TextField(controller: stock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المخزون (-1 = غير محدود)')),
+                TextField(controller: name, decoration: InputDecoration(labelText: t(context).giftNameField)),
+                TextField(controller: description, decoration: InputDecoration(labelText: t(context).description)),
+                TextField(controller: points, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t(context).giftPointsCostField)),
+                TextField(controller: stock, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t(context).giftStockField)),
                 DropdownButtonFormField<String>(
                   value: tier,
-                  decoration: const InputDecoration(labelText: 'أقل مستوى مسموح'),
+                  decoration: InputDecoration(labelText: t(context).minimumTierField),
                   items: const [
                     DropdownMenuItem(value: 'bronze', child: Text('Bronze')),
                     DropdownMenuItem(value: 'silver', child: Text('Silver')),
@@ -329,13 +339,13 @@ class LoyaltyProgramTab extends StatelessWidget {
                   ],
                   onChanged: (value) => setState(() => tier = value ?? 'bronze'),
                 ),
-                SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, title: const Text('الهدية متاحة'), value: active, onChanged: (v) => setState(() => active = v)),
+                SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, title: Text(t(context).giftAvailable), value: active, onChanged: (v) => setState(() => active = v)),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('حفظ')),
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(t(context).cancel)),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t(context).save)),
           ],
         ),
       ),
@@ -372,23 +382,23 @@ class LoyaltyProgramTab extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: _MetricCard(label: 'حسابات الولاء', value: '${tools.loyalty.length}', icon: Icons.stars_outlined)),
+              Expanded(child: _MetricCard(label: t(context).metricLoyaltyAccounts, value: '${tools.loyalty.length}', icon: Icons.stars_outlined)),
               const SizedBox(width: 8),
-              Expanded(child: _MetricCard(label: 'إجمالي النقاط', value: '$totalPoints', icon: Icons.bolt_outlined)),
+              Expanded(child: _MetricCard(label: t(context).metricTotalPoints, value: '$totalPoints', icon: Icons.bolt_outlined)),
               const SizedBox(width: 8),
-              Expanded(child: _MetricCard(label: 'قواعد فعالة', value: '$activeRules', icon: Icons.rule_folder_outlined)),
+              Expanded(child: _MetricCard(label: t(context).metricActiveRules, value: '$activeRules', icon: Icons.rule_folder_outlined)),
             ],
           ),
           const SizedBox(height: 16),
-          _SectionHeader(title: 'قواعد كسب النقاط', actionLabel: 'إضافة قاعدة', onPressed: canManage ? () => _showRuleDialog(context) : null),
+          _SectionHeader(title: t(context).sectionEarningRules, actionLabel: t(context).addRuleAction, onPressed: canManage ? () => _showRuleDialog(context) : null),
           if (tools.loyaltyRules.isEmpty)
-            const Card(child: ListTile(title: Text('لا توجد قواعد بعد'), subtitle: Text('أضف قاعدة لتحديد نقاط الزيارة والفاتورة والتنبيه عن الغياب.')))
+            Card(child: ListTile(title: Text(t(context).noRulesYet), subtitle: Text(t(context).noRulesSubtitle)))
           else
             ...tools.loyaltyRules.map((rule) => Card(
                   child: ListTile(
                     leading: Icon(rule.enabled ? Icons.rule : Icons.rule_outlined),
                     title: Text(rule.name),
-                    subtitle: Text('${rule.pointsPerVisit} نقطة/زيارة + ${rule.pointsPerCurrency} لكل وحدة نقدية  •  تنبيه بعد ${rule.inactiveAfterDays} يوم'),
+                    subtitle: Text(t(context).ruleSummary('${rule.pointsPerVisit}', '${rule.pointsPerCurrency}', '${rule.inactiveAfterDays}')),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -399,50 +409,50 @@ class LoyaltyProgramTab extends StatelessWidget {
                               if (value == 'edit') _showRuleDialog(context, existing: rule);
                               if (value == 'delete') tools.deleteLoyaltyRule(rule.id);
                             },
-                            itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('تعديل')), PopupMenuItem(value: 'delete', child: Text('حذف'))],
+                            itemBuilder: (_) => [PopupMenuItem(value: 'edit', child: Text(t(context).edit)), PopupMenuItem(value: 'delete', child: Text(t(context).delete))],
                           ),
                       ],
                     ),
                   ),
                 )),
           const SizedBox(height: 16),
-          _SectionHeader(title: 'هدايا العملاء المميزين', actionLabel: 'إضافة هدية', onPressed: canManage ? () => _showGiftDialog(context) : null),
+          _SectionHeader(title: t(context).sectionLoyaltyGifts, actionLabel: t(context).addGift, onPressed: canManage ? () => _showGiftDialog(context) : null),
           if (tools.loyaltyGifts.isEmpty)
-            const Card(child: ListTile(title: Text('لا توجد هدايا بعد'), subtitle: Text('أضف مكافآت يمكن استبدالها بالنقاط مع تحديد المستوى والمخزون.')))
+            Card(child: ListTile(title: Text(t(context).noGiftsYet), subtitle: Text(t(context).noGiftsSubtitle)))
           else
             ...tools.loyaltyGifts.map((gift) => Card(
                   child: ListTile(
                     leading: const Icon(Icons.card_giftcard_outlined),
                     title: Text(gift.name),
-                    subtitle: Text('${gift.pointsCost} نقطة  •  من مستوى ${gift.minimumTier}  •  ${gift.stock < 0 ? 'غير محدود' : '${gift.redeemedCount}/${gift.stock} مستخدم'}'),
+                    subtitle: Text(t(context).giftSummary('${gift.pointsCost}', gift.minimumTier, gift.stock < 0 ? t(context).unlimited : t(context).giftStockUsed('${gift.redeemedCount}', '${gift.stock}'))),
                     trailing: canManage
                         ? PopupMenuButton<String>(
                             onSelected: (value) {
                               if (value == 'edit') _showGiftDialog(context, existing: gift);
                               if (value == 'delete') tools.deleteLoyaltyGift(gift.id);
                             },
-                            itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('تعديل')), PopupMenuItem(value: 'delete', child: Text('حذف'))],
+                            itemBuilder: (_) => [PopupMenuItem(value: 'edit', child: Text(t(context).edit)), PopupMenuItem(value: 'delete', child: Text(t(context).delete))],
                           )
                         : null,
                   ),
                 )),
           const SizedBox(height: 16),
-          _SectionHeader(title: 'أرصدة العملاء', actionLabel: 'إضافة حساب', onPressed: () => _showCustomerAccountDialog(context)),
+          _SectionHeader(title: t(context).sectionCustomerBalances, actionLabel: t(context).addAccountAction, onPressed: () => _showCustomerAccountDialog(context)),
           ...tools.loyalty.map((account) {
             final gifts = tools.loyaltyGifts.where((gift) => gift.isAvailable && _tierRank(account.tier) >= _tierRank(gift.minimumTier) && account.points >= gift.pointsCost).toList();
             return Card(
               child: ExpansionTile(
                 leading: CircleAvatar(child: Text('${account.points}')),
                 title: Text(account.customerName.isEmpty ? account.customerPhone : account.customerName),
-                subtitle: Text('${account.customerPhone}  •  المستوى: ${account.tier}'),
+                subtitle: Text(t(context).loyaltyAccountSubtitle(account.customerPhone, account.tier)),
                 children: [
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                     child: Row(
                       children: [
-                        OutlinedButton.icon(onPressed: () => tools.addPoints(account.id, 10), icon: const Icon(Icons.add), label: const Text('+10 نقاط')),
+                        OutlinedButton.icon(onPressed: () => tools.addPoints(account.id, 10), icon: const Icon(Icons.add), label: Text(t(context).addTenPoints)),
                         const SizedBox(width: 8),
-                        Expanded(child: Text(gifts.isEmpty ? 'لا توجد هدية مستحقة حاليًا' : 'الهدايا المستحقة: ${gifts.map((gift) => gift.name).join('، ')}')),
+                        Expanded(child: Text(gifts.isEmpty ? t(context).noGiftDue : t(context).dueGifts(gifts.map((gift) => gift.name).join(t(context).listSeparator)))),
                       ],
                     ),
                   ),
@@ -450,17 +460,17 @@ class LoyaltyProgramTab extends StatelessWidget {
                     ...gifts.map((gift) => ListTile(
                           dense: true,
                           leading: const Icon(Icons.redeem_outlined),
-                          title: Text('استبدال: ${gift.name}'),
+                          title: Text(t(context).redeemGiftTitle(gift.name)),
                           trailing: FilledButton.tonal(
                             onPressed: () async {
                               try {
                                 await tools.redeemGift(account.id, gift);
-                                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم استبدال الهدية بنجاح')));
+                                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t(context).giftRedeemed)));
                               } catch (error) {
                                 if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
                               }
                             },
-                            child: Text('${gift.pointsCost} نقطة'),
+                            child: Text(t(context).pointsAmount('${gift.pointsCost}')),
                           ),
                         )),
                 ],
@@ -479,15 +489,15 @@ class LoyaltyProgramTab extends StatelessWidget {
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('إضافة حساب ولاء'),
+        title: Text(t(context).addLoyaltyAccount),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: name, decoration: const InputDecoration(labelText: 'اسم العميل')),
-          TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'الهاتف')),
-          TextField(controller: points, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'النقاط الابتدائية')),
+          TextField(controller: name, decoration: InputDecoration(labelText: t(context).customerNameField)),
+          TextField(controller: phone, keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: t(context).phone)),
+          TextField(controller: points, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t(context).initialPointsField)),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('حفظ')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(t(context).cancel)),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t(context).save)),
         ],
       ),
     );
@@ -531,21 +541,21 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Text(existing == null ? 'إضافة كرسي حلاقة' : 'تعديل الكرسي'),
+          title: Text(existing == null ? t(context).addChair : t(context).editChair),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: number, decoration: const InputDecoration(labelText: 'رقم الكرسي')),
-            TextField(controller: name, decoration: const InputDecoration(labelText: 'اسم الكرسي')),
+            TextField(controller: number, decoration: InputDecoration(labelText: t(context).chairNumberField)),
+            TextField(controller: name, decoration: InputDecoration(labelText: t(context).chairNameField)),
             DropdownButtonFormField<String>(
               value: employeeId,
-              decoration: const InputDecoration(labelText: 'الحلاق المسؤول'),
+              decoration: InputDecoration(labelText: t(context).assignedBarberField),
               items: shop.activeEmployees.map((employee) => DropdownMenuItem(value: employee.id, child: Text(employee.name))).toList(),
               onChanged: (value) => setState(() => employeeId = value),
             ),
-            SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, title: const Text('الكرسي يعمل حاليًا'), value: active, onChanged: (value) => setState(() => active = value)),
+            SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, title: Text(t(context).chairActive), value: active, onChanged: (value) => setState(() => active = value)),
           ]),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('حفظ')),
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(t(context).cancel)),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t(context).save)),
           ],
         ),
       ),
@@ -558,7 +568,7 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
   Future<void> _showSupplyDialog(BuildContext context) async {
     final tools = context.read<BusinessToolsProvider>();
     if (tools.chairs.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('أضف كرسيًا أولًا قبل تسجيل مستلزماته')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t(context).addChairFirst)));
       return;
     }
     var chairId = tools.chairs.first.id;
@@ -572,17 +582,17 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: const Text('إضافة مستلزم للكرسي'),
+          title: Text(t(context).addSupply),
           content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-            DropdownButtonFormField<String>(value: chairId, decoration: const InputDecoration(labelText: 'الكرسي'), items: tools.chairs.map((chair) => DropdownMenuItem(value: chair.id, child: Text(_chairLabel(chair)))).toList(), onChanged: (value) => setState(() => chairId = value ?? chairId)),
-            TextField(controller: name, decoration: const InputDecoration(labelText: 'اسم المادة')),
-            TextField(controller: category, decoration: const InputDecoration(labelText: 'الفئة')),
-            TextField(controller: unit, decoration: const InputDecoration(labelText: 'الوحدة')),
-            TextField(controller: quantity, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'الكمية الحالية')),
-            TextField(controller: unitCost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'تكلفة الوحدة')),
-            TextField(controller: reorder, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'حد إعادة الطلب')),
+            DropdownButtonFormField<String>(value: chairId, decoration: InputDecoration(labelText: t(context).chairField), items: tools.chairs.map((chair) => DropdownMenuItem(value: chair.id, child: Text(_chairLabel(context, chair)))).toList(), onChanged: (value) => setState(() => chairId = value ?? chairId)),
+            TextField(controller: name, decoration: InputDecoration(labelText: t(context).supplyNameField)),
+            TextField(controller: category, decoration: InputDecoration(labelText: t(context).category)),
+            TextField(controller: unit, decoration: InputDecoration(labelText: t(context).unitField)),
+            TextField(controller: quantity, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t(context).quantityField)),
+            TextField(controller: unitCost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t(context).unitCostField)),
+            TextField(controller: reorder, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t(context).reorderLevelField)),
           ])),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('حفظ'))],
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(t(context).cancel)), FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t(context).save))],
         ),
       ),
     );
@@ -606,13 +616,13 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('ربح ${_chairLabel(chair)} — ${DateFormat('yyyy/MM/dd').format(_weekStart)}'),
+        title: Text(t(context).chairProfitTitle(_chairLabel(context, chair), DateFormat('yyyy/MM/dd').format(_weekStart))),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('الإيراد: ${fmtPrice(computed.revenue, context.read<ShopProvider>().settings?.currency ?? 'SAR')}  •  المواد: ${fmtPrice(computed.supplyCost, context.read<ShopProvider>().settings?.currency ?? 'SAR')}'),
-          TextField(controller: profit, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'الربح المعتمد من قبلك (اختياري)')),
-          TextField(controller: notes, maxLines: 2, decoration: const InputDecoration(labelText: 'ملاحظات الأسبوع')),
+          Text(t(context).chairProfitRevenue(fmtPrice(computed.revenue, context.read<ShopProvider>().settings?.currency ?? 'SAR'), fmtPrice(computed.supplyCost, context.read<ShopProvider>().settings?.currency ?? 'SAR'))),
+          TextField(controller: profit, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t(context).manualProfitField)),
+          TextField(controller: notes, maxLines: 2, decoration: InputDecoration(labelText: t(context).weekNotesField)),
         ]),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('حفظ التقرير'))],
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(t(context).cancel)), FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t(context).saveReport))],
       ),
     );
     if (saved != true || !context.mounted) return;
@@ -632,7 +642,7 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
     ));
   }
 
-  String _chairLabel(Chair chair) => chair.number.trim().isEmpty ? chair.name : 'كرسي ${chair.number} — ${chair.name}';
+  String _chairLabel(BuildContext context, Chair chair) => chair.number.trim().isEmpty ? chair.name : t(context).chairLabel(chair.number, chair.name);
 
   ChairWeeklyProfit _computedReport(BusinessToolsProvider tools, Chair chair) {
     final end = _weekStart.add(const Duration(days: 7));
@@ -670,42 +680,42 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
         children: [
           Row(children: [
-            Expanded(child: _MetricCard(label: 'الكراسي النشطة', value: '${tools.chairs.where((c) => c.active).length}', icon: Icons.event_seat_outlined)),
+            Expanded(child: _MetricCard(label: t(context).metricActiveChairs, value: '${tools.chairs.where((c) => c.active).length}', icon: Icons.event_seat_outlined)),
             const SizedBox(width: 8),
-            Expanded(child: _MetricCard(label: 'ربح الأسبوع', value: fmtPrice(totalProfit, currency), icon: Icons.trending_up_outlined)),
+            Expanded(child: _MetricCard(label: t(context).metricWeekProfit, value: fmtPrice(totalProfit, currency), icon: Icons.trending_up_outlined)),
             const SizedBox(width: 8),
-            Expanded(child: _MetricCard(label: 'مواد منخفضة', value: '$lowStock', icon: Icons.inventory_2_outlined)),
+            Expanded(child: _MetricCard(label: t(context).metricLowStock, value: '$lowStock', icon: Icons.inventory_2_outlined)),
           ]),
           const SizedBox(height: 16),
-          _SectionHeader(title: 'الكراسي والحلاقون', actionLabel: 'إضافة كرسي', onPressed: canManage ? () => _showChairDialog(context) : null),
+          _SectionHeader(title: t(context).sectionChairsAndBarbers, actionLabel: t(context).addChairAction, onPressed: canManage ? () => _showChairDialog(context) : null),
           if (tools.chairs.isEmpty)
-            const Card(child: ListTile(title: Text('لم تتم إضافة كراسي بعد'), subtitle: Text('أضف رقم واسم كل كرسي واربطه بالحلاق المسؤول.')))
+            Card(child: ListTile(title: Text(t(context).noChairsYet), subtitle: Text(t(context).noChairsSubtitle)))
           else
             ...tools.chairs.map((chair) {
               final employee = chair.employeeId == null ? null : context.read<ShopProvider>().activeEmployees.where((e) => e.id == chair.employeeId).firstOrNull;
               return Card(child: ListTile(
                 leading: CircleAvatar(child: Text(chair.number.isEmpty ? '—' : chair.number)),
-                title: Text(_chairLabel(chair)),
-                subtitle: Text('${employee == null ? 'غير مربوط بحلاق' : 'الحلاق: ${employee.name}'}  •  ${chair.active ? 'نشط' : 'متوقف'}'),
-                trailing: canManage ? PopupMenuButton<String>(onSelected: (value) { if (value == 'edit') _showChairDialog(context, existing: chair); if (value == 'delete') tools.deleteChair(chair.id); }, itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('تعديل')), PopupMenuItem(value: 'delete', child: Text('حذف'))]) : null,
+                title: Text(_chairLabel(context, chair)),
+                subtitle: Text('${employee == null ? t(context).chairUnassigned : t(context).chairAssignedBarber(employee.name)}  •  ${chair.active ? t(context).active : t(context).chairInactiveState}'),
+                trailing: canManage ? PopupMenuButton<String>(onSelected: (value) { if (value == 'edit') _showChairDialog(context, existing: chair); if (value == 'delete') tools.deleteChair(chair.id); }, itemBuilder: (_) => [PopupMenuItem(value: 'edit', child: Text(t(context).edit)), PopupMenuItem(value: 'delete', child: Text(t(context).delete))]) : null,
               ));
             }),
           const SizedBox(height: 16),
-          _SectionHeader(title: 'مستلزمات كل كرسي', actionLabel: 'إضافة مادة', onPressed: canManage ? () => _showSupplyDialog(context) : null),
+          _SectionHeader(title: t(context).sectionChairSupplies, actionLabel: t(context).addSupplyAction, onPressed: canManage ? () => _showSupplyDialog(context) : null),
           if (tools.chairSupplies.isEmpty)
-            const Card(child: ListTile(title: Text('لا توجد مواد مسجلة'), subtitle: Text('سجّل الشفرات والمناشف والمواد والمستلزمات مع تكلفة الوحدة.')))
+            Card(child: ListTile(title: Text(t(context).noSuppliesYet), subtitle: Text(t(context).noSuppliesSubtitle)))
           else
             ...tools.chairSupplies.map((supply) {
               final chair = tools.chairs.where((c) => c.id == supply.chairId).firstOrNull;
               return Card(child: ListTile(
                 leading: Icon(supply.lowStock ? Icons.warning_amber_rounded : Icons.inventory_2_outlined, color: supply.lowStock ? Colors.orange : null),
                 title: Text(supply.name),
-                subtitle: Text('${chair == null ? 'كرسي غير معروف' : _chairLabel(chair)}  •  ${supply.quantity} ${supply.unit}  •  تكلفة الوحدة ${supply.unitCost}'),
-                trailing: canManage ? PopupMenuButton<String>(onSelected: (value) { if (value == 'delete') tools.deleteChairSupply(supply.id); }, itemBuilder: (_) => const [PopupMenuItem(value: 'delete', child: Text('حذف'))]) : null,
+                subtitle: Text('${chair == null ? t(context).unknownChair : _chairLabel(context, chair)}  •  ${supply.quantity} ${supply.unit}  •  ${t(context).unitCostField} ${supply.unitCost}'),
+                trailing: canManage ? PopupMenuButton<String>(onSelected: (value) { if (value == 'delete') tools.deleteChairSupply(supply.id); }, itemBuilder: (_) => [PopupMenuItem(value: 'delete', child: Text(t(context).delete))]) : null,
               ));
             }),
           const SizedBox(height: 16),
-          const _SectionHeader(title: 'ربحية الكراسي — الأسبوع المحدد', actionLabel: '', onPressed: null),
+          _SectionHeader(title: t(context).sectionChairProfit, actionLabel: '', onPressed: null),
           Card(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -720,17 +730,17 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
             final report = _computedReport(tools, chair);
             return Card(child: ListTile(
               leading: const Icon(Icons.bar_chart_outlined),
-              title: Text(_chairLabel(chair)),
-              subtitle: Text('زيارات مكتملة: ${report.completedVisits}  •  إشغال تقريبي: ${report.utilizationPercent.toStringAsFixed(1)}%\nإيراد ${fmtPrice(report.revenue, currency)}  •  مواد ${fmtPrice(report.supplyCost, currency)}'),
+              title: Text(_chairLabel(context, chair)),
+              subtitle: Text(t(context).chairReportSummary('${report.completedVisits}', report.utilizationPercent.toStringAsFixed(1), fmtPrice(report.revenue, currency), fmtPrice(report.supplyCost, currency))),
               isThreeLine: true,
               trailing: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: AlignmentDirectional.centerEnd,
                 child: Column(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
                   Text(fmtPrice(report.profit, currency), style: const TextStyle(fontWeight: FontWeight.w800)),
-                  Text(report.manualProfit == null ? 'محسوب' : 'معتمد يدويًا', style: TextStyle(fontSize: 11, color: report.manualProfit == null ? Colors.grey : Colors.green)),
+                  Text(report.manualProfit == null ? t(context).computedLabel : t(context).manualApprovedLabel, style: TextStyle(fontSize: 11, color: report.manualProfit == null ? Colors.grey : Colors.green)),
                   if (canManage)
-                    TextButton(onPressed: () => _showProfitDialog(context, chair, report), child: const Text('تعديل الربح')),
+                    TextButton(onPressed: () => _showProfitDialog(context, chair, report), child: Text(t(context).editProfit)),
                 ]),
               ),
             ));

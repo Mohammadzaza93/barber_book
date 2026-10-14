@@ -397,5 +397,212 @@
 
   "accessDeniedTitle": "Access restricted",
   "accessDeniedMessage": "This section is available to owners and managers only.",
-  "restrictedValue": "Restricted"
+  "restrictedValue": "Restricted",
+
+  "tabPortfolio": "Portfolio",
+  "tabCustomers": "Customers",
+  "tabLoyalty": "Loyalty",
+  "tabChairs": "Chairs",
+  "tabQueue": "Queue",
+  "tabPayments": "Payments",
+
+  "portfolioAddTitle": "Add portfolio item",
+  "portfolioItemTitle": "Title",
+  "portfolioImageUrl": "Image URL",
+  "portfolioEmpty": "Add photos of haircuts and beard styles to showcase your shop.",
+
+  "queueAddTitle": "Add customer to queue",
+  "customerNameField": "Customer name",
+  "queueAddFab": "Add to queue ({count})",
+  "unassigned": "Unassigned",
+
+  "paymentDialogTitle": "Record a payment and chair sales",
+  "customerPhoneField": "Customer phone",
+  "appointmentRefField": "Appointment reference",
+  "materialCostField": "Material cost used",
+  "chairField": "Chair",
+  "chairLabel": "Chair {number} — {name}",
+  "@chairLabel": {
+    "placeholders": {
+      "number": {"type": "String"},
+      "name": {"type": "String"}
+    }
+  },
+  "salesCard": "Sales",
+  "materialsCard": "Materials",
+  "netCard": "Net",
+  "promoServicesTitle": "Promote services",
+  "promoServicesSubtitle": "Create offers and promo codes and share them with customers.",
+  "anonymousCustomer": "Customer",
+  "netShort": "Net",
+
+  "addCustomer": "Add customer",
+  "editCustomerProfile": "Edit customer profile",
+  "customerNameRequired": "Enter the customer name",
+  "phoneNumberField": "Phone number",
+  "phoneRequired": "Enter the phone number",
+  "preferredTimeField": "Preferred time",
+  "customerNotesField": "Notes and special preferences",
+  "marketingOptIn": "Allow reminder messages and offers",
+  "metricTotalCustomers": "Total customers",
+  "metricLoyalCustomers": "Loyal customers",
+  "metricNeedFollowUp": "Need follow-up",
+  "searchCustomersHint": "Search by name or phone",
+  "filterInactive": "Inactive",
+  "customersEmpty": "No matching customers. Add your first customer or wait for appointments to complete.",
+  "listSeparator": ", ",
+  "customerStatusFirstVisit": "First visit",
+  "customerStatusLoyal": "Loyal customer",
+  "customerStatusReturning": "Returning customer",
+  "customerStatusSingleVisit": "Single visit",
+  "noneValue": "None",
+  "notSet": "Not set",
+  "notSpecified": "Not specified",
+  "daysCount": "{count} days",
+  "customerSummary": "{phone}  •  {status}\nVisits: {visits}  •  Last visit: {lastVisit}\nAverage: {average}  •  Time: {time}\nPreferred services: {services}  •  Preferred barber: {barber}",
+  "@customerSummary": {
+    "placeholders": {
+      "phone": {"type": "String"},
+      "status": {"type": "String"},
+      "visits": {"type": "String"},
+      "lastVisit": {"type": "String"},
+      "average": {"type": "String"},
+      "time": {"type": "String"},
+      "services": {"type": "String"},
+      "barber": {"type": "String"}
+    }
+  },
+  "menuEditProfile": "Edit profile",
+  "menuDeleteProfile": "Delete profile",
+
+  "defaultRuleName": "Base points rule",
+  "addLoyaltyRule": "Add loyalty rule",
+  "editLoyaltyRule": "Edit loyalty rule",
+  "ruleNameField": "Rule name",
+  "ruleDescriptionField": "Rule description",
+  "pointsPerVisitField": "Points per visit",
+  "pointsPerCurrencyField": "Points per currency unit",
+  "minimumSpendField": "Minimum bill",
+  "bonusPointsField": "Bonus points when condition met",
+  "inactiveDaysField": "Inactive days before alert",
+  "ruleEnabled": "Rule enabled",
+  "loyaltyRuleFallbackName": "Loyalty rule",
+  "addGift": "Add gift",
+  "editGift": "Edit gift",
+  "giftNameField": "Gift name",
+  "giftPointsCostField": "Gift cost in points",
+  "giftStockField": "Stock (-1 = unlimited)",
+  "minimumTierField": "Minimum tier allowed",
+  "giftAvailable": "Gift available",
+  "metricLoyaltyAccounts": "Loyalty accounts",
+  "metricTotalPoints": "Total points",
+  "metricActiveRules": "Active rules",
+  "sectionEarningRules": "Points earning rules",
+  "addRuleAction": "Add rule",
+  "noRulesYet": "No rules yet",
+  "noRulesSubtitle": "Add a rule to define visit and bill points and inactivity alerts.",
+  "ruleSummary": "{pointsPerVisit} pts/visit + {pointsPerCurrency} per currency unit  •  Alert after {days} days",
+  "@ruleSummary": {
+    "placeholders": {
+      "pointsPerVisit": {"type": "String"},
+      "pointsPerCurrency": {"type": "String"},
+      "days": {"type": "String"}
+    }
+  },
+  "sectionLoyaltyGifts": "VIP customer gifts",
+  "noGiftsYet": "No gifts yet",
+  "noGiftsSubtitle": "Add rewards redeemable with points, with a tier and stock.",
+  "unlimited": "Unlimited",
+  "giftStockUsed": "{redeemed}/{stock} used",
+  "@giftStockUsed": {
+    "placeholders": {
+      "redeemed": {"type": "String"},
+      "stock": {"type": "String"}
+    }
+  },
+  "giftSummary": "{points} pts  •  From tier {tier}  •  {stockInfo}",
+  "@giftSummary": {
+    "placeholders": {
+      "points": {"type": "String"},
+      "tier": {"type": "String"},
+      "stockInfo": {"type": "String"}
+    }
+  },
+  "sectionCustomerBalances": "Customer balances",
+  "addAccountAction": "Add account",
+  "loyaltyAccountSubtitle": "{phone}  •  Tier: {tier}",
+  "@loyaltyAccountSubtitle": {
+    "placeholders": {
+      "phone": {"type": "String"},
+      "tier": {"type": "String"}
+    }
+  },
+  "addTenPoints": "+10 points",
+  "noGiftDue": "No gift due right now",
+  "dueGifts": "Due gifts: {list}",
+  "redeemGiftTitle": "Redeem: {name}",
+  "giftRedeemed": "Gift redeemed successfully",
+  "pointsAmount": "{count} points",
+  "addLoyaltyAccount": "Add loyalty account",
+  "initialPointsField": "Initial points",
+
+  "addChair": "Add chair",
+  "editChair": "Edit chair",
+  "chairNumberField": "Chair number",
+  "chairNameField": "Chair name",
+  "assignedBarberField": "Assigned barber",
+  "chairActive": "Chair is active",
+  "addChairFirst": "Add a chair first before recording its supplies",
+  "unitPiece": "Piece",
+  "addSupply": "Add chair supply",
+  "supplyNameField": "Material name",
+  "unitField": "Unit",
+  "quantityField": "Current quantity",
+  "unitCostField": "Unit cost",
+  "reorderLevelField": "Reorder level",
+  "chairProfitTitle": "Profit of {chair} — {date}",
+  "@chairProfitTitle": {
+    "placeholders": {
+      "chair": {"type": "String"},
+      "date": {"type": "String"}
+    }
+  },
+  "chairProfitRevenue": "Revenue: {revenue}  •  Materials: {materials}",
+  "@chairProfitRevenue": {
+    "placeholders": {
+      "revenue": {"type": "String"},
+      "materials": {"type": "String"}
+    }
+  },
+  "manualProfitField": "Approved profit (optional)",
+  "weekNotesField": "Week notes",
+  "saveReport": "Save report",
+  "metricActiveChairs": "Active chairs",
+  "metricWeekProfit": "Week profit",
+  "metricLowStock": "Low stock",
+  "sectionChairsAndBarbers": "Chairs and barbers",
+  "addChairAction": "Add chair",
+  "noChairsYet": "No chairs added yet",
+  "noChairsSubtitle": "Add each chair's number and name and link it to the assigned barber.",
+  "chairUnassigned": "Not linked to a barber",
+  "chairAssignedBarber": "Barber: {name}",
+  "chairInactiveState": "Stopped",
+  "sectionChairSupplies": "Supplies per chair",
+  "addSupplyAction": "Add material",
+  "noSuppliesYet": "No supplies recorded",
+  "noSuppliesSubtitle": "Record blades, towels, materials and supplies with their unit cost.",
+  "unknownChair": "Unknown chair",
+  "sectionChairProfit": "Chair profitability — selected week",
+  "chairReportSummary": "Completed visits: {visits}  •  Approx. occupancy: {utilization}%\nRevenue {revenue}  •  Materials {materials}",
+  "@chairReportSummary": {
+    "placeholders": {
+      "visits": {"type": "String"},
+      "utilization": {"type": "String"},
+      "revenue": {"type": "String"},
+      "materials": {"type": "String"}
+    }
+  },
+  "computedLabel": "Computed",
+  "manualApprovedLabel": "Manually approved",
+  "editProfit": "Edit profit"
 }
