@@ -4,8 +4,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
-import 'shop_manager.dart';
-
 class NotificationService {
   NotificationService._();
   static final instance = NotificationService._();
@@ -71,15 +69,42 @@ class NotificationService {
 
   Future<String?> getToken() => _messaging.getToken();
 
-  Future<void> subscribeToShop() async {
-    if (ShopManager.shopId != null) {
-      await _messaging.subscribeToTopic(ShopManager.shopId!);
+  /// Subscribes this device to [shopId]'s FCM topic.
+  ///
+  /// The topic is passed explicitly rather than read from a mutable global
+  /// (`ShopManager.shopId`), so the caller always targets the tenant it
+  /// validated. Best-effort: FCM's topic subscribe does not complete while
+  /// offline, so it is bounded to 5s and a timeout/failure is non-fatal.
+  ///
+  /// Returns `true` **only** when the underlying operation completed. A
+  /// timeout returns `false` and must not be read as proof the operation
+  /// definitely failed — the SDK may still complete it later — so callers
+  /// should re-reconcile rather than assume an unsubscribe is unnecessary.
+  Future<bool> subscribeToShop(String shopId) async {
+    try {
+      await _messaging
+          .subscribeToTopic(shopId)
+          .timeout(const Duration(seconds: 5));
+      return true;
+    } catch (e) {
+      debugPrint('NotificationService: subscribeToTopic($shopId) failed: $e');
+      return false;
     }
   }
 
-  Future<void> unsubscribeFromShop() async {
-    if (ShopManager.shopId != null) {
-      await _messaging.unsubscribeFromTopic(ShopManager.shopId!);
+  /// Unsubscribes this device from [shopId]'s FCM topic (explicit topic).
+  ///
+  /// Best-effort (see [subscribeToShop]); never blocks sign-out or startup.
+  Future<bool> unsubscribeFromShop(String shopId) async {
+    try {
+      await _messaging
+          .unsubscribeFromTopic(shopId)
+          .timeout(const Duration(seconds: 5));
+      return true;
+    } catch (e) {
+      debugPrint(
+          'NotificationService: unsubscribeFromTopic($shopId) failed: $e');
+      return false;
     }
   }
 

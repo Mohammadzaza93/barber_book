@@ -30,7 +30,15 @@ class BarberApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => DiscountProvider()),
         ChangeNotifierProvider(create: (_) => ExpenseProvider()),
         ChangeNotifierProvider(create: (_) => FeedbackProvider()),
-        ChangeNotifierProvider(create: (_) => ConnectionProvider()..start()),
+        // `AuthProvider` is registered above, so its reconnect handler can be
+        // wired here. FCM topic recovery is routed through the auth/session
+        // layer (which owns tenant identity) rather than into the connectivity
+        // provider itself.
+        ChangeNotifierProvider(
+          create: (context) => ConnectionProvider(
+            onReconnected: context.read<AuthProvider>().reconcileShopTopic,
+          )..start(),
+        ),
       ],
       child: const _Material(),
     );
