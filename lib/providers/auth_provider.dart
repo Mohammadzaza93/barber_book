@@ -26,12 +26,16 @@ class AuthProvider extends ChangeNotifier {
     ShopResolver? resolveShop,
     ShopTopicOp? subscribeShopNotifications,
     ShopTopicOp? unsubscribeShopNotifications,
+    Duration topicRetryDelay = const Duration(seconds: 5),
+    int maxTopicRetries = 3,
   })  : _resolveShop =
             resolveShop ?? FirestoreService.instance.resolveShopForUser,
         _subscribeShopNotifications = subscribeShopNotifications ??
             NotificationService.instance.subscribeToShop,
         _unsubscribeShopNotifications = unsubscribeShopNotifications ??
-            NotificationService.instance.unsubscribeFromShop {
+            NotificationService.instance.unsubscribeFromShop,
+        _topicRetryDelay = topicRetryDelay,
+        _maxTopicRetries = maxTopicRetries {
     // When Firebase failed to initialize there is no auth stream to listen to,
     // and touching it here would throw before the config error screen renders.
     if (!firebaseReady) {
@@ -59,7 +63,27 @@ class AuthProvider extends ChangeNotifier {
   final ShopTopicOp _subscribeShopNotifications;
   final ShopTopicOp _unsubscribeShopNotifications;
 
+  /// Base delay before an in-session topic reconcile is retried. Injectable so
+  /// tests can drive retries with real (short) timers instead of waiting 5s.
+  final Duration _topicRetryDelay;
+
+  /// Upper bound on consecutive retries for one desired topic state. A bound
+  /// (rather than a periodic loop) means a persistent failure eventually stops
+  /// burning battery; the next session transition or connectivity edge still
+  /// restarts the process with a fresh budget.
+  final int _maxTopicRetries;
+
   StreamSubscription<User?>? _authSub;
+
+  /// Pending retry of a reconcile that did not settle. Cancelled on dispose and
+  /// whenever a newer explicit transition supersedes it.
+  Timer? _retryTimer;
+
+  /// Retries already spent for the current desired state (reset by every
+  /// explicit [_scheduleTopicReconcile]).
+  int _retryAttempt = 0;
+
+  bool _disposed = false;
 
   /// Monotonically increasing token for the latest session transition. A resolve
   /// that completes after a newer transition is discarded, so an old account's
@@ -163,17 +187,62 @@ class AuthProvider extends ChangeNotifier {
   ///
   /// When [guarded], the transition is dropped if [generation] is no longer the
   /// current session — so a stale callback cannot (re)subscribe a previous
-  /// tenant after a switch or sign-out.
+  /// tenant after a switch or sign-out. This is the *explicit* entry point: it
+  /// supersedes any pending retry and restarts the retry budget.
   void _scheduleTopicReconcile(
+    String? target, {
+    required bool guarded,
+    int? generation,
+  }) {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    _retryAttempt = 0;
+    _enqueueReconcile(target, guarded: guarded, generation: generation);
+  }
+
+  void _enqueueReconcile(
     String? target, {
     required bool guarded,
     int? generation,
   }) {
     _topicQueue = _topicQueue.then((_) async {
       if (guarded && generation != _sessionGeneration) return;
-      await _reconcileTopic(target);
+      final settled = await _reconcileTopic(target);
+      // An unsettled transition means the device may still be subscribed to a
+      // previous tenant (unsubscribe failed) or not yet subscribed to the
+      // current one (subscribe failed). If the device stays online but no
+      // reconnect edge ever fires, nothing else would retry — so retry in
+      // process, bounded. Only guarded (current-session) transitions retry;
+      // the unguarded sign-out reconcile is covered by the next session or a
+      // reconnect edge instead.
+      if (!settled && guarded && generation == _sessionGeneration) {
+        _scheduleRetry();
+      }
     }).catchError((Object e) {
       debugPrint('AuthProvider: topic transition failed: $e');
+    });
+  }
+
+  /// Schedules one bounded, delayed retry of the current desired topic state.
+  ///
+  /// Re-reads `shopId` and the session generation when the timer fires, so a
+  /// retry enqueued for an old session cannot target a newer tenant.
+  void _scheduleRetry() {
+    if (_disposed) return;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    if (_retryAttempt >= _maxTopicRetries) {
+      debugPrint('AuthProvider: giving up topic reconcile after '
+          '$_retryAttempt retries; will retry on the next session or '
+          'connectivity change');
+      return;
+    }
+    _retryAttempt++;
+    final delay = _topicRetryDelay * _retryAttempt;
+    _retryTimer = Timer(delay, () {
+      _retryTimer = null;
+      if (_disposed) return;
+      _enqueueReconcile(shopId, guarded: true, generation: _sessionGeneration);
     });
   }
 
@@ -184,21 +253,30 @@ class AuthProvider extends ChangeNotifier {
   /// complete, the new subscription is deferred: staying subscribed to the old
   /// tenant is preferable to being subscribed to two tenants at once
   /// (cross-tenant push leakage). A later reconcile retries the whole step.
-  Future<void> _reconcileTopic(String? target) async {
+  ///
+  /// Returns `true` when the device has converged to [target] (nothing further
+  /// to do), or `false` when the state is still unsettled and a retry is
+  /// warranted.
+  Future<bool> _reconcileTopic(String? target) async {
     final previous = _confirmedTopic;
     if (previous != null && previous != target) {
       final removed = await _unsubscribeShopNotifications(previous);
       if (!removed) {
         debugPrint('AuthProvider: could not unsubscribe from $previous; '
             'deferring subscription to $target to avoid cross-tenant delivery');
-        return;
+        return false;
       }
       if (_confirmedTopic == previous) _confirmedTopic = null;
     }
     if (target != null && _confirmedTopic != target) {
       final subscribed = await _subscribeShopNotifications(target);
-      if (subscribed) _confirmedTopic = target;
+      if (subscribed) {
+        _confirmedTopic = target;
+      } else {
+        return false;
+      }
     }
+    return true;
   }
 
   /// Reconciles the FCM topic for the *current* validated session. Called when
@@ -310,6 +388,10 @@ class AuthProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _retryTimer?.cancel();
+    _retryTimer = null;
     _authSub?.cancel();
     _authSub = null;
     super.dispose();
