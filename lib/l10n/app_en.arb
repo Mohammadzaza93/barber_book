@@ -386,6 +386,7 @@
   "secureErrorInactive": "That service or employee is not available",
   "secureErrorServiceMismatch": "The selected employee does not offer that service",
   "secureErrorNetwork": "Could not reach the server, please try again",
+  "secureErrorServer": "The server could not complete the request, please try again",
   "secureErrorGeneric": "Something went wrong",
   "paymentDerivedByServer": "Set by the server from the amount collected",
   "recordPayment": "Record payment",

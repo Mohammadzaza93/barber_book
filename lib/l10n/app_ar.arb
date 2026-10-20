@@ -386,6 +386,7 @@
   "secureErrorInactive": "الخدمة أو الموظف غير متاح حالياً",
   "secureErrorServiceMismatch": "الموظف المختار لا يقدم هذه الخدمة",
   "secureErrorNetwork": "تعذر الاتصال بالسيرفر، حاول مرة أخرى",
+  "secureErrorServer": "تعذر إكمال العملية على السيرفر، حاول مرة أخرى",
   "secureErrorGeneric": "حدث خطأ غير متوقع",
   "paymentDerivedByServer": "يحددها السيرفر بناءً على المبلغ المحصل",
   "recordPayment": "تسجيل دفعة",

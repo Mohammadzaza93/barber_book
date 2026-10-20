@@ -9,7 +9,11 @@ import 'secure_api.dart';
 /// place instead of being re-derived at every call site.
 String describeSecureError(BuildContext context, SecureApiException error) {
   final s = t(context);
-  switch (error.code) {
+  // Server AppError codes are already kebab-case, but a callable that fails
+  // before reaching our handlers (e.g. the function is not deployed) surfaces
+  // the raw gRPC name such as `NOT_FOUND`; normalize so both shapes match.
+  final code = error.code.trim().toLowerCase().replaceAll('_', '-');
+  switch (code) {
     case 'appointment-conflict':
       return s.secureErrorConflict;
     case 'permission-denied':
@@ -49,6 +53,9 @@ String describeSecureError(BuildContext context, SecureApiException error) {
     case 'employee-not-found':
     case 'chair-not-found':
     case 'shop-not-found':
+    // A callable whose server message is empty arrives with the raw gRPC code;
+    // treat the same lookup failures identically.
+    case 'not-found':
       return s.secureErrorNotFound;
     case 'service-inactive':
     case 'employee-inactive':
@@ -57,11 +64,18 @@ String describeSecureError(BuildContext context, SecureApiException error) {
     case 'service-mismatch':
       return s.secureErrorServiceMismatch;
     case 'invalid-input':
+    case 'invalid-pricing':
+    case 'invalid-argument':
       return s.secureErrorInvalidInput;
+    case 'aborted':
+      return s.secureErrorConflict;
     case 'unavailable':
     case 'deadline-exceeded':
     case 'network-unavailable':
       return s.secureErrorNetwork;
+    case 'internal':
+    case 'unknown':
+      return s.secureErrorServer;
     default:
       return s.secureErrorGeneric;
   }

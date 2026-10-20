@@ -63,6 +63,7 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
                     controller: email,
                     keyboardType: TextInputType.emailAddress,
                     decoration: InputDecoration(labelText: t(context).email),
+                    validator: (v) => v != null && v.trim().isNotEmpty && !v.contains('@') ? t(context).required : null,
                   ),
                   TextFormField(
                     controller: preferredTime,
@@ -137,6 +138,7 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
 
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'bt_customers_fab',
         onPressed: () => _showCustomerDialog(context),
         icon: const Icon(Icons.person_add_alt_1),
         label: Text(t(context).addCustomer),
@@ -534,6 +536,7 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
   Future<void> _showChairDialog(BuildContext context, {Chair? existing}) async {
     final name = TextEditingController(text: existing?.name ?? '');
     final number = TextEditingController(text: existing?.number ?? '');
+    final formKey = GlobalKey<FormState>();
     final shop = context.read<ShopProvider>();
     var employeeId = existing?.employeeId;
     var active = existing?.active ?? true;
@@ -542,25 +545,28 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
       builder: (_) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: Text(existing == null ? t(context).addChair : t(context).editChair),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: number, decoration: InputDecoration(labelText: t(context).chairNumberField)),
-            TextField(controller: name, decoration: InputDecoration(labelText: t(context).chairNameField)),
-            DropdownButtonFormField<String>(
-              value: employeeId,
-              decoration: InputDecoration(labelText: t(context).assignedBarberField),
-              items: shop.activeEmployees.map((employee) => DropdownMenuItem(value: employee.id, child: Text(employee.name))).toList(),
-              onChanged: (value) => setState(() => employeeId = value),
-            ),
-            SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, title: Text(t(context).chairActive), value: active, onChanged: (value) => setState(() => active = value)),
-          ]),
+          content: Form(
+            key: formKey,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: number, decoration: InputDecoration(labelText: t(context).chairNumberField)),
+              TextFormField(controller: name, decoration: InputDecoration(labelText: t(context).chairNameField), validator: (v) => v == null || v.trim().isEmpty ? t(context).required : null),
+              DropdownButtonFormField<String>(
+                value: employeeId,
+                decoration: InputDecoration(labelText: t(context).assignedBarberField),
+                items: shop.activeEmployees.map((employee) => DropdownMenuItem(value: employee.id, child: Text(employee.name))).toList(),
+                onChanged: (value) => setState(() => employeeId = value),
+              ),
+              SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, title: Text(t(context).chairActive), value: active, onChanged: (value) => setState(() => active = value)),
+            ]),
+          ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: Text(t(context).cancel)),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t(context).save)),
+            FilledButton(onPressed: () { if (formKey.currentState?.validate() ?? false) Navigator.pop(context, true); }, child: Text(t(context).save)),
           ],
         ),
       ),
     );
-    if (saved != true || !context.mounted || name.text.trim().isEmpty) return;
+    if (saved != true || !context.mounted) return;
     final tools = context.read<BusinessToolsProvider>();
     await tools.saveChair(Chair(id: existing?.id ?? tools.newId(), name: name.text.trim(), number: number.text.trim(), employeeId: employeeId, active: active));
   }
@@ -573,30 +579,34 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
     }
     var chairId = tools.chairs.first.id;
     final name = TextEditingController();
-    final category = TextEditingController(text: 'حلاقة');
-    final unit = TextEditingController(text: 'قطعة');
+    final category = TextEditingController(text: t(context).catShave);
+    final unit = TextEditingController(text: t(context).unitPiece);
     final quantity = TextEditingController(text: '0');
     final unitCost = TextEditingController(text: '0');
     final reorder = TextEditingController(text: '1');
+    final formKey = GlobalKey<FormState>();
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: Text(t(context).addSupply),
-          content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-            DropdownButtonFormField<String>(value: chairId, decoration: InputDecoration(labelText: t(context).chairField), items: tools.chairs.map((chair) => DropdownMenuItem(value: chair.id, child: Text(_chairLabel(context, chair)))).toList(), onChanged: (value) => setState(() => chairId = value ?? chairId)),
-            TextField(controller: name, decoration: InputDecoration(labelText: t(context).supplyNameField)),
-            TextField(controller: category, decoration: InputDecoration(labelText: t(context).category)),
-            TextField(controller: unit, decoration: InputDecoration(labelText: t(context).unitField)),
-            TextField(controller: quantity, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t(context).quantityField)),
-            TextField(controller: unitCost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t(context).unitCostField)),
-            TextField(controller: reorder, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t(context).reorderLevelField)),
-          ])),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(t(context).cancel)), FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t(context).save))],
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+              DropdownButtonFormField<String>(value: chairId, decoration: InputDecoration(labelText: t(context).chairField), items: tools.chairs.map((chair) => DropdownMenuItem(value: chair.id, child: Text(_chairLabel(context, chair)))).toList(), onChanged: (value) => setState(() => chairId = value ?? chairId)),
+              TextFormField(controller: name, decoration: InputDecoration(labelText: t(context).supplyNameField), validator: (v) => v == null || v.trim().isEmpty ? t(context).required : null),
+              TextField(controller: category, decoration: InputDecoration(labelText: t(context).category)),
+              TextField(controller: unit, decoration: InputDecoration(labelText: t(context).unitField)),
+              TextField(controller: quantity, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t(context).quantityField)),
+              TextField(controller: unitCost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t(context).unitCostField)),
+              TextField(controller: reorder, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t(context).reorderLevelField)),
+            ])),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(t(context).cancel)), FilledButton(onPressed: () { if (formKey.currentState?.validate() ?? false) Navigator.pop(context, true); }, child: Text(t(context).save))],
         ),
       ),
     );
-    if (saved != true || !context.mounted || name.text.trim().isEmpty) return;
+    if (saved != true || !context.mounted) return;
     await tools.saveChairSupply(ChairSupply(
       id: tools.newId(),
       chairId: chairId,

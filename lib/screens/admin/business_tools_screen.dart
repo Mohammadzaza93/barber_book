@@ -7,6 +7,9 @@ import '../../models/business_features.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/business_tools_provider.dart';
 import '../../providers/shop_provider.dart';
+import '../../services/secure_api.dart';
+import '../../services/secure_error_text.dart';
+import '../../widgets/confirm.dart';
 import 'discounts_screen.dart';
 import 'business_management_tabs.dart';
 
@@ -103,6 +106,7 @@ class _PortfolioTab extends StatelessWidget {
     return Scaffold(
       floatingActionButton: canManage
           ? FloatingActionButton.extended(
+              heroTag: 'bt_portfolio_fab',
               onPressed: () => _add(context),
               icon: const Icon(Icons.add_photo_alternate_outlined),
               label: Text(t(context).addPhoto),
@@ -185,7 +189,7 @@ class _QueueTab extends StatelessWidget {
     final staff = context.watch<ShopProvider>().activeEmployees;
     final waiting = tools.queue.where((e) => e.status == QueueStatus.waiting).length;
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(onPressed: () => _addQueue(context), icon: const Icon(Icons.person_add), label: Text(t(context).queueAddFab('$waiting'))),
+      floatingActionButton: FloatingActionButton.extended(heroTag: 'bt_queue_fab', onPressed: () => _addQueue(context), icon: const Icon(Icons.person_add), label: Text(t(context).queueAddFab('$waiting'))),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: tools.queue.map((entry) {
@@ -248,7 +252,18 @@ class _PaymentsTab extends StatelessWidget {
     final value = double.tryParse(amount.text);
     if (value == null || value <= 0) return;
     final cost = double.tryParse(materialCost.text) ?? 0;
-    await tools.addPayment(Payment(id: tools.newId(), appointmentId: appointment.text.trim(), customerName: customer.text.trim(), customerPhone: phone.text.trim(), chairId: chairId, employeeId: employeeId, amount: value, materialCost: cost, method: method, paidAt: DateTime.now()));
+    try {
+      await tools.addPayment(Payment(id: tools.newId(), appointmentId: appointment.text.trim(), customerName: customer.text.trim(), customerPhone: phone.text.trim(), chairId: chairId, employeeId: employeeId, amount: value, materialCost: cost, method: method, paidAt: DateTime.now()));
+    } on SecureApiException catch (error) {
+      // The server owns the money path, so a rejection (e.g. the referenced
+      // appointment does not exist) has to be surfaced instead of escaping as
+      // an unhandled async exception.
+      debugPrint('recordPayment rejected: code=${error.code} details=${error.details}');
+      if (context.mounted) showSnack(context, describeSecureError(context, error));
+    } catch (error) {
+      debugPrint('recordPayment unexpected failure: $error');
+      if (context.mounted) showSnack(context, t(context).error);
+    }
   }
 
   @override
@@ -258,7 +273,7 @@ class _PaymentsTab extends StatelessWidget {
     final materialTotal = tools.payments.fold<double>(0, (sum, p) => sum + p.materialCost);
     final currency = context.watch<ShopProvider>().settings?.currency ?? 'SAR';
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(onPressed: () => _addPayment(context), icon: const Icon(Icons.add_card), label: Text(t(context).recordPayment)),
+      floatingActionButton: FloatingActionButton.extended(heroTag: 'bt_payments_fab', onPressed: () => _addPayment(context), icon: const Icon(Icons.add_card), label: Text(t(context).recordPayment)),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [

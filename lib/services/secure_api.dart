@@ -82,12 +82,17 @@ class SecureApi {
       // the message, anything else is a transport or deployment problem.
       final message = error.message ?? '';
       final appCode = message.isEmpty ? error.code : message;
+      debugPrint(
+        'SecureApi.$name rejected: code=$appCode grpc=${error.code} '
+        'details=${error.details}',
+      );
       throw SecureApiException(
         appCode,
         error.details?.toString() ?? '',
         kind: _kindFor(appCode),
       );
     } catch (error) {
+      debugPrint('SecureApi.$name transport failure: $error');
       // Transport-level failures (SocketException, TimeoutException,
       // HandshakeException) are not FirebaseFunctionsException, so they used to
       // escape untyped and crash call sites that only handle
