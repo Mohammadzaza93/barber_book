@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../l10n/strings.dart';
 import '../../models/employee.dart';
+import '../../models/staff_permissions.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/shop_manager.dart';
@@ -86,7 +87,9 @@ class StaffScreen extends StatelessWidget {
                       ],
                     ),
                     subtitle: Text(
-                      '${e.serviceIds.length} ${t(context).servicesSelected}',
+                      e.email?.isNotEmpty == true
+                          ? e.email!
+                          : '${e.serviceIds.length} ${t(context).servicesSelected}',
                       style:
                           TextStyle(color: Colors.grey.shade600, fontSize: 12),
                     ),
@@ -136,9 +139,12 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
   late final TextEditingController _name;
   final _role = TextEditingController();
   final _phone = TextEditingController();
+  final _email = TextEditingController();
+  final _authUid = TextEditingController();
   late Map<int, List<WorkSlot>> _hours;
   late List<String> _serviceIds;
   late bool _active;
+  late StaffPermissions _perms;
   bool _busy = false;
 
   @override
@@ -148,9 +154,12 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     _name = TextEditingController(text: e?.name ?? '');
     _role.text = e?.role ?? 'barber';
     _phone.text = e?.phone ?? '';
+    _email.text = e?.email ?? '';
+    _authUid.text = e?.authUid ?? '';
     _hours = Map.from(e?.workingHours ?? {});
     _serviceIds = List.from(e?.serviceIds ?? []);
     _active = e?.active ?? true;
+    _perms = e?.permissions ?? StaffPermissions.minimal;
   }
 
   @override
@@ -158,6 +167,8 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     _name.dispose();
     _role.dispose();
     _phone.dispose();
+    _email.dispose();
+    _authUid.dispose();
     super.dispose();
   }
 
@@ -178,10 +189,13 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
       name: _name.text.trim(),
       role: _role.text.trim().isEmpty ? 'barber' : _role.text.trim(),
       phone: _phone.text.trim(),
+      email: _email.text.trim().isEmpty ? '' : _email.text.trim(),
+      authUid: _authUid.text.trim().isEmpty ? null : _authUid.text.trim(),
       workingHours: _hours,
       serviceIds: _serviceIds,
       active: _active,
       colorValue: widget.employee?.colorValue ?? 0xFF26A69A,
+      permissions: _perms,
     );
     try {
       if (widget.employee == null) {
@@ -201,6 +215,8 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
   @override
   Widget build(BuildContext context) {
     final shop = context.watch<ShopProvider>();
+    final auth = context.watch<AuthProvider>();
+    final canManage = auth.canManageRules;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.employee == null
@@ -235,6 +251,25 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _email,
+            keyboardType: TextInputType.emailAddress,
+            decoration: const InputDecoration(
+              labelText: 'بريد الموظف لربط الحساب',
+              prefixIcon: Icon(Icons.email_outlined),
+              hintText: 'example@domain.com',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _authUid,
+            decoration: const InputDecoration(
+              labelText: 'UID الحساب (اختياري)',
+              prefixIcon: Icon(Icons.key_rounded),
+              hintText: 'يتم ربطه بحساب الموظف مباشرة',
+            ),
           ),
           const SizedBox(height: 16),
           Text(t(context).workingHours,
@@ -279,6 +314,79 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
             value: _active,
             onChanged: (v) => setState(() => _active = v),
           ),
+          if (canManage) ...[
+            const SizedBox(height: 16),
+            const Text('صلاحيات الموظف',
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0F172A))),
+            const SizedBox(height: 4),
+            const Text('حدد الأقسام التي يمكن لهذا الموظف الوصول إليها',
+                style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 10),
+            Card(
+              child: Column(
+                children: [
+                  SwitchListTile(
+                      title: const Text('المواعيد'),
+                      value: _perms.appointments,
+                      onChanged: (v) =>
+                          setState(() => _perms = _perms.copyWith(appointments: v))),
+                  SwitchListTile(
+                      title: const Text('المدفوعات'),
+                      value: _perms.payments,
+                      onChanged: (v) =>
+                          setState(() => _perms = _perms.copyWith(payments: v))),
+                  SwitchListTile(
+                      title: const Text('الخدمات'),
+                      value: _perms.services,
+                      onChanged: (v) =>
+                          setState(() => _perms = _perms.copyWith(services: v))),
+                  SwitchListTile(
+                      title: const Text('الموظفين'),
+                      value: _perms.staff,
+                      onChanged: (v) =>
+                          setState(() => _perms = _perms.copyWith(staff: v))),
+                  SwitchListTile(
+                      title: const Text('الخصومات'),
+                      value: _perms.discounts,
+                      onChanged: (v) =>
+                          setState(() => _perms = _perms.copyWith(discounts: v))),
+                  SwitchListTile(
+                      title: const Text('المصروفات'),
+                      value: _perms.expenses,
+                      onChanged: (v) =>
+                          setState(() => _perms = _perms.copyWith(expenses: v))),
+                  SwitchListTile(
+                      title: const Text('آراء العملاء'),
+                      value: _perms.feedback,
+                      onChanged: (v) =>
+                          setState(() => _perms = _perms.copyWith(feedback: v))),
+                  SwitchListTile(
+                      title: const Text('طلبات خارج الدوام'),
+                      value: _perms.outOfHours,
+                      onChanged: (v) =>
+                          setState(() => _perms = _perms.copyWith(outOfHours: v))),
+                  SwitchListTile(
+                      title: const Text('التقارير'),
+                      value: _perms.reports,
+                      onChanged: (v) =>
+                          setState(() => _perms = _perms.copyWith(reports: v))),
+                  SwitchListTile(
+                      title: const Text('أدوات الأعمال'),
+                      value: _perms.businessTools,
+                      onChanged: (v) =>
+                          setState(() => _perms = _perms.copyWith(businessTools: v))),
+                  SwitchListTile(
+                      title: const Text('إعدادات المحل'),
+                      value: _perms.settings,
+                      onChanged: (v) =>
+                          setState(() => _perms = _perms.copyWith(settings: v))),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           FilledButton(
               onPressed: _busy ? null : _save,

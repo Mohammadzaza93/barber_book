@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../l10n/strings.dart';
 import '../../models/app_role.dart';
+import '../../models/staff_permissions.dart';
 import '../../providers/appointment_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/language_provider.dart';
@@ -35,12 +36,39 @@ const Set<int> adminTabsSet = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 
 /// Pure capability check so the navigation policy can be unit-tested without a
 /// widget tree.
-bool adminTabVisible(AppRole role, int index) {
+bool adminTabVisible(AppRole role, int index, {StaffPermissions? perms}) {
   if (role.isAdmin) {
     return adminTabsSet.contains(index);
   }
-  // Staff: enter appointments and payments only (appointments tab)
-  return index == 1;
+  final p = perms ?? StaffPermissions.minimal;
+  switch (index) {
+    case 0: // dashboard
+      return false;
+    case 1: // appointments
+      return p.appointments;
+    case 2: // services
+      return p.services;
+    case 3: // staff
+      return p.staff;
+    case 4: // discounts
+      return p.discounts;
+    case 5: // expenses
+      return p.expenses;
+    case 6: // feedback
+      return p.feedback;
+    case 7: // out of hours
+      return p.outOfHours;
+    case 8: // reports
+      return p.reports;
+    case 9: // settings
+      return p.settings;
+    case 10: // business tools
+      return p.businessTools;
+    case 11: // profile
+      return true;
+    default:
+      return false;
+  }
 }
 
 class AdminHomeScreen extends StatefulWidget {

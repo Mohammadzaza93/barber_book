@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/app_role.dart';
+import '../models/staff_permissions.dart';
 import '../services/auth_service.dart';
 import '../services/firebase_status.dart';
 import '../services/firestore_service.dart';
@@ -55,6 +57,9 @@ class AuthProvider extends ChangeNotifier {
   User? user;
   String? shopId;
   AppRole role = AppRole.staff;
+  StaffPermissions _staffPermissions = StaffPermissions.minimal;
+  StaffPermissions get permissions =>
+      role.isAdmin ? StaffPermissions.all : _staffPermissions;
   bool initializing = true;
   String? error;
 
@@ -337,6 +342,7 @@ class AuthProvider extends ChangeNotifier {
       // server-side, so the client's role must come from that same source.
       final resolved = await _resolveShop(uid);
       role = resolved.role;
+      await _loadStaffPermissions(id, uid, user?.email);
       _scheduleTopicReconcile(id, guarded: true, generation: _sessionGeneration);
       notifyListeners();
       return id;
@@ -369,6 +375,44 @@ class AuthProvider extends ChangeNotifier {
       error = null;
       await _applySession(null);
     }
+  }
+
+  Future<void> _loadStaffPermissions(
+      String shopId, String uid, String? email) async {
+    if (role.isAdmin) {
+      _staffPermissions = StaffPermissions.all;
+      notifyListeners();
+      return;
+    }
+    try {
+      final db = FirebaseFirestore.instance;
+      var snap = await db
+          .collection('shops')
+          .doc(shopId)
+          .collection('employees')
+          .where('authUid', isEqualTo: uid)
+          .limit(1)
+          .get();
+      if (snap.docs.isEmpty && email != null && email.isNotEmpty) {
+        snap = await db
+            .collection('shops')
+            .doc(shopId)
+            .collection('employees')
+            .where('email', isEqualTo: email.toLowerCase())
+            .limit(1)
+            .get();
+      }
+      if (snap.docs.isNotEmpty) {
+        final data = snap.docs.first.data();
+        _staffPermissions = StaffPermissions.fromMap(
+            data['permissions'] as Map<String, dynamic>?);
+      } else {
+        _staffPermissions = StaffPermissions.minimal;
+      }
+    } catch (e) {
+      _staffPermissions = StaffPermissions.minimal;
+    }
+    notifyListeners();
   }
 
   Future<void> sendPasswordReset(String email) =>
