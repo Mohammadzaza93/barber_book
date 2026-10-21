@@ -7,8 +7,6 @@ import '../../models/unavailability_request.dart';
 import '../../providers/appointment_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/shop_provider.dart';
-import '../../services/secure_api.dart';
-import '../../services/secure_error_text.dart';
 import '../../services/shop_manager.dart';
 import '../../widgets/confirm.dart';
 import '../../widgets/empty_state.dart';
@@ -64,9 +62,15 @@ class _UnavailabilityScreenState extends State<UnavailabilityScreen> {
 
     try {
       if (approve) {
-        // Approving turns the request into a real booking, so it goes through
-        // the callable that prices it and takes the slot lock.
         try {
+          final services = shop.services.where((s) => r.serviceIds.contains(s.id)).toList();
+          double total = 0;
+          int duration = 0;
+          for (final s in services) {
+            total += s.price;
+            duration += s.durationMinutes;
+          }
+          final end = r.requestedStart.add(Duration(minutes: duration == 0 ? 30 : duration));
           await provider.create(
             shopId: shopId,
             employeeId: shop.activeEmployees.isNotEmpty
@@ -74,14 +78,16 @@ class _UnavailabilityScreenState extends State<UnavailabilityScreen> {
                 : '',
             serviceIds: r.serviceIds,
             start: r.requestedStart,
+            end: end,
             customerName: r.customerName,
             customerPhone: r.customerPhone,
             notes: r.reason,
             outOfHours: true,
+            totalAmount: total,
           );
-        } on SecureApiException catch (error) {
+        } catch (error) {
           if (context.mounted) {
-            showSnack(context, describeSecureError(context, error));
+            showSnack(context, error.toString().contains('conflict') ? t(context).fillRequiredFields : t(context).error);
           }
           return;
         }

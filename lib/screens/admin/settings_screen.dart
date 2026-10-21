@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../l10n/strings.dart';
 import '../../models/booking_settings.dart';
@@ -16,7 +18,6 @@ import '../../widgets/color_picker.dart';
 import '../../widgets/confirm.dart';
 import '../../widgets/labeled_field.dart';
 import '../../widgets/work_hours_editor.dart';
-import '../customer/booking_flow_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final bool openShare;
@@ -40,6 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _instagram;
   late final TextEditingController _facebook;
   late final TextEditingController _google;
+  late final TextEditingController _googleBookingUrl;
 
   bool _busy = false;
 
@@ -63,6 +65,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         TextEditingController(text: _draft.socialLinks['facebook'] ?? '');
     _google =
         TextEditingController(text: _draft.socialLinks['google'] ?? '');
+    _googleBookingUrl =
+        TextEditingController(text: _draft.googleBookingUrl ?? '');
 
     if (widget.openShare) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _shareLink());
@@ -83,21 +87,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _instagram.dispose();
     _facebook.dispose();
     _google.dispose();
+    _googleBookingUrl.dispose();
     super.dispose();
   }
 
   String get _link =>
-      'https://barberbook.app/${_draft.slug.isEmpty ? 'book' : _draft.slug}';
+      _googleBookingUrl.text.trim().isNotEmpty
+          ? _googleBookingUrl.text.trim()
+          : 'https://barberbook.app/${_draft.slug.isEmpty ? 'book' : _draft.slug}';
 
   void _set(BuildingSettingsBuilder fn) {
-    // Shop settings live on the owner-only `shops` document, so non-owners can
-    // view this screen but cannot change the local draft.
     if (!context.read<AuthProvider>().canManageRules) return;
     setState(() => _draft = fn(_draft));
   }
 
   Future<void> _save() async {
-    // Defensive: saving writes the owner-only `shops` document.
     if (!context.read<AuthProvider>().canManageRules) return;
     setState(() => _busy = true);
     final updated = _draft.copyWith(
@@ -107,6 +111,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       phone: _phone.text.trim(),
       email: _email.text.trim(),
       currency: _currency.text.trim(),
+      slug: _draft.slug,
+      googleBookingUrl: _googleBookingUrl.text.trim().isEmpty ? null : _googleBookingUrl.text.trim(),
+      logoUrl: _draft.logoUrl,
       seoTitle: _seoTitle.text.trim(),
       seoDescription: _seoDescription.text.trim(),
       seoKeywords: _seoKeywords.text.trim(),
@@ -152,15 +159,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _shareLink() async {
+    final url = _googleBookingUrl.text.trim();
+    if (url.isEmpty || !url.startsWith('https://')) {
+      if (mounted) showSnack(context, t(context).error);
+      return;
+    }
     await Share.share(
-      '${t(context).appName} - ${_draft.shopName}\n$_link',
+      '${t(context).appName} - ${_draft.shopName}\n$url',
       subject: _draft.shopName,
     );
   }
 
   Future<void> _copyLink() async {
-    await Clipboard.setData(ClipboardData(text: _link));
+    final url = _googleBookingUrl.text.trim();
+    if (url.isEmpty || !url.startsWith('https://')) {
+      if (mounted) showSnack(context, t(context).error);
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: url));
     if (mounted) showSnack(context, t(context).linkCopied);
+  }
+
+  Future<void> _openLink() async {
+    final url = _googleBookingUrl.text.trim();
+    if (url.isEmpty || !url.startsWith('https://')) {
+      if (mounted) showSnack(context, t(context).error);
+      return;
+    }
+    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  }
+
+  void _showQr() {
+    final url = _googleBookingUrl.text.trim();
+    if (url.isEmpty || !url.startsWith('https://')) {
+      if (mounted) showSnack(context, t(context).error);
+      return;
+    }
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(t(context).qrCode),
+        content: SizedBox(
+          width: 250,
+          height: 250,
+          child: QrImageView(data: url, version: QrVersions.auto),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context), child: Text(t(context).close)),
+        ],
+      ),
+    );
   }
 
   @override
@@ -175,20 +224,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // ---- Booking link ----
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(t(context).shareBookingLink,
+            // ---- Booking link ----
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                  Text(t(context).bookingLink,
                       style: const TextStyle(
                           fontWeight: FontWeight.w800, fontSize: 15)),
                   const SizedBox(height: 4),
                   Text(t(context).shareLinkHint,
                       style: TextStyle(
                           color: Colors.grey.shade600, fontSize: 12)),
+                  const SizedBox(height: 12),
+                  LabeledField(
+                    label: 'Google Booking URL',
+                    child: TextField(
+                      controller: _googleBookingUrl,
+                      enabled: canManage,
+                      decoration: const InputDecoration(hintText: 'https://calendar.google.com/...'),
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -205,41 +263,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: Text(_link,
                               style: const TextStyle(fontWeight: FontWeight.w600)),
                         ),
-                        IconButton(
-                          onPressed: _copyLink,
-                          icon: const Icon(Icons.copy_rounded, size: 18),
-                        ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _shareLink,
-                          icon: const Icon(Icons.share_rounded, size: 18),
-                          label: Text(t(context).shareBookingLink),
-                        ),
+                      OutlinedButton.icon(
+                        onPressed: _copyLink,
+                        icon: const Icon(Icons.copy_rounded, size: 18),
+                        label: Text(t(context).copyLink),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const BookingFlowScreen()),
-                          ),
-                          icon: const Icon(Icons.visibility_rounded, size: 18),
-                          label: Text(t(context).openBookingPage),
-                        ),
+                      OutlinedButton.icon(
+                        onPressed: _shareLink,
+                        icon: const Icon(Icons.share_rounded, size: 18),
+                        label: Text(t(context).shareBookingLink),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _openLink,
+                        icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                        label: Text(t(context).openBookingPage),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _showQr,
+                        icon: const Icon(Icons.qr_code_rounded, size: 18),
+                        label: Text(t(context).qrCode),
                       ),
                     ],
                   ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
           const SizedBox(height: 12),
 
           _card(t(context).brandingSettings, [

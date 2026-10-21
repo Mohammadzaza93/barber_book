@@ -26,9 +26,11 @@ service cloud.firestore {
       return get(memberPath(shopId)).data.role;
     }
 
-    function isManager(shopId) {
+    function isAdmin(shopId) {
       return isShopOwner(shopId)
-        || (isShopMember(shopId) && myRole(shopId) == 'manager');
+        || (isShopMember(shopId) && myRole(shopId) == 'admin')
+        || (isShopMember(shopId) && myRole(shopId) == 'manager')
+        || (isShopMember(shopId) && myRole(shopId) == 'owner');
     }
 
     function isStaff(shopId) {
@@ -46,159 +48,117 @@ service cloud.firestore {
       allow read: if isShopOwner(shopId) || isShopMember(shopId);
       allow update, delete: if isShopOwner(shopId);
 
-      // Membership is granted only by the joinShopByCode callable, which
-      // resolves the join code server side and always writes the lowest role.
-      // A client can no longer insert or promote its own member document.
+      // Admin can manage members
       match /members/{memberId} {
-        allow read: if isShopOwner(shopId)
+        allow read: if isShopOwner(shopId) || isAdmin(shopId)
           || (signedIn() && request.auth.uid == memberId);
+        allow create: if isShopOwner(shopId);
         allow update, delete: if isShopOwner(shopId);
       }
 
-      // Appointments are fully server authoritative: pricing, duration,
-      // status, payment state, reminders and ratings are all written by the
-      // callables with the Admin SDK, which bypasses these rules. Blocking
-      // client writes is what makes that guarantee hold, so there is no
-      // partial-write path left to reason about.
+      // Appointments - direct writes with role checks
       match /appointments/{docId} {
         allow read: if canReadShopData(shopId);
-        allow create, update, delete: if false;
+        allow create: if isAdmin(shopId) || isStaff(shopId);
+        allow update: if isAdmin(shopId) || isStaff(shopId);
+        allow delete: if isAdmin(shopId);
       }
 
-      // Booking locks are internal to the conflict detector. A client that can
-      // write them could clear or forge a lock and double book a slot.
-      match /bookingLocks/{docId} {
-        allow read, write: if false;
-      }
-
-      // Idempotency claims. Server only, otherwise a client could reserve a
-      // requestId and suppress a legitimate retry from another device.
-      match /bookingRequests/{docId} {
-        allow read, write: if false;
-      }
-
-      // Financial records are manager-owned. A staff member must not create,
-      // alter, or delete expenses or payment records from the client.
+      // Staff can enter appointments/payments, admin manages all
       match /expenses/{docId} {
-        allow read: if isManager(shopId);
-        allow create, update: if isManager(shopId);
-        allow delete: if isManager(shopId);
+        allow read: if isAdmin(shopId);
+        allow create, update: if isAdmin(shopId) || isStaff(shopId);
+        allow delete: if isAdmin(shopId);
       }
 
-      // Payment records are created, corrected and deleted exclusively by the
-      // updateAppointment callable, so that collectedAmount and the derived
-      // paymentStatus can never disagree and no client can invent a collection.
-      // Managers keep read access for the reports screens.
       match /payments/{docId} {
-        allow read: if isManager(shopId);
-        allow write: if false;
+        allow read: if isAdmin(shopId);
+        allow create: if isAdmin(shopId) || isStaff(shopId);
+        allow update, delete: if isAdmin(shopId);
       }
 
-      // A staff member may submit an out-of-hours request, but only a manager
-      // may approve, reject, or delete it.
       match /requests/{docId} {
-        allow read: if isManager(shopId) || isStaff(shopId);
-        allow create: if isManager(shopId) || isStaff(shopId);
-        allow update, delete: if isManager(shopId);
+        allow read: if isAdmin(shopId) || isStaff(shopId);
+        allow create: if isAdmin(shopId) || isStaff(shopId);
+        allow update, delete: if isAdmin(shopId);
       }
 
-      // Ratings are append-only from the client. Moderation is manager-only.
-      // A future public customer endpoint should replace the member read rule.
       match /feedback/{docId} {
-        allow read: if isManager(shopId);
+        allow read: if isAdmin(shopId);
         allow create: if canReadShopData(shopId);
-        allow update: if isManager(shopId)
-          && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['showOnPage']);
-        allow delete: if isManager(shopId);
+        allow update, delete: if isAdmin(shopId);
       }
 
-      // Customer and loyalty records contain personal and business data.
       match /customers/{docId} {
-        allow read: if isManager(shopId);
-        allow create, update: if isManager(shopId);
-        allow delete: if isManager(shopId);
+        allow read: if isAdmin(shopId);
+        allow create, update: if isAdmin(shopId);
+        allow delete: if isAdmin(shopId);
       }
 
       match /loyalty/{docId} {
-        allow read: if isManager(shopId);
-        allow create, update: if isManager(shopId);
-        allow delete: if isManager(shopId);
+        allow read: if isAdmin(shopId);
+        allow create, update: if isAdmin(shopId);
+        allow delete: if isAdmin(shopId);
       }
 
       match /queue/{docId} {
-        allow read, create, update: if isManager(shopId);
-        allow delete: if isManager(shopId);
+        allow read, create, update: if isAdmin(shopId);
+        allow delete: if isAdmin(shopId);
       }
 
-      // Stock levels and the movement log that feeds them. Movements are
-      // append-only from the client so a staff account cannot quietly rewrite
-      // the history behind a quantity, and both are manager scoped because the
-      // admin home exposes the inventory tab to every role.
       match /inventory/{docId} {
-        allow read, create, update, delete: if isManager(shopId);
+        allow read, create, update, delete: if isAdmin(shopId);
       }
 
       match /inventoryMovements/{docId} {
-        allow read: if isManager(shopId);
-        allow create: if isManager(shopId);
+        allow read: if isAdmin(shopId);
+        allow create: if isAdmin(shopId);
         allow update, delete: if false;
       }
 
-      // Catalog and configuration writes remain owner-only. This prevents a
-      // staff account from changing prices, services, staff definitions, or
-      // reward rules even if the UI is bypassed.
       match /services/{docId} {
         allow read: if canReadShopData(shopId);
-        allow write: if isShopOwner(shopId);
+        allow write: if isAdmin(shopId);
       }
 
       match /employees/{docId} {
         allow read: if canReadShopData(shopId);
-        allow write: if isShopOwner(shopId);
+        allow write: if isAdmin(shopId);
       }
 
-      // The owner edits the coupon, but never its redemption counter. Usage is
-      // incremented by the createAppointment callable inside the booking
-      // transaction, so a client cannot mint extra discounts.
       match /discounts/{docId} {
         allow read: if canReadShopData(shopId);
-        allow create: if isShopOwner(shopId)
-          && (!('usageCount' in request.resource.data)
-            || request.resource.data.usageCount == 0);
-        allow update: if isShopOwner(shopId)
-          && request.resource.data.usageCount == resource.data.usageCount;
-        allow delete: if isShopOwner(shopId);
+        allow write: if isAdmin(shopId);
       }
 
       match /portfolio/{docId} {
         allow read: if canReadShopData(shopId);
-        allow write: if isShopOwner(shopId);
+        allow write: if isAdmin(shopId);
       }
 
       match /chairs/{docId} {
         allow read: if canReadShopData(shopId);
-        allow write: if isShopOwner(shopId);
+        allow write: if isAdmin(shopId);
       }
 
       match /chairSupplies/{docId} {
-        allow read: if isManager(shopId);
-        allow write: if isShopOwner(shopId);
+        allow read: if isAdmin(shopId);
+        allow write: if isAdmin(shopId);
       }
 
       match /chairWeeklyProfits/{docId} {
-        allow read: if isManager(shopId);
-        allow write: if isShopOwner(shopId);
+        allow read: if isAdmin(shopId);
+        allow write: if isAdmin(shopId);
       }
 
       match /loyaltyRules/{docId} {
         allow read: if canReadShopData(shopId);
-        allow write: if isShopOwner(shopId);
+        allow write: if isAdmin(shopId);
       }
 
       match /loyaltyGifts/{docId} {
         allow read: if canReadShopData(shopId);
-        allow write: if isShopOwner(shopId);
+        allow write: if isAdmin(shopId);
       }
     }
 

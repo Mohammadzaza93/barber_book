@@ -13,8 +13,6 @@ import '../../providers/shop_provider.dart';
 import '../../services/booking_calc.dart';
 import '../../services/calendar_service.dart';
 import '../../services/reminder_service.dart';
-import '../../services/secure_api.dart';
-import '../../services/secure_error_text.dart';
 import '../../services/shop_manager.dart';
 import '../../widgets/confirm.dart';
 import '../../widgets/service_picker.dart';
@@ -144,35 +142,58 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
     setState(() => _busy = true);
     final shopId = ShopManager.shopId!;
 
-    // The server owns the reference, the duration, the discount, the deposit
-    // and the resulting payment status, so the client only sends intent.
-    List<Map<String, dynamic>> created;
+    // Create appointment directly
+    final apptProvider = context.read<AppointmentProvider>();
+    final shopProvider = context.read<ShopProvider>();
+    final services = shopProvider.services.where((s) => _serviceIds.contains(s.id)).toList();
+    double total = 0;
+    int duration = 0;
+    for (final s in services) {
+      total += s.price;
+      duration += s.durationMinutes;
+    }
+    final end = _slot!.add(Duration(minutes: duration));
     try {
-      created = await SecureApi.instance.createAppointment(
+      final id = await apptProvider.create(
         shopId: shopId,
         employeeId: _employeeId!,
         chairId: _chairId,
         serviceIds: _serviceIds,
-        startTime: _slot!.toUtc().toIso8601String(),
-        requestId: SecureApi.instance.newRequestId(),
+        start: _slot!,
+        end: end,
         customerName: _name.text.trim(),
         customerPhone: _phone.text.trim(),
         customerEmail: _email.text.trim(),
         notes: _notes.text.trim(),
-        discountCode: _promo.text.trim().isEmpty ? null : _promo.text.trim(),
         recurring: _recurring,
+        totalAmount: total,
+        createdById: context.read<AuthProvider>().user?.uid,
       );
-    } on SecureApiException catch (error) {
+      // Schedule reminders
+      final createdAppt = Appointment(
+        id: id,
+        shopId: shopId,
+        reference: '',
+        customerName: _name.text.trim(),
+        customerPhone: _phone.text.trim(),
+        customerEmail: _email.text.trim(),
+        employeeId: _employeeId!,
+        chairId: _chairId,
+        serviceIds: _serviceIds,
+        startTime: _slot!,
+        endTime: end,
+        totalAmount: total,
+        createdAt: DateTime.now(),
+      );
+      await ReminderService.instance.scheduleLocalReminders(settings, createdAppt);
+    } catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      showSnack(context, describeSecureError(context, error));
+      showSnack(context, e.toString().contains('conflict') ? t(context).fillRequiredFields : t(context).error);
       return;
     }
 
-    for (final item in created) {
-      await ReminderService.instance.scheduleLocalReminders(
-          settings, Appointment.fromMap(item['id'] as String, item));
-    }
+    // Reminders already scheduled above
 
     if (!mounted) return;
     setState(() => _busy = false);
@@ -569,14 +590,14 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
       } else {
         await provider.setStatus(a, status, ShopManager.shopId!);
       }
-    } on SecureApiException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      showSnack(context, describeSecureError(context, error));
+      showSnack(context, t(context).error);
     }
   }
 
-  /// Records a payment and lets the server derive the payment status from the
-  /// amount collected so far, so the two can never be set independently.
+  /// Records a payment and adjusts the payment status from the amount
+  /// collected so far, so the two can never be set independently.
   Future<void> _recordPayment(Appointment a) async {
     // Defensive: recording a payment requires owner/manager.
     if (!context.read<AuthProvider>().canManageOperations) return;
@@ -637,9 +658,11 @@ class _AppointmentEditScreenState extends State<AppointmentEditScreen> {
             method: method,
             amount: value,
           );
-    } on SecureApiException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      showSnack(context, describeSecureError(context, error));
+      showSnack(context, error.toString().contains('invalid-pricing')
+          ? t(context).enterValidAmount
+          : t(context).error);
     }
   }
 

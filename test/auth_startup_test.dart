@@ -38,7 +38,7 @@ void main() {
     test('a never-completing notification subscribe does not strand init',
         () async {
       final auth = AuthProvider(
-        resolveShop: (_) async => (shopId: 'shop-A', role: AppRole.owner),
+        resolveShop: (_) async => (shopId: 'shop-A', role: AppRole.admin),
         subscribeShopNotifications: (_) => Completer<bool>().future,
         unsubscribeShopNotifications: (_) async => true,
       );
@@ -48,14 +48,14 @@ void main() {
       expect(auth.initializing, isFalse);
       expect(auth.shopId, 'shop-A',
           reason: 'a notification failure must not clear the session');
-      expect(auth.role, AppRole.owner);
+      expect(auth.role, AppRole.admin);
       expect(ShopManager.shopId, 'shop-A');
     });
 
     test('a failing notification subscribe does not clear the session',
         () async {
       final auth = AuthProvider(
-        resolveShop: (_) async => (shopId: 'shop-A', role: AppRole.owner),
+        resolveShop: (_) async => (shopId: 'shop-A', role: AppRole.admin),
         subscribeShopNotifications: (_) async => throw Exception('fcm down'),
         unsubscribeShopNotifications: (_) async => true,
       );
@@ -66,7 +66,7 @@ void main() {
       expect(auth.shopId, 'shop-A');
       expect(auth.error, isNull,
           reason: 'notifications are best-effort, not session state');
-      expect(auth.role, AppRole.owner);
+      expect(auth.role, AppRole.admin);
     });
 
     test('an unresolvable shop still finishes init with a null session',

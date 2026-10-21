@@ -11,17 +11,16 @@ import '../../providers/shop_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/connection_banner.dart';
 import '../../widgets/feature_labels.dart';
-import '../customer/booking_flow_screen.dart';
 import '../profile_screen.dart';
-import 'dashboard_screen.dart';
 import 'appointments_screen.dart';
+import 'business_tools_screen.dart';
+import 'dashboard_screen.dart';
 import 'discounts_screen.dart';
 import 'expenses_screen.dart';
 import 'feedback_screen.dart';
 import 'reports_screen.dart';
 import 'services_screen.dart';
 import 'settings_screen.dart';
-import 'business_tools_screen.dart';
 import 'staff_screen.dart';
 import 'unavailability_screen.dart';
 
@@ -31,18 +30,17 @@ import 'unavailability_screen.dart';
 /// 10 business tools, 11 profile.
 ///
 /// This is a UI-only capability map. Hiding a tab is a UX affordance, not a
-/// security boundary — the backend rules and callables remain authoritative and
-/// reject unauthorized operations regardless of what the UI renders.
-const Set<int> ownerManagerAdminTabs = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
-const Set<int> staffAdminTabs = {0, 1, 2, 3, 7, 11};
+/// security boundary — the backend rules remain authoritative.
+const Set<int> adminTabsSet = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 
 /// Pure capability check so the navigation policy can be unit-tested without a
 /// widget tree.
 bool adminTabVisible(AppRole role, int index) {
-  if (role == AppRole.owner || role == AppRole.manager) {
-    return ownerManagerAdminTabs.contains(index);
+  if (role.isAdmin) {
+    return adminTabsSet.contains(index);
   }
-  return staffAdminTabs.contains(index);
+  // Staff: enter appointments and payments only (appointments tab)
+  return index == 1;
 }
 
 class AdminHomeScreen extends StatefulWidget {
@@ -63,19 +61,19 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   bool _visibleFor(BuildContext context, int index) =>
       adminTabVisible(context.read<AuthProvider>().role, index);
 
-  final _screens = const [
-    DashboardScreen(),
-    AppointmentsScreen(),
-    ServicesScreen(),
-    StaffScreen(),
-    DiscountsScreen(),
-    ExpensesScreen(),
-    FeedbackScreen(),
-    UnavailabilityScreen(),
-    ReportsScreen(),
-    SettingsScreen(),
-    BusinessToolsScreen(),
-    ProfileScreen(),
+  final _screens = [
+    const DashboardScreen(),
+    const AppointmentsScreen(),
+    const ServicesScreen(),
+    const StaffScreen(),
+    const DiscountsScreen(),
+    const ExpensesScreen(),
+    const FeedbackScreen(),
+    const UnavailabilityScreen(),
+    const ReportsScreen(),
+    const SettingsScreen(),
+    const BusinessToolsScreen(),
+    const ProfileScreen(),
   ];
 
   @override
@@ -99,7 +97,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const BookingFlowScreen(),
+                      builder: (_) => const SettingsScreen(openShare: true),
                     ),
                   ),
                   icon: const Icon(Icons.calendar_month_rounded),

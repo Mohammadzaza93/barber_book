@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseException;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
@@ -9,7 +9,6 @@ import '../models/enums.dart';
 import '../models/shop_time.dart';
 import '../models/unavailability_request.dart';
 import '../services/firestore_service.dart';
-import '../services/secure_api.dart';
 import '../services/shop_manager.dart';
 
 class AppointmentProvider extends ChangeNotifier {
@@ -113,106 +112,191 @@ class AppointmentProvider extends ChangeNotifier {
     });
   }
 
-  /// Creates the booking on the server and returns the authoritative rows.
-  Future<List<Map<String, dynamic>>> create({
+  /// Creates appointment directly via transaction to avoid conflicts
+  Future<String> create({
     required String shopId,
     required String employeeId,
     String? chairId,
     required List<String> serviceIds,
     required DateTime start,
+    required DateTime end,
     required String customerName,
     String? customerPhone,
     String? customerEmail,
     String? notes,
-    String? discountCode,
     bool recurring = false,
+    String? seriesId,
     bool outOfHours = false,
-    String? requestId,
-  }) {
-    return SecureApi.instance.createAppointment(
-      shopId: shopId,
-      employeeId: employeeId,
-      chairId: chairId,
-      serviceIds: serviceIds,
-      startTime: start.toUtc().toIso8601String(),
-      requestId: requestId ?? SecureApi.instance.newRequestId(),
-      customerName: customerName,
-      customerPhone: customerPhone,
-      customerEmail: customerEmail,
-      notes: notes,
-      discountCode: discountCode,
-      recurring: recurring,
-      outOfHours: outOfHours,
-    );
+    required double totalAmount,
+    String? createdById,
+  }) async {
+    final db = FirebaseFirestore.instance;
+    final ref = db.collection('shops').doc(shopId).collection('appointments').doc();
+    await db.runTransaction((tx) async {
+      // Check for conflicts
+      final snap = await db
+          .collection('shops')
+          .doc(shopId)
+          .collection('appointments')
+          .where('employeeId', isEqualTo: employeeId)
+          .get();
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        if (data['status'] == 'cancelled' || data['status'] == 'noShow') continue;
+        final s = (data['startTime'] as Timestamp).toDate();
+        final e = (data['endTime'] as Timestamp).toDate();
+        if (start.isBefore(e) && end.isAfter(s)) {
+          throw Exception('appointment-conflict');
+        }
+      }
+      final refNum = DateTime.now().millisecondsSinceEpoch.toString().substring(7);
+      tx.set(ref, {
+        'shopId': shopId,
+        'reference': 'APT-$refNum',
+        'customerName': customerName,
+        'customerPhone': customerPhone ?? '',
+        'customerEmail': customerEmail ?? '',
+        'employeeId': employeeId,
+        'chairId': chairId,
+        'serviceIds': serviceIds,
+        'startTime': Timestamp.fromDate(start),
+        'endTime': Timestamp.fromDate(end),
+        'status': AppointmentStatus.confirmed.name,
+        'paymentStatus': PaymentStatus.unpaid.name,
+        'totalAmount': totalAmount,
+        'depositAmount': 0,
+        'collectedAmount': 0,
+        'discountCode': null,
+        'discountAmount': 0,
+        'notes': notes ?? '',
+        'recurring': recurring,
+        'seriesId': seriesId,
+        'outOfHours': outOfHours,
+        'createdById': createdById,
+        'createdAt': FieldValue.serverTimestamp(),
+        'reminderSent': false,
+        'rating': null,
+      });
+    });
+    return ref.id;
   }
 
   Future<void> updateContact(Appointment a, String shopId,
       {String? customerName, String? customerPhone, String? customerEmail, String? notes}) async {
-    await SecureApi.instance.updateContact(
-      shopId: shopId,
-      appointmentId: a.id,
-      customerName: customerName,
-      customerPhone: customerPhone,
-      customerEmail: customerEmail,
-      notes: notes,
-    );
+    await FirebaseFirestore.instance
+        .collection('shops')
+        .doc(shopId)
+        .collection('appointments')
+        .doc(a.id)
+        .update({
+      if (customerName != null) 'customerName': customerName,
+      if (customerPhone != null) 'customerPhone': customerPhone,
+      if (customerEmail != null) 'customerEmail': customerEmail,
+      if (notes != null) 'notes': notes,
+    });
   }
 
   Future<void> delete(Appointment a, String shopId) async {
-    await SecureApi.instance.deleteAppointment(
-      shopId: shopId,
-      appointmentId: a.id,
-    );
+    await FirebaseFirestore.instance
+        .collection('shops')
+        .doc(shopId)
+        .collection('appointments')
+        .doc(a.id)
+        .delete();
+  }
+
+  /// Cancel series in one operation
+  Future<void> cancelSeries(String shopId, String seriesId) async {
+    final db = FirebaseFirestore.instance;
+    final snap = await db
+        .collection('shops')
+        .doc(shopId)
+        .collection('appointments')
+        .where('seriesId', isEqualTo: seriesId)
+        .get();
+    final batch = db.batch();
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      if (data['status'] == 'completed') continue;
+      batch.update(doc.reference, {'status': AppointmentStatus.cancelled.name});
+    }
+    await batch.commit();
   }
 
   Future<void> setStatus(Appointment a, AppointmentStatus s, String shopId,
       {bool applyToSeries = false}) async {
     if (applyToSeries && a.seriesId != null) {
-      for (final item in appointments) {
-        if (item.seriesId == a.seriesId &&
-            (item.status == AppointmentStatus.confirmed ||
-                item.status == AppointmentStatus.requested)) {
-          await SecureApi.instance.setStatus(
-            shopId: shopId,
-            appointmentId: item.id,
-            status: s.name,
-          );
-        }
-      }
-    } else {
-      await SecureApi.instance.setStatus(
-        shopId: shopId,
-        appointmentId: a.id,
-        status: s.name,
-      );
+      await cancelSeries(shopId, a.seriesId!);
+      return;
     }
+    if (!a.status.canTransitionTo(s)) {
+      throw Exception('invalid-transition');
+    }
+    final db = FirebaseFirestore.instance;
+    if (s == AppointmentStatus.cancelled && a.recurring && a.seriesId != null) {
+      await cancelSeries(shopId, a.seriesId!);
+      return;
+    }
+    await db
+        .collection('shops')
+        .doc(shopId)
+        .collection('appointments')
+        .doc(a.id)
+        .update({'status': s.name});
   }
 
-  /// Records a payment against the appointment. The server owns the resulting
-  /// payment status, so the client only supplies the amount and the method.
+  /// Records a payment with caps
   Future<void> recordPayment(Appointment a, String shopId,
       {required String method, required double amount}) async {
-    await SecureApi.instance.recordPayment(
-      shopId: shopId,
-      appointmentId: a.id,
-      method: method,
-      amount: amount,
-    );
+    if (amount <= 0) throw Exception('invalid-input');
+    final db = FirebaseFirestore.instance;
+    final ref = db.collection('shops').doc(shopId).collection('appointments').doc(a.id);
+    await db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) throw Exception('appointment-not-found');
+      final data = snap.data()!;
+      final total = ((data['totalAmount'] as num?) ?? 0).toDouble();
+      final collected = ((data['collectedAmount'] as num?) ?? 0).toDouble();
+      final newCollected = collected + amount;
+      if (newCollected > total + 0.01) throw Exception('invalid-pricing');
+      PaymentStatus ps = PaymentStatus.unpaid;
+      if (newCollected >= total - 0.01) {
+        ps = PaymentStatus.paid;
+      } else if (newCollected > 0) {
+        ps = PaymentStatus.depositPaid;
+      }
+      tx.update(ref, {
+        'collectedAmount': newCollected,
+        'paymentStatus': ps.name,
+      });
+      // Also write to payments collection for records
+      final payRef = db.collection('shops').doc(shopId).collection('payments').doc();
+      tx.set(payRef, {
+        'appointmentId': a.id,
+        'amount': amount,
+        'method': method,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    });
   }
 
   Future<void> markReminderSent(Appointment a, String shopId) async {
-    await SecureApi.instance.markReminderSent(
-      shopId: shopId,
-      appointmentId: a.id,
-    );
+    await FirebaseFirestore.instance
+        .collection('shops')
+        .doc(shopId)
+        .collection('appointments')
+        .doc(a.id)
+        .update({'reminderSent': true});
   }
 
   Future<void> setRating(Appointment a, int rating, String shopId) async {
-    await SecureApi.instance.setRating(
-      shopId: shopId,
-      appointmentId: a.id,
-      rating: rating,
-    );
+    if (rating < 1 || rating > 5) throw Exception('invalid-rating');
+    await FirebaseFirestore.instance
+        .collection('shops')
+        .doc(shopId)
+        .collection('appointments')
+        .doc(a.id)
+        .update({'rating': rating});
   }
 
   Future<void> addRequest(

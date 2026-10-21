@@ -7,8 +7,6 @@ import '../../models/business_features.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/business_tools_provider.dart';
 import '../../providers/shop_provider.dart';
-import '../../services/secure_api.dart';
-import '../../services/secure_error_text.dart';
 import '../../widgets/confirm.dart';
 import 'discounts_screen.dart';
 import 'business_management_tabs.dart';
@@ -254,12 +252,6 @@ class _PaymentsTab extends StatelessWidget {
     final cost = double.tryParse(materialCost.text) ?? 0;
     try {
       await tools.addPayment(Payment(id: tools.newId(), appointmentId: appointment.text.trim(), customerName: customer.text.trim(), customerPhone: phone.text.trim(), chairId: chairId, employeeId: employeeId, amount: value, materialCost: cost, method: method, paidAt: DateTime.now()));
-    } on SecureApiException catch (error) {
-      // The server owns the money path, so a rejection (e.g. the referenced
-      // appointment does not exist) has to be surfaced instead of escaping as
-      // an unhandled async exception.
-      debugPrint('recordPayment rejected: code=${error.code} details=${error.details}');
-      if (context.mounted) showSnack(context, describeSecureError(context, error));
     } catch (error) {
       debugPrint('recordPayment unexpected failure: $error');
       if (context.mounted) showSnack(context, t(context).error);

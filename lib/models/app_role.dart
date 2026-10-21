@@ -1,21 +1,18 @@
 /// أدوار المستخدمين داخل التطبيق.
 ///
-/// - [owner]   المالك: كل الصلاحيات بما فيها تغيير الإعدادات والقواعد.
-/// - [manager] مدير: إدارة العمليات اليومية (مواعيد، طلبات، مصروفات، تقارير)
-///   دون القدرة على تعديل إعدادات المحل أو القواعد أو الأعضاء.
-/// - [staff]   موظف (مستخدم عادي): إدخال بيانات عادية فقط
-///   (إنشاء مواعيد/مصروفات/طلبات) ولا يملك أي صلاحية تغيير للقواعد.
-enum AppRole { owner, manager, staff }
+/// - [admin]   أدمن: كل الصلاحيات (خدمات، حلاقون، تقارير، نفقات، مخزون، إعدادات، إدارة الموظفين)
+/// - [staff]   موظف إدخال: إدخال المواعيد والمدفوعات وتعديل ما أدخله فقط، بلا تقارير مالية ولا إعدادات
+enum AppRole { admin, staff }
 
 extension AppRoleX on AppRole {
   String get name => toString().split('.').last;
 
   static AppRole fromName(String? name) {
     switch (name) {
+      case 'admin':
       case 'owner':
-        return AppRole.owner;
       case 'manager':
-        return AppRole.manager;
+        return AppRole.admin;
       case 'staff':
         return AppRole.staff;
       default:
@@ -23,17 +20,18 @@ extension AppRoleX on AppRole {
     }
   }
 
-  /// هل يمكن لهذا الدور تعديل "القواعد"؟
-  /// (إعدادات صفحة الحجز، الخدمات، الخصومات، الموظفين، أدوات الأعمال، الأعضاء)
-  bool get canManageRules => this == AppRole.owner;
+  /// هل يمكن لهذا الدور إدارة كل شيء؟
+  bool get isAdmin => this == AppRole.admin;
+
+  /// هل يمكن لهذا الدور تعديل الإعدادات والقواعد؟
+  bool get canManageRules => this == AppRole.admin;
 
   /// هل يمكن لهذا الدور إدارة العمليات اليومية؟
-  /// (تأكيد/إلغاء المواعيد، اعتماد طلبات التعطيل، حذف سجلات تشغيلية، عرض التقارير)
-  bool get canManageOperations => this != AppRole.staff;
+  bool get canManageOperations => this == AppRole.admin;
 
-  /// هل يمكن لهذا الدور عرض لوحة البيانات والتقارير المالية؟
-  bool get canViewReports => this != AppRole.staff;
+  /// هل يمكن لهذا الدور عرض التقارير المالية؟
+  bool get canViewReports => this == AppRole.admin;
 
-  /// إدخال بيانات عادية متاح لجميع الأدوار.
+  /// إدخال بيانات عادية
   bool get canEnterData => true;
 }

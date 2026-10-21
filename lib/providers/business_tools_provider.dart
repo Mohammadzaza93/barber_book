@@ -9,14 +9,14 @@ import '../models/appointment.dart';
 import '../models/business_features.dart';
 import '../models/enums.dart';
 import '../services/firestore_service.dart';
-import '../services/secure_api.dart';
 
-/// The `customers` collection is manager/owner-only in firestore.rules, so only
-/// those roles may run the appointment-derived customer-profile synchronisation.
+
+/// The `customers` collection is admin-only in firestore.rules, so only
+/// admins may run the appointment-derived customer-profile synchronisation.
 /// A null role means "unknown/not provided" and preserves the previous behaviour
 /// for callers that bind without a role (e.g. older tests).
 bool canSyncCustomerProfiles(AppRole? role) =>
-    role == null || role == AppRole.owner || role == AppRole.manager;
+    role == null || role == AppRole.admin;
 
 class BusinessToolsProvider extends ChangeNotifier {
   String? _shopId;
@@ -163,18 +163,25 @@ class BusinessToolsProvider extends ChangeNotifier {
   Future<void> addQueue(QueueEntry entry) =>
       FirestoreService.instance.saveQueueEntry(shopId, entry);
 
-  /// Records a payment through the callable so the appointment total and its
-  /// derived payment status can never disagree, then applies the loyalty
-  /// points that the shop rules award for the same sale.
+  /// Records a payment directly against the appointment (so the collected
+  /// total and its derived payment status can never disagree), then applies
+  /// the loyalty points that the shop rules award for the same sale.
   Future<void> addPayment(Payment payment) async {
     final appointmentId =
         payment.appointmentId.trim().isEmpty ? null : payment.appointmentId.trim();
-    await SecureApi.instance.recordPayment(
-      shopId: shopId,
-      appointmentId: appointmentId,
-      method: payment.method,
+    await FirestoreService.instance.recordPayment(shopId, Payment(
+      id: payment.id,
+      appointmentId: appointmentId ?? '',
+      customerName: payment.customerName,
+      customerPhone: payment.customerPhone,
+      chairId: payment.chairId,
+      employeeId: payment.employeeId,
       amount: payment.amount,
-    );
+      materialCost: payment.materialCost,
+      method: payment.method,
+      paidAt: payment.paidAt,
+      notes: payment.notes,
+    ));
     final phone = payment.customerPhone.trim();
     if (phone.isEmpty) return;
     final matchingRules = loyaltyRules.where((rule) => rule.enabled);
@@ -203,8 +210,10 @@ class BusinessToolsProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> deletePayment(String id) =>
-      SecureApi.instance.deletePayment(shopId: shopId, paymentId: id);
+  Future<void> deletePayment(String id) async {
+    if (_shopId == null) return;
+    await FirestoreService.instance.deletePayment(_shopId!, id);
+  }
 
   Future<void> saveInventoryItem(InventoryItem item) =>
       FirestoreService.instance.saveInventoryItem(shopId, item);

@@ -8,7 +8,6 @@ import '../services/auth_service.dart';
 import '../services/firebase_status.dart';
 import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
-import '../services/secure_api.dart';
 import '../services/shop_manager.dart';
 
 /// Resolves the shop and role for an authenticated uid. Overridable so session
@@ -108,7 +107,7 @@ class AuthProvider extends ChangeNotifier {
   /// topic instead of appending independent operations).
   Future<void> _topicQueue = Future<void>.value();
 
-  bool get isOwner => role == AppRole.owner;
+  bool get isOwner => role == AppRole.admin;
   bool get canManageRules => role.canManageRules;
   bool get canManageOperations => role.canManageOperations;
   bool get canViewReports => role.canViewReports;
@@ -348,23 +347,12 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// انضمام الحساب الحالي إلى محل قائم عبر كود الانضمام (بدور موظف).
+  /// انضمام الحساب الحالي إلى محل قائم: لم يعد هناك كود انضمام — Membership
+  /// now happens only when an admin adds the account by email.
   Future<bool> joinShopByCode(String code) async {
-    error = null;
-    try {
-      await SecureApi.instance.joinShopByCode(code);
-      final resolved = await _resolveShop(user!.uid);
-      shopId = resolved.shopId;
-      role = resolved.role;
-      ShopManager.shopId = shopId;
-      _scheduleTopicReconcile(shopId, guarded: true, generation: _sessionGeneration);
-      notifyListeners();
-      return true;
-    } catch (e) {
-      error = e.toString();
-      notifyListeners();
-      return false;
-    }
+    error = 'join-code-removed';
+    notifyListeners();
+    return false;
   }
 
   Future<void> signOut() async {

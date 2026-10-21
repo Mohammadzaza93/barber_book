@@ -59,6 +59,9 @@ class BookingSettings {
   final bool autoConfirm;
   final bool showRatings;
 
+  // Google Calendar booking link
+  final String? googleBookingUrl;
+
   // SEO
   final String seoTitle;
   final String seoDescription;
@@ -78,14 +81,15 @@ class BookingSettings {
     this.primaryColorHex = '0xFF121316',
     this.accentColorHex = '0xFFC6CBD4',
     this.slug = '',
+    this.googleBookingUrl,
     this.workingHours = const {},
     this.policies = const [],
-    this.cancelFreeHours = 6,
-    this.cancelFeePercent = 20,
-    this.whoPaysFees = 'customer',
+    this.cancelFreeHours = 0,
+    this.cancelFeePercent = 0,
+    this.whoPaysFees = 'shop',
     this.depositsEnabled = false,
-    this.depositPercent = 20,
-    this.depositHighDemandOnly = true,
+    this.depositPercent = 0,
+    this.depositHighDemandOnly = false,
     this.remindersEnabled = true,
     this.reminderTimings = const [2, 24],
     this.reminderChannels = const ['whatsapp', 'email'],
@@ -111,6 +115,7 @@ class BookingSettings {
     String? primaryColorHex,
     String? accentColorHex,
     String? slug,
+    String? googleBookingUrl,
     Map<int, List<WorkSlot>>? workingHours,
     List<String>? policies,
     int? cancelFreeHours,
@@ -143,6 +148,7 @@ class BookingSettings {
       primaryColorHex: primaryColorHex ?? this.primaryColorHex,
       accentColorHex: accentColorHex ?? this.accentColorHex,
       slug: slug ?? this.slug,
+      googleBookingUrl: googleBookingUrl ?? this.googleBookingUrl,
       workingHours: workingHours ?? this.workingHours,
       policies: policies ?? this.policies,
       cancelFreeHours: cancelFreeHours ?? this.cancelFreeHours,
@@ -178,6 +184,8 @@ class BookingSettings {
         'primaryColorHex': primaryColorHex,
         'accentColorHex': accentColorHex,
         'slug': slug,
+        if (googleBookingUrl != null && googleBookingUrl!.isNotEmpty)
+          'googleBookingUrl': googleBookingUrl,
         'workingHours': workingHours.map((k, v) =>
             MapEntry(k.toString(), v.map((s) => s.toMap()).toList())),
         'policies': policies,
@@ -223,6 +231,7 @@ class BookingSettings {
       primaryColorHex: (m['primaryColorHex'] as String?) ?? '0xFF121316',
       accentColorHex: (m['accentColorHex'] as String?) ?? '0xFFC6CBD4',
       slug: (m['slug'] as String?) ?? '',
+      googleBookingUrl: m['googleBookingUrl'] as String?,
       workingHours: wh,
       policies: (m['policies'] as List<dynamic>? ?? const [])
           .map((e) => e.toString())
