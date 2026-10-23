@@ -46,7 +46,8 @@ service cloud.firestore {
         && request.resource.data.ownerId == request.auth.uid;
 
       allow read: if isShopOwner(shopId) || isShopMember(shopId);
-      allow update, delete: if isShopOwner(shopId);
+      allow update: if isAdmin(shopId);
+      allow delete: if isShopOwner(shopId);
 
       // Admin can manage members
       match /members/{memberId} {
@@ -75,6 +76,16 @@ service cloud.firestore {
         allow read: if isAdmin(shopId);
         allow create: if isAdmin(shopId) || isStaff(shopId);
         allow update, delete: if isAdmin(shopId);
+      }
+
+      // Finance & accounting is admin-only (startup costs, expenses,
+      // barber settlements, daily sales entries and cash-box splits).
+      match /finance/{group}/items/{itemId} {
+        allow read, write: if isAdmin(shopId);
+      }
+
+      match /finance_daily/{entryId} {
+        allow read, write: if isAdmin(shopId);
       }
 
       match /requests/{docId} {

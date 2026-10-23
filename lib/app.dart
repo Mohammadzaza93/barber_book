@@ -10,6 +10,7 @@ import 'providers/connection_provider.dart';
 import 'providers/discount_provider.dart';
 import 'providers/expense_provider.dart';
 import 'providers/feedback_provider.dart';
+import 'providers/finance_provider.dart';
 import 'providers/language_provider.dart';
 import 'providers/shop_provider.dart';
 import 'screens/root_gate.dart';
@@ -38,6 +39,14 @@ class BarberApp extends StatelessWidget {
           create: (context) => ConnectionProvider(
             onReconnected: context.read<AuthProvider>().reconcileShopTopic,
           )..start(),
+        ),
+        ChangeNotifierProxyProvider<AuthProvider, FinanceProvider>(
+          create: (_) => FinanceProvider(),
+          update: (_, auth, finance) {
+            finance ??= FinanceProvider();
+            finance.bind(auth.shopId);
+            return finance;
+          },
         ),
       ],
       child: const _Material(),

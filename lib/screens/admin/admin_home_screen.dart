@@ -19,6 +19,7 @@ import 'dashboard_screen.dart';
 import 'discounts_screen.dart';
 import 'expenses_screen.dart';
 import 'feedback_screen.dart';
+import 'finance/finance_home_screen.dart';
 import 'reports_screen.dart';
 import 'services_screen.dart';
 import 'settings_screen.dart';
@@ -28,11 +29,11 @@ import 'unavailability_screen.dart';
 /// Admin shell tab indices, in the same order as `_AdminHomeScreenState._screens`:
 /// 0 dashboard, 1 appointments, 2 services, 3 staff, 4 discounts, 5 expenses,
 /// 6 feedback, 7 out-of-hours requests, 8 reports, 9 booking-page settings,
-/// 10 business tools, 11 profile.
+/// 10 business tools, 11 profile, 12 finance & accounting.
 ///
 /// This is a UI-only capability map. Hiding a tab is a UX affordance, not a
 /// security boundary — the backend rules remain authoritative.
-const Set<int> adminTabsSet = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+const Set<int> adminTabsSet = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
 
 /// Pure capability check so the navigation policy can be unit-tested without a
 /// widget tree.
@@ -66,6 +67,8 @@ bool adminTabVisible(AppRole role, int index, {StaffPermissions? perms}) {
       return p.businessTools;
     case 11: // profile
       return true;
+    case 12: // finance
+      return p.finance;
     default:
       return false;
   }
@@ -86,8 +89,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   /// because the admin shell is mounted.
   final Set<int> _visited = {0};
 
-  bool _visibleFor(BuildContext context, int index) =>
-      adminTabVisible(context.read<AuthProvider>().role, index);
+  bool _visibleFor(BuildContext context, int index) {
+    final auth = context.read<AuthProvider>();
+    return adminTabVisible(auth.role, index, perms: auth.permissions);
+  }
 
   final _screens = [
     const DashboardScreen(),
@@ -102,6 +107,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     const SettingsScreen(),
     const BusinessToolsScreen(),
     const ProfileScreen(),
+    const FinanceHomeScreen(),
   ];
 
   @override
@@ -236,6 +242,14 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   if (_visibleFor(context, 9)) _item(context, 9, Icons.tune_rounded, Icons.tune, t(context).bookingPageSettings),
                   if (_visibleFor(context, 10)) _item(context, 10, Icons.business_center_outlined, Icons.business_center, FeatureLabels.text(context, 'أدوات الأعمال', 'Business Tools')),
                   if (_visibleFor(context, 11)) _item(context, 11, Icons.person_outline_rounded, Icons.person_rounded, t(context).profile),
+                  if (_visibleFor(context, 12))
+                    _item(
+                      context,
+                      12,
+                      Icons.account_balance_wallet_outlined,
+                      Icons.account_balance_wallet_rounded,
+                      FeatureLabels.text(context, 'المالية والمحاسبة', 'Finance & Accounting'),
+                    ),
                 ],
               ),
             ),

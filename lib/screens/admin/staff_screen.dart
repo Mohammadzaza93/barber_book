@@ -379,6 +379,11 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                       onChanged: (v) =>
                           setState(() => _perms = _perms.copyWith(businessTools: v))),
                   SwitchListTile(
+                      title: const Text('المالية والمحاسبة'),
+                      value: _perms.finance,
+                      onChanged: (v) =>
+                          setState(() => _perms = _perms.copyWith(finance: v))),
+                  SwitchListTile(
                       title: const Text('إعدادات المحل'),
                       value: _perms.settings,
                       onChanged: (v) =>
