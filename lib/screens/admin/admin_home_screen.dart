@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
@@ -17,7 +17,6 @@ import 'appointments_screen.dart';
 import 'business_tools_screen.dart';
 import 'dashboard_screen.dart';
 import 'discounts_screen.dart';
-import 'expenses_screen.dart';
 import 'feedback_screen.dart';
 import 'finance/finance_home_screen.dart';
 import 'reports_screen.dart';
@@ -27,13 +26,16 @@ import 'staff_screen.dart';
 import 'unavailability_screen.dart';
 
 /// Admin shell tab indices, in the same order as `_AdminHomeScreenState._screens`:
-/// 0 dashboard, 1 appointments, 2 services, 3 staff, 4 discounts, 5 expenses,
-/// 6 feedback, 7 out-of-hours requests, 8 reports, 9 booking-page settings,
-/// 10 business tools, 11 profile, 12 finance & accounting.
+/// 0 dashboard, 1 appointments, 2 services, 3 staff, 4 discounts,
+/// 5 feedback, 6 out-of-hours requests, 7 reports, 8 booking-page settings,
+/// 9 business tools, 10 profile, 11 finance & accounting.
+///
+/// Expenses live only under Finance (OperatingExpense). The old standalone
+/// Expenses tab was removed.
 ///
 /// This is a UI-only capability map. Hiding a tab is a UX affordance, not a
 /// security boundary — the backend rules remain authoritative.
-const Set<int> adminTabsSet = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+const Set<int> adminTabsSet = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 
 /// Pure capability check so the navigation policy can be unit-tested without a
 /// widget tree.
@@ -53,21 +55,19 @@ bool adminTabVisible(AppRole role, int index, {StaffPermissions? perms}) {
       return p.staff;
     case 4: // discounts
       return p.discounts;
-    case 5: // expenses
-      return p.expenses;
-    case 6: // feedback
+    case 5: // feedback
       return p.feedback;
-    case 7: // out of hours
+    case 6: // out of hours
       return p.outOfHours;
-    case 8: // reports
+    case 7: // reports
       return p.reports;
-    case 9: // settings
+    case 8: // settings
       return p.settings;
-    case 10: // business tools
+    case 9: // business tools
       return p.businessTools;
-    case 11: // profile
+    case 10: // profile
       return true;
-    case 12: // finance
+    case 11: // finance
       return p.finance;
     default:
       return false;
@@ -100,7 +100,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     const ServicesScreen(),
     const StaffScreen(),
     const DiscountsScreen(),
-    const ExpensesScreen(),
     const FeedbackScreen(),
     const UnavailabilityScreen(),
     const ReportsScreen(),
@@ -222,33 +221,59 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             Expanded(
               child: ListView(
                 children: [
-                  if (_visibleFor(context, 0)) _item(context, 0, Icons.dashboard_outlined, Icons.dashboard, t(context).dashboard),
-                  if (_visibleFor(context, 1)) _item(context, 1, Icons.event_note_outlined, Icons.event_note, t(context).appointments),
-                  if (_visibleFor(context, 2)) _item(context, 2, Icons.content_cut_outlined, Icons.content_cut, t(context).servicesManagement),
-                  if (_visibleFor(context, 3)) _item(context, 3, Icons.people_outline_rounded, Icons.people_rounded, t(context).staff),
-                  if (_visibleFor(context, 4)) _item(context, 4, Icons.local_offer_outlined, Icons.local_offer, t(context).discounts),
-                  if (_visibleFor(context, 5)) _item(context, 5, Icons.payments_outlined, Icons.payments, t(context).expenses),
-                  if (_visibleFor(context, 6)) _item(context, 6, Icons.star_outline_rounded, Icons.star_rounded, t(context).feedback),
-                  if (_visibleFor(context, 7))
+                  if (_visibleFor(context, 0))
+                    _item(context, 0, Icons.dashboard_outlined, Icons.dashboard,
+                        t(context).dashboard),
+                  if (_visibleFor(context, 1))
+                    _item(context, 1, Icons.event_note_outlined, Icons.event_note,
+                        t(context).appointments),
+                  if (_visibleFor(context, 2))
+                    _item(context, 2, Icons.content_cut_outlined, Icons.content_cut,
+                        t(context).servicesManagement),
+                  if (_visibleFor(context, 3))
+                    _item(context, 3, Icons.people_outline_rounded,
+                        Icons.people_rounded, t(context).staff),
+                  if (_visibleFor(context, 4))
+                    _item(context, 4, Icons.local_offer_outlined, Icons.local_offer,
+                        t(context).discounts),
+                  if (_visibleFor(context, 5))
+                    _item(context, 5, Icons.star_outline_rounded, Icons.star_rounded,
+                        t(context).feedback),
+                  if (_visibleFor(context, 6))
                     _item(
                       context,
-                      7,
+                      6,
                       Icons.schedule_send_outlined,
                       Icons.schedule_send,
                       t(context).requestOutOfHours,
                       badge: pendingCount,
                     ),
-                  if (_visibleFor(context, 8)) _item(context, 8, Icons.insights_outlined, Icons.insights, t(context).reports),
-                  if (_visibleFor(context, 9)) _item(context, 9, Icons.tune_rounded, Icons.tune, t(context).bookingPageSettings),
-                  if (_visibleFor(context, 10)) _item(context, 10, Icons.business_center_outlined, Icons.business_center, FeatureLabels.text(context, 'أدوات الأعمال', 'Business Tools')),
-                  if (_visibleFor(context, 11)) _item(context, 11, Icons.person_outline_rounded, Icons.person_rounded, t(context).profile),
-                  if (_visibleFor(context, 12))
+                  if (_visibleFor(context, 7))
+                    _item(context, 7, Icons.insights_outlined, Icons.insights,
+                        t(context).reports),
+                  if (_visibleFor(context, 8))
+                    _item(context, 8, Icons.tune_rounded, Icons.tune,
+                        t(context).bookingPageSettings),
+                  if (_visibleFor(context, 9))
                     _item(
                       context,
-                      12,
+                      9,
+                      Icons.business_center_outlined,
+                      Icons.business_center,
+                      FeatureLabels.text(
+                          context, 'أدوات الأعمال', 'Business Tools'),
+                    ),
+                  if (_visibleFor(context, 10))
+                    _item(context, 10, Icons.person_outline_rounded,
+                        Icons.person_rounded, t(context).profile),
+                  if (_visibleFor(context, 11))
+                    _item(
+                      context,
+                      11,
                       Icons.account_balance_wallet_outlined,
                       Icons.account_balance_wallet_rounded,
-                      FeatureLabels.text(context, 'المالية والمحاسبة', 'Finance & Accounting'),
+                      FeatureLabels.text(
+                          context, 'المالية والمحاسبة', 'Finance & Accounting'),
                     ),
                 ],
               ),
