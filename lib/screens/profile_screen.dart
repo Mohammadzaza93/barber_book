@@ -7,8 +7,8 @@ import '../providers/appointment_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/business_tools_provider.dart';
 import '../providers/discount_provider.dart';
-import '../providers/expense_provider.dart';
 import '../providers/feedback_provider.dart';
+import '../providers/finance_provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/shop_provider.dart';
 import '../services/auth_service.dart';
@@ -37,8 +37,7 @@ class ProfileScreen extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 32,
-                    backgroundColor:
-                        Theme.of(context).colorScheme.primary,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     child: const Icon(Icons.storefront_rounded,
                         color: Colors.white, size: 30),
                   ),
@@ -112,15 +111,7 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  /// Signs out and fully tears down the previous session.
-  ///
-  /// `RootGate` is the `home:` route, so any screen pushed on top of it (this
-  /// one included) survives a plain `signOut()` and would keep rendering the old
-  /// shop's data over the login screen. Popping to the first route and clearing
-  /// every shop-scoped provider plus the cached favourite barber closes that.
   Future<void> _signOut(BuildContext context) async {
-    // Everything that needs a BuildContext is captured before the first await
-    // so no lookup happens across an async gap.
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final auth = context.read<AuthProvider>();
@@ -128,8 +119,8 @@ class ProfileScreen extends StatelessWidget {
     final appointmentProvider = context.read<AppointmentProvider>();
     final businessTools = context.read<BusinessToolsProvider>();
     final discountProvider = context.read<DiscountProvider>();
-    final expenseProvider = context.read<ExpenseProvider>();
     final feedbackProvider = context.read<FeedbackProvider>();
+    final financeProvider = context.read<FinanceProvider>();
     final shopId = ShopManager.shopId;
 
     await auth.signOut();
@@ -138,11 +129,10 @@ class ProfileScreen extends StatelessWidget {
     appointmentProvider.reset();
     businessTools.reset();
     discountProvider.reset();
-    expenseProvider.reset();
     feedbackProvider.reset();
+    financeProvider.reset();
 
     if (shopId != null) {
-      // Best effort: a preference-write failure must not block sign-out.
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove('favorite_barber_$shopId');
@@ -192,8 +182,7 @@ class ProfileScreen extends StatelessWidget {
     if (ok == true) {
       if (!context.mounted) return;
       try {
-        await AuthService.instance
-            .changePassword(current.text, newPass.text);
+        await AuthService.instance.changePassword(current.text, newPass.text);
         if (!context.mounted) return;
         showSnack(context, t(context).settingsSaved);
       } catch (_) {
