@@ -9,12 +9,8 @@ import '../models/appointment.dart';
 import '../models/business_features.dart';
 import '../models/enums.dart';
 import '../services/firestore_service.dart';
+import '../services/firestore_inventory.dart';
 
-
-/// The `customers` collection is admin-only in firestore.rules, so only
-/// admins may run the appointment-derived customer-profile synchronisation.
-/// A null role means "unknown/not provided" and preserves the previous behaviour
-/// for callers that bind without a role (e.g. older tests).
 bool canSyncCustomerProfiles(AppRole? role) =>
     role == null || role == AppRole.admin;
 
@@ -36,13 +32,7 @@ class BusinessToolsProvider extends ChangeNotifier {
   List<InventoryItem> inventory = [];
   List<InventoryMovement> inventoryMovements = [];
   bool loading = true;
-
-  /// First unrecoverable stream error, surfaced in the UI instead of hanging.
   String? error;
-
-  /// True when Firestore rejected a read for this role. Staff legitimately
-  /// lack access to the manager-only collections, so this is expected rather
-  /// than exceptional.
   bool permissionDenied = false;
 
   List<Appointment> _appointments = [];
@@ -62,6 +52,7 @@ class BusinessToolsProvider extends ChangeNotifier {
     error = null;
     permissionDenied = false;
     final db = FirestoreService.instance;
+    final inv = FirestoreInventory.instance;
 
     _listen(db.watchPortfolio(shopId), (v) => portfolio = v);
     _listen(db.watchCustomers(shopId), (v) => customers = v);
@@ -72,14 +63,10 @@ class BusinessToolsProvider extends ChangeNotifier {
     _listen(db.watchChairSupplies(shopId), (v) => chairSupplies = v);
     _listen(db.watchChairWeeklyProfits(shopId), (v) => weeklyProfits = v);
     _listen(db.watchQueue(shopId), (v) => queue = v);
-    _listen(db.watchInventory(shopId), (v) => inventory = v);
-    _listen(db.watchInventoryMovements(shopId), (v) => inventoryMovements = v);
+    _listen(inv.watchInventory(shopId), (v) => inventory = v);
+    _listen(inv.watchInventoryMovements(shopId), (v) => inventoryMovements = v);
     _listen(db.watchPayments(shopId), (v) => payments = v);
 
-    // `appointments` is the gating stream: it is readable by every shop role
-    // (firestore.rules canReadShopData), so `loading` always resolves. The
-    // previously-gated `payments` stream is manager-only, which left staff
-    // spinning forever.
     _listen(
       db.watchAppointments(shopId),
       (v) {
@@ -90,8 +77,6 @@ class BusinessToolsProvider extends ChangeNotifier {
     );
   }
 
-  /// Subscribes [stream], funnelling both data and failures through one path so
-  /// a single denied collection can never leave the screen on a spinner.
   void _listen<T>(
     Stream<List<T>> stream,
     void Function(List<T> value) onData, {
@@ -110,7 +95,6 @@ class BusinessToolsProvider extends ChangeNotifier {
         } else {
           error ??= e.toString();
         }
-        // Never leave the caller waiting on a stream that can no longer deliver.
         if (gatesLoading) loading = false;
         notifyListeners();
       },
@@ -163,25 +147,24 @@ class BusinessToolsProvider extends ChangeNotifier {
   Future<void> addQueue(QueueEntry entry) =>
       FirestoreService.instance.saveQueueEntry(shopId, entry);
 
-  /// Records a payment directly against the appointment (so the collected
-  /// total and its derived payment status can never disagree), then applies
-  /// the loyalty points that the shop rules award for the same sale.
   Future<void> addPayment(Payment payment) async {
     final appointmentId =
         payment.appointmentId.trim().isEmpty ? null : payment.appointmentId.trim();
-    await FirestoreService.instance.recordPayment(shopId, Payment(
-      id: payment.id,
-      appointmentId: appointmentId ?? '',
-      customerName: payment.customerName,
-      customerPhone: payment.customerPhone,
-      chairId: payment.chairId,
-      employeeId: payment.employeeId,
-      amount: payment.amount,
-      materialCost: payment.materialCost,
-      method: payment.method,
-      paidAt: payment.paidAt,
-      notes: payment.notes,
-    ));
+    await FirestoreService.instance.recordPayment(
+        shopId,
+        Payment(
+          id: payment.id,
+          appointmentId: appointmentId ?? '',
+          customerName: payment.customerName,
+          customerPhone: payment.customerPhone,
+          chairId: payment.chairId,
+          employeeId: payment.employeeId,
+          amount: payment.amount,
+          materialCost: payment.materialCost,
+          method: payment.method,
+          paidAt: payment.paidAt,
+          notes: payment.notes,
+        ));
     final phone = payment.customerPhone.trim();
     if (phone.isEmpty) return;
     final matchingRules = loyaltyRules.where((rule) => rule.enabled);
@@ -216,15 +199,11 @@ class BusinessToolsProvider extends ChangeNotifier {
   }
 
   Future<void> saveInventoryItem(InventoryItem item) =>
-      FirestoreService.instance.saveInventoryItem(shopId, item);
+      FirestoreInventory.instance.saveInventoryItem(shopId, item);
 
   Future<void> deleteInventoryItem(String id) =>
-      FirestoreService.instance.deleteInventoryItem(shopId, id);
+      FirestoreInventory.instance.deleteInventoryItem(shopId, id);
 
-  /// يسجل حركة مخزون ويحدّث رصيد المادة تلقائياً.
-  /// - purchase: إضافة الكمية للرصيد وتحديث تكلفة الوحدة.
-  /// - usage / waste: خصم الكمية (يفشل إذا كان الرصيد غير كافٍ).
-  /// - adjustment: ضبط الرصيد على الكمية الفعلية بعد الجرد.
   Future<void> applyInventoryMovement(InventoryMovement movement) async {
     final item = inventory.where((x) => x.id == movement.itemId).firstOrNull;
     if (item == null) throw StateError('المادة غير موجودة في المخزون');
@@ -246,7 +225,7 @@ class BusinessToolsProvider extends ChangeNotifier {
       default:
         throw StateError('نوع حركة غير معروف');
     }
-    await FirestoreService.instance.saveInventoryItem(
+    await FirestoreInventory.instance.saveInventoryItem(
       shopId,
       item.copyWith(
         quantity: newQuantity,
@@ -256,20 +235,14 @@ class BusinessToolsProvider extends ChangeNotifier {
         updatedAt: DateTime.now(),
       ),
     );
-    await FirestoreService.instance.addInventoryMovement(shopId, movement);
+    await FirestoreInventory.instance.addInventoryMovement(shopId, movement);
   }
 
   String normalizePhone(String value) =>
       value.replaceAll(RegExp(r'[^0-9+]'), '');
 
   Future<void> _syncCustomerProfiles(List<Appointment> appointments) async {
-    // Skipping the sync for staff avoids a stream of denied writes instead of
-    // relying on catching each one after Firestore rejects it.
     if (!canSyncCustomerProfiles(_role)) return;
-    // Pin the shop this sync belongs to. If a sign-out / account switch rebinds
-    // the provider mid-sync, the bound shop changes and every remaining write
-    // is abandoned so one tenant's derived profiles are never written into the
-    // next session's shop.
     final boundShop = _shopId;
     if (boundShop == null) return;
     final grouped = <String, List<Appointment>>{};
@@ -298,8 +271,10 @@ class BusinessToolsProvider extends ChangeNotifier {
       );
       final visits = completed.length;
       final spent = completed.fold<double>(0, (sum, a) => sum + a.totalAmount);
-      final first = completed.isEmpty ? existing?.firstVisitAt : completed.first.startTime;
-      final last = completed.isEmpty ? existing?.lastVisitAt : completed.last.startTime;
+      final first =
+          completed.isEmpty ? existing?.firstVisitAt : completed.first.startTime;
+      final last =
+          completed.isEmpty ? existing?.lastVisitAt : completed.last.startTime;
       final interval = _averageIntervalDays(completed);
       final expected = last != null && interval > 0
           ? last.add(Duration(days: interval.round()))
@@ -330,7 +305,8 @@ class BusinessToolsProvider extends ChangeNotifier {
             ? (existing?.preferredServiceIds ?? const [])
             : serviceIds,
         preferredEmployeeId: employeeId ?? existing?.preferredEmployeeId,
-        preferredTime: last == null ? (existing?.preferredTime ?? '') : _timeBucket(last),
+        preferredTime:
+            last == null ? (existing?.preferredTime ?? '') : _timeBucket(last),
         notes: existing?.notes ?? '',
         marketingOptIn: existing?.marketingOptIn ?? false,
         createdAt: existing?.createdAt ?? (first ?? DateTime.now()),
@@ -340,8 +316,6 @@ class BusinessToolsProvider extends ChangeNotifier {
         try {
           await FirestoreService.instance.saveCustomer(boundShop, profile);
         } on FirebaseException catch (e) {
-          // A permission-denied here is an expected capability boundary; any
-          // other failure is a real problem and must stay observable.
           if (e.code != 'permission-denied') rethrow;
         }
       }
@@ -353,9 +327,9 @@ class BusinessToolsProvider extends ChangeNotifier {
     var total = 0.0;
     for (var i = 1; i < appointments.length; i++) {
       total += appointments[i]
-          .startTime
-          .difference(appointments[i - 1].startTime)
-          .inHours /
+              .startTime
+              .difference(appointments[i - 1].startTime)
+              .inHours /
           24;
     }
     return total / (appointments.length - 1);
@@ -372,7 +346,8 @@ class BusinessToolsProvider extends ChangeNotifier {
     return sorted.take(limit).map((e) => e.key).toList();
   }
 
-  String? _topValue(Iterable<String> values) => _topValues(values, limit: 1).firstOrNull;
+  String? _topValue(Iterable<String> values) =>
+      _topValues(values, limit: 1).firstOrNull;
 
   String _timeBucket(DateTime date) {
     final hour = date.hour;
@@ -402,8 +377,6 @@ class BusinessToolsProvider extends ChangeNotifier {
     return true;
   }
 
-  /// Drops the bound shop and all twelve cached collections. Used on sign-out so
-  /// customer profiles and financials never survive into the next session.
   void reset() {
     for (final sub in _subs) {
       sub.cancel();
