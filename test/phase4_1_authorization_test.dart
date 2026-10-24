@@ -13,7 +13,6 @@ import 'package:barber_app/providers/appointment_provider.dart';
 import 'package:barber_app/providers/auth_provider.dart';
 import 'package:barber_app/providers/business_tools_provider.dart';
 import 'package:barber_app/providers/discount_provider.dart';
-import 'package:barber_app/providers/expense_provider.dart';
 import 'package:barber_app/providers/feedback_provider.dart';
 import 'package:barber_app/providers/shop_provider.dart';
 import 'package:barber_app/screens/admin/appointment_edit_screen.dart';
@@ -25,18 +24,6 @@ import 'package:barber_app/screens/admin/staff_screen.dart';
 import 'package:barber_app/screens/admin/unavailability_screen.dart';
 import 'package:barber_app/services/shop_manager.dart';
 
-/// PHASE 4.1 regression coverage for O-2 and O-4.
-///
-/// O-2: the UI must not offer write controls that the Firestore rules and
-/// callables reject. These widget tests assert that owner-only and
-/// manager-only affordances are gated purely by the session role.
-///
-/// O-4: sign-out / account-switch / auth-expiry must purge every shop-scoped
-/// provider so a previous session's data cannot leak into the next one.
-
-/// Builds an [AuthProvider] for a role without touching Firebase. In the test
-/// environment `firebaseReady` is false, so the constructor never opens an auth
-/// stream and the role can be set directly.
 AuthProvider _auth(AppRole role) {
   final provider = AuthProvider();
   provider.role = role;
@@ -55,16 +42,11 @@ Widget _app({required List<SingleChildWidget> providers, required Widget home}) 
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      // A unique key forces a fresh element tree on every pumpWidget call.
-      // Several tests re-pump the same `const` screen with a different session
-      // role; without this the reused element keeps the previous role's tree.
       home: KeyedSubtree(key: UniqueKey(), child: home),
     ),
   );
 }
 
-/// Gives the test a tall viewport so a ListView's off-screen children are
-/// actually built, which is required to observe gated sections.
 void _useLargeSurface(WidgetTester tester) {
   tester.view.physicalSize = const Size(1200, 4000);
   tester.view.devicePixelRatio = 1.0;
@@ -227,7 +209,6 @@ void main() {
       await tester.pump();
       expect(find.text(en.approved), findsNothing);
       expect(find.text(en.rejected), findsNothing);
-      // The request itself is still visible to staff (read-only).
       expect(find.text('Customer'), findsOneWidget);
     });
   });
@@ -323,15 +304,12 @@ void main() {
       final appts = AppointmentProvider()..appointments = [_appointment()];
       final tools = BusinessToolsProvider();
       final discounts = DiscountProvider()..loading = false;
-      final expenses = ExpenseProvider()..loading = false;
       final feedback = FeedbackProvider()..loading = false;
 
-      // Mirrors RootGate._resetDataProviders + AuthProvider._clearSession.
       shop.reset();
       appts.reset();
       tools.reset();
       discounts.reset();
-      expenses.reset();
       feedback.reset();
       ShopManager.reset();
 
