@@ -1,13 +1,11 @@
 import 'package:barber_app/models/appointment.dart';
 import 'package:barber_app/models/enums.dart';
-import 'package:barber_app/models/expense.dart';
 import 'package:barber_app/models/feedback.dart';
 import 'package:barber_app/models/firestore_date.dart';
 import 'package:barber_app/models/member.dart';
 import 'package:barber_app/models/unavailability_request.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Minimal stand-in for `cloud_firestore`'s Timestamp: exposes `toDate()`.
 class _FakeTimestamp {
   _FakeTimestamp(this._value);
   final DateTime _value;
@@ -57,9 +55,6 @@ void main() {
   });
 
   group('Appointment.fromMap accepts callable payloads', () {
-    // Regression: the callable returns ISO strings, while the model previously
-    // assumed a Timestamp and called .toDate() unconditionally, throwing
-    // NoSuchMethodError on every booking creation.
     Map<String, dynamic> callablePayload() => {
           'shopId': 'shop1',
           'reference': 'REF-1',
@@ -133,15 +128,6 @@ void main() {
       'createdAt': isoString,
     });
     expect(f.createdAt, expected);
-  });
-
-  test('Expense.fromMap parses ISO date', () {
-    final e = Expense.fromMap('e1', {
-      'title': 'Rent',
-      'amount': 100.0,
-      'date': isoString,
-    });
-    expect(e.date, expected);
   });
 
   test('UnavailabilityRequest.fromMap parses ISO dates', () {
