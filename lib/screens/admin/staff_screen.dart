@@ -115,6 +115,7 @@ class StaffScreen extends StatelessWidget {
             ),
       floatingActionButton: canManage
           ? FloatingActionButton.extended(
+              heroTag: 'staff_fab',
               onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const StaffEditScreen()),

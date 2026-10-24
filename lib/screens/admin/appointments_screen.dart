@@ -108,6 +108,7 @@ if (_onlyToday) {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'appointments_fab',
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const AppointmentEditScreen()),

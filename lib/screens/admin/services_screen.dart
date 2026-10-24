@@ -102,6 +102,7 @@ class ServicesScreen extends StatelessWidget {
             ),
       floatingActionButton: canManage
           ? FloatingActionButton.extended(
+              heroTag: 'services_fab',
               onPressed: () => _editService(context),
               icon: const Icon(Icons.add_rounded),
               label: Text(t(context).addService),

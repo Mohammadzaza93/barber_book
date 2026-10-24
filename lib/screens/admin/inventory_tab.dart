@@ -114,6 +114,7 @@ class InventoryTab extends StatelessWidget {
     final lowStock = tools.inventory.where((item) => item.lowStock).length;
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'inventory_fab',
         onPressed: () => _showItemDialog(context),
         icon: const Icon(Icons.add_box_outlined),
         label: const Text('إضافة مادة'),
