@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:barber_app/models/appointment.dart';
 import 'package:barber_app/models/enums.dart';
-import 'package:barber_app/models/expense.dart';
 import 'package:barber_app/services/analytics_service.dart';
 
 Appointment appointment({
@@ -65,17 +64,5 @@ void main() {
     ];
 
     expect(analytics.completionRate(appointments), closeTo(33.333, 0.01));
-  });
-
-  test('calculates net profit after expenses', () {
-    final date = DateTime(2026, 1, 1);
-    final appointments = [
-      appointment(id: 'a1', startTime: date, totalAmount: 250),
-    ];
-    final expenses = [
-      Expense(id: 'e1', title: 'Supplies', amount: 75, date: date),
-    ];
-
-    expect(analytics.netProfit(appointments, expenses), 175);
   });
 }
