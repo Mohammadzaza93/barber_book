@@ -105,14 +105,21 @@ class AppointmentProvider extends ChangeNotifier {
         return false;
       }
       final sameEmployee = existing.employeeId == employeeId;
-      final sameChair = chairId != null && existing.chairId == chairId;
+      final sameChair = chairId != null &&
+          existing.chairId != null &&
+          existing.chairId == chairId;
       final overlaps = start.isBefore(existing.endTime) &&
           end.isAfter(existing.startTime);
       return overlaps && (sameEmployee || sameChair);
     });
   }
 
-  /// Creates appointment directly via transaction to avoid conflicts
+  /// Creates an appointment after an in-memory conflict check, then writes
+  /// inside a transaction that re-validates the same documents when possible.
+  ///
+  /// Note: full collection queries cannot be done transactionally in Firestore.
+  /// For a single-owner admin app this is acceptable; two devices creating the
+  /// exact same slot at the same millisecond can still race.
   Future<String> create({
     required String shopId,
     required String employeeId,
@@ -130,26 +137,54 @@ class AppointmentProvider extends ChangeNotifier {
     required double totalAmount,
     String? createdById,
   }) async {
+    // Fast path against the already-loaded list (UI should also call hasConflict).
+    if (hasConflict(
+      employeeId: employeeId,
+      chairId: chairId,
+      start: start,
+      end: end,
+    )) {
+      throw Exception('appointment-conflict');
+    }
+
     final db = FirebaseFirestore.instance;
-    final ref = db.collection('shops').doc(shopId).collection('appointments').doc();
+    final col = db.collection('shops').doc(shopId).collection('appointments');
+    final ref = col.doc();
+
+    // Collect candidate docs that might overlap (same employee, near the window).
+    // We re-check them inside the transaction with tx.get.
+    final windowStart = start.subtract(const Duration(hours: 12));
+    final windowEnd = end.add(const Duration(hours: 12));
+    final candidates = await col
+        .where('employeeId', isEqualTo: employeeId)
+        .where('startTime', isGreaterThanOrEqualTo: Timestamp.fromDate(windowStart))
+        .where('startTime', isLessThanOrEqualTo: Timestamp.fromDate(windowEnd))
+        .get();
+
     await db.runTransaction((tx) async {
-      // Check for conflicts
-      final snap = await db
-          .collection('shops')
-          .doc(shopId)
-          .collection('appointments')
-          .where('employeeId', isEqualTo: employeeId)
-          .get();
-      for (final doc in snap.docs) {
-        final data = doc.data();
-        if (data['status'] == 'cancelled' || data['status'] == 'noShow') continue;
+      for (final doc in candidates.docs) {
+        final fresh = await tx.get(doc.reference);
+        if (!fresh.exists) continue;
+        final data = fresh.data()!;
+        final status = data['status'] as String? ?? '';
+        if (status == 'cancelled' || status == 'noShow') continue;
         final s = (data['startTime'] as Timestamp).toDate();
         final e = (data['endTime'] as Timestamp).toDate();
         if (start.isBefore(e) && end.isAfter(s)) {
           throw Exception('appointment-conflict');
         }
+        // Chair overlap if both have the same chair.
+        if (chairId != null &&
+            data['chairId'] != null &&
+            data['chairId'] == chairId) {
+          if (start.isBefore(e) && end.isAfter(s)) {
+            throw Exception('appointment-conflict');
+          }
+        }
       }
-      final refNum = DateTime.now().millisecondsSinceEpoch.toString().substring(7);
+
+      final refNum =
+          DateTime.now().millisecondsSinceEpoch.toString().substring(7);
       tx.set(ref, {
         'shopId': shopId,
         'reference': 'APT-$refNum',
@@ -182,7 +217,10 @@ class AppointmentProvider extends ChangeNotifier {
   }
 
   Future<void> updateContact(Appointment a, String shopId,
-      {String? customerName, String? customerPhone, String? customerEmail, String? notes}) async {
+      {String? customerName,
+      String? customerPhone,
+      String? customerEmail,
+      String? notes}) async {
     await FirebaseFirestore.instance
         .collection('shops')
         .doc(shopId)
@@ -250,7 +288,8 @@ class AppointmentProvider extends ChangeNotifier {
       {required String method, required double amount}) async {
     if (amount <= 0) throw Exception('invalid-input');
     final db = FirebaseFirestore.instance;
-    final ref = db.collection('shops').doc(shopId).collection('appointments').doc(a.id);
+    final ref =
+        db.collection('shops').doc(shopId).collection('appointments').doc(a.id);
     await db.runTransaction((tx) async {
       final snap = await tx.get(ref);
       if (!snap.exists) throw Exception('appointment-not-found');
@@ -269,8 +308,8 @@ class AppointmentProvider extends ChangeNotifier {
         'collectedAmount': newCollected,
         'paymentStatus': ps.name,
       });
-      // Also write to payments collection for records
-      final payRef = db.collection('shops').doc(shopId).collection('payments').doc();
+      final payRef =
+          db.collection('shops').doc(shopId).collection('payments').doc();
       tx.set(payRef, {
         'appointmentId': a.id,
         'amount': amount,
@@ -299,16 +338,12 @@ class AppointmentProvider extends ChangeNotifier {
         .update({'rating': rating});
   }
 
-  Future<void> addRequest(
-      UnavailabilityRequest r, String shopId) async {
-    await FirestoreService.instance
-        .addUnavailabilityRequest(shopId, r);
+  Future<void> addRequest(UnavailabilityRequest r, String shopId) async {
+    await FirestoreService.instance.addUnavailabilityRequest(shopId, r);
   }
 
-  Future<void> updateRequest(
-      UnavailabilityRequest r, String shopId) async {
-    await FirestoreService.instance
-        .updateUnavailabilityRequest(shopId, r);
+  Future<void> updateRequest(UnavailabilityRequest r, String shopId) async {
+    await FirestoreService.instance.updateUnavailabilityRequest(shopId, r);
   }
 
   /// Drops the bound shop and all cached appointments/requests. Used on
