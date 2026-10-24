@@ -8,7 +8,6 @@ import 'providers/business_tools_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/connection_provider.dart';
 import 'providers/discount_provider.dart';
-import 'providers/expense_provider.dart';
 import 'providers/feedback_provider.dart';
 import 'providers/finance_provider.dart';
 import 'providers/language_provider.dart';
@@ -29,12 +28,7 @@ class BarberApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AppointmentProvider()),
         ChangeNotifierProvider(create: (_) => BusinessToolsProvider()),
         ChangeNotifierProvider(create: (_) => DiscountProvider()),
-        ChangeNotifierProvider(create: (_) => ExpenseProvider()),
         ChangeNotifierProvider(create: (_) => FeedbackProvider()),
-        // `AuthProvider` is registered above, so its reconnect handler can be
-        // wired here. FCM topic recovery is routed through the auth/session
-        // layer (which owns tenant identity) rather than into the connectivity
-        // provider itself.
         ChangeNotifierProvider(
           create: (context) => ConnectionProvider(
             onReconnected: context.read<AuthProvider>().reconcileShopTopic,
