@@ -1,4 +1,4 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/appointment.dart';
 import '../models/app_role.dart';
@@ -7,7 +7,6 @@ import '../models/booking_settings.dart';
 import '../models/discount.dart';
 import '../models/employee.dart';
 import '../models/enums.dart';
-import '../models/expense.dart';
 import '../models/feedback.dart';
 import '../models/member.dart';
 import '../models/service.dart';
@@ -17,30 +16,12 @@ class FirestoreService {
   FirestoreService._();
   static final instance = FirestoreService._();
 
-  // Lazy on purpose: this singleton is created while the provider tree is
-  // built, and `FirebaseFirestore.instance` throws [core/no-app] if Firebase
-  // was never initialized. Deferring the lookup keeps the config error screen
-  // reachable instead of crashing during build.
   FirebaseFirestore get _db => FirebaseFirestore.instance;
 
-  /// On-disk cache bound for offline persistence.
-  ///
-  /// Firestore rejects any value outside 1 MB..100 MB, and leaving the cache
-  /// unlimited risks unbounded storage growth on low-end or shared devices, so
-  /// a modest, documented bound is used instead of [Settings.CACHE_SIZE_UNLIMITED].
   static const int offlineCacheSizeBytes = 40 * 1024 * 1024;
 
   bool _offlineConfigured = false;
 
-  /// Enables Firestore's on-disk offline cache exactly once.
-  ///
-  /// Must be called after `Firebase.initializeApp` and before the first
-  /// Firestore operation — setting [Settings] afterwards throws
-  /// `[core/failed-precondition]`. Once enabled, supported reads fall back to
-  /// the cache when the device is offline and supported direct writes
-  /// (`.set()`/`.delete()` on stable document ids) are queued locally and
-  /// replayed on reconnection. Cloud Functions callables and `runTransaction`
-  /// calls remain server-only and are not queued.
   void configureOfflinePersistence() {
     if (_offlineConfigured) return;
     _db.settings = const Settings(
@@ -159,8 +140,6 @@ class FirestoreService {
               .map((d) => Appointment.fromMap(d.id, d.data()))
               .toList());
 
-  // Appointment writes handled directly via transactions in providers.
-
   Future<Appointment?> findAppointment(
       String shopId, String reference) async {
     final snap = await _coll(shopId, 'appointments')
@@ -201,31 +180,6 @@ class FirestoreService {
 
   Future<void> deleteDiscount(String shopId, String id) async {
     await _coll(shopId, 'discounts').doc(id).delete();
-  }
-
-  // The redemption counter is owned by the createAppointment callable. A
-  // client cannot increment it, so usage can never be minted locally.
-
-  // ---------- Expenses ----------
-
-  Stream<List<Expense>> watchExpenses(String shopId) =>
-      _coll(shopId, 'expenses')
-          .orderBy('date', descending: true)
-          .snapshots()
-          .map((snap) => snap.docs
-              .map((d) => Expense.fromMap(d.id, d.data()))
-              .toList());
-
-  Future<void> addExpense(String shopId, Expense e) async {
-    await _coll(shopId, 'expenses').doc(e.id).set(e.toMap());
-  }
-
-  Future<void> updateExpense(String shopId, Expense e) async {
-    await _coll(shopId, 'expenses').doc(e.id).set(e.toMap());
-  }
-
-  Future<void> deleteExpense(String shopId, String id) async {
-    await _coll(shopId, 'expenses').doc(id).delete();
   }
 
   // ---------- Feedback ----------
@@ -271,7 +225,7 @@ class FirestoreService {
     await _coll(shopId, 'requests').doc(r.id).set(r.toMap());
   }
 
-    // ---------- Portfolio ----------
+  // ---------- Portfolio ----------
   Stream<List<PortfolioItem>> watchPortfolio(String shopId) =>
       _coll(shopId, 'portfolio')
           .orderBy('createdAt', descending: true)
@@ -356,7 +310,8 @@ class FirestoreService {
   Future<void> deleteLoyaltyGift(String shopId, String id) =>
       _coll(shopId, 'loyaltyGifts').doc(id).delete();
 
-  Future<void> redeemLoyaltyGift(String shopId, String accountId, LoyaltyGift gift) async {
+  Future<void> redeemLoyaltyGift(
+      String shopId, String accountId, LoyaltyGift gift) async {
     final accountRef = _coll(shopId, 'loyalty').doc(accountId);
     final giftRef = _coll(shopId, 'loyaltyGifts').doc(gift.id);
     await _db.runTransaction((transaction) async {
@@ -365,14 +320,17 @@ class FirestoreService {
       if (!accountSnap.exists || !giftSnap.exists) {
         throw StateError('السجل غير موجود');
       }
-      final account = LoyaltyAccount.fromMap(accountId, accountSnap.data() ?? {});
+      final account =
+          LoyaltyAccount.fromMap(accountId, accountSnap.data() ?? {});
       final currentGift = LoyaltyGift.fromMap(gift.id, giftSnap.data() ?? {});
       if (account.points < currentGift.pointsCost || !currentGift.isAvailable) {
         throw StateError('النقاط غير كافية أو الهدية غير متاحة');
       }
       final updatedAccount = account.copyWith(
         points: account.points - currentGift.pointsCost,
-        tier: account.copyWith(points: account.points - currentGift.pointsCost).calculatedTier,
+        tier: account
+            .copyWith(points: account.points - currentGift.pointsCost)
+            .calculatedTier,
         updatedAt: DateTime.now(),
       );
       transaction.set(accountRef, updatedAccount.toMap());
@@ -384,7 +342,8 @@ class FirestoreService {
 
   // ---------- Chairs ----------
   Stream<List<Chair>> watchChairs(String shopId) =>
-      _coll(shopId, 'chairs').orderBy('name').snapshots().map((snap) => snap.docs
+      _coll(shopId, 'chairs').orderBy('name').snapshots().map((snap) => snap
+          .docs
           .map((d) => Chair.fromMap(d.id, d.data()))
           .toList());
   Future<void> saveChair(String shopId, Chair chair) =>
@@ -440,9 +399,7 @@ class FirestoreService {
           .map((snap) => snap.docs
               .map((d) => Payment.fromMap(d.id, d.data()))
               .toList());
-  // Payment writes update the appointment (collected total + derived payment
-  // status) and the payment record in a single transaction, so the two can
-  // never disagree. The collected amount is capped at the appointment total.
+
   Future<PaymentStatus> recordPayment(String shopId, Payment payment) async {
     final db = FirebaseFirestore.instance;
     final payments = _coll(shopId, 'payments');
@@ -462,7 +419,9 @@ class FirestoreService {
       final collected = ((data['collectedAmount'] as num?) ?? 0).toDouble();
       final next = collected + payment.amount;
       if (next > total + 0.01) throw Exception('invalid-pricing');
-      status = next >= total - 0.01 ? PaymentStatus.paid : PaymentStatus.depositPaid;
+      status = next >= total - 0.01
+          ? PaymentStatus.paid
+          : PaymentStatus.depositPaid;
       tx.update(ref, {
         'collectedAmount': next,
         'paymentStatus': status.name,
@@ -495,7 +454,6 @@ class FirestoreService {
     return Member.fromMap(snap.id, snap.data() ?? {});
   }
 
-  /// يبحث عن محل يملكه المستخدم، وإلا عن محل انضم إليه كعضو.
   Future<({String? shopId, AppRole role})> resolveShopForUser(
       String uid) async {
     final ownedShopId = await findShopByOwner(uid);
@@ -505,89 +463,31 @@ class FirestoreService {
     final profile = await getUserProfile(uid);
     final joinedShopId = profile?['joinedShopId'] as String?;
     if (joinedShopId == null || joinedShopId.isEmpty) {
-      return (shopId: null, role: AppRole.staff);
+      return (shopId: null, role: AppRole.admin);
     }
-    final membership = await getMember(joinedShopId, uid);
-    if (membership == null) {
-      return (shopId: null, role: AppRole.staff);
+    final member = await getMember(joinedShopId, uid);
+    if (member == null) {
+      return (shopId: null, role: AppRole.admin);
     }
-    return (shopId: joinedShopId, role: AppRoleX.fromName(membership.role.name));
+    return (shopId: joinedShopId, role: member.role);
   }
 
   Future<Map<String, dynamic>?> getUserProfile(String uid) async {
     final snap = await _users().doc(uid).get();
-    return snap.exists ? snap.data() : null;
+    return snap.data();
   }
 
-  // Admin adds staff by email directly
-  Future<void> addMemberByEmail(
-      String shopId, String email, AppRole role) async {
-    // Find user by email
-    final users = await _users().where('email', isEqualTo: email).limit(1).get();
-    if (users.docs.isEmpty) throw Exception('user-not-found');
-    final uid = users.docs.first.id;
-    await _members(shopId).doc(uid).set({
-      'uid': uid,
-      'email': email,
-      'role': role.name,
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-    // Update user profile
-    await _users().doc(uid).set({
-      'joinedShopId': shopId,
-      'role': role.name,
-    }, SetOptions(merge: true));
+  Future<void> upsertUserProfile(String uid, Map<String, dynamic> data) async {
+    await _users().doc(uid).set(
+        {...data, 'updatedAt': FieldValue.serverTimestamp()},
+        SetOptions(merge: true));
   }
 
-  Future<void> updateMemberRole(
-      String shopId, String uid, AppRole role) async {
-    await _members(shopId).doc(uid).update({'role': role.name});
-    await _users().doc(uid).set({'role': role.name}, SetOptions(merge: true));
+  Future<void> setMember(String shopId, Member member) async {
+    await _members(shopId).doc(member.uid).set(member.toMap());
   }
 
-  Future<void> removeMember(String shopId, String uid) async {
+  Future<void> deleteMember(String shopId, String uid) async {
     await _members(shopId).doc(uid).delete();
-    await _users().doc(uid).set({'joinedShopId': FieldValue.delete()}, SetOptions(merge: true));
-  }
-
-  // ---------- Inventory ----------
-  Stream<List<InventoryItem>> watchInventory(String shopId) =>
-      _db.collection('shops').doc(shopId).collection('inventory')
-          .orderBy('name')
-          .snapshots()
-          .map((snap) => snap.docs
-              .map((d) => InventoryItem.fromMap(d.id, d.data()))
-              .toList());
-
-  Future<void> saveInventoryItem(String shopId, InventoryItem item) =>
-      _db.collection('shops').doc(shopId).collection('inventory').doc(item.id).set(item.toMap());
-
-  Future<void> deleteInventoryItem(String shopId, String id) =>
-      _db.collection('shops').doc(shopId).collection('inventory').doc(id).delete();
-
-  Stream<List<InventoryMovement>> watchInventoryMovements(String shopId) =>
-      _db.collection('shops').doc(shopId).collection('inventoryMovements')
-          .orderBy('createdAt', descending: true)
-          .limit(200)
-          .snapshots()
-          .map((snap) => snap.docs
-              .map((d) => InventoryMovement.fromMap(d.id, d.data()))
-              .toList());
-
-  Future<void> addInventoryMovement(
-          String shopId, InventoryMovement movement) =>
-      _db.collection('shops').doc(shopId).collection('inventoryMovements').doc(movement.id).set(movement.toMap());
-
-  // ---------- Customer helpers ----------
-  static String genReference() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final rand = DateTime.now().microsecondsSinceEpoch;
-    String s = '';
-    var seed = rand;
-    for (var i = 0; i < 6; i++) {
-      s += chars[seed % chars.length];
-      seed = seed ~/ 31;
-    }
-    return s;
   }
 }
