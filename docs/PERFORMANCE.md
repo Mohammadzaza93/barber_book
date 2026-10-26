@@ -1,62 +1,71 @@
-# تحسين الأداء وحجم التطبيق — barber_book
+# تحسين الأداء — barber_book (شامل التطبيق)
 
-مرجع سريع لما طُبّق وما يُفضّل مراعاته لاحقاً.
+## ما طُبّق على مستوى المشروع
 
-## 1. أداء البناء (UI)
+### 1. قواعد التحليل (`analysis_options.yaml`)
+- `prefer_const_constructors`
+- `prefer_const_literals_to_create_immutables`
+- `prefer_const_declarations`
+- `avoid_unnecessary_containers` / `sized_box_for_whitespace`
 
-| ممارسة | الحالة في المشروع |
-|--------|-------------------|
-| `const` على الـ widgets الثابتة | مفعّل عبر `prefer_const_constructors` في `analysis_options.yaml` |
-| تقسيم الشاشات الكبيرة | شاشة **وارد الزبائن** قُسّمت إلى ملخص / نموذج / سجل؛ `setState` محلي داخل النموذج فقط |
-| عدم رفع `setState` لأعلى الشجرة | النموذج لا يعيد بناء قائمة السجل عند الكتابة في الحقول |
-| `context.select` بدل `watch` الكامل | رأس السجل والقائمة يستمعان للحقول المطلوبة فقط |
+شغّل `flutter analyze` وأصلح تحذيرات `const` تدريجياً — لا تكسر التشغيل.
 
-### عند إضافة شاشات جديدة
+### 2. شاشات أُعيدت هيكلتها (تقسيم + setState محدود)
+
+| الشاشة | التحسين |
+|--------|----------|
+| **وارد الزبائن** (`daily_sales_screen`) | ملخص / نموذج / سجل منفصلين؛ `setState` داخل النموذج فقط |
+| **المصاريف التشغيلية** | نموذج + قائمة + مجموع؛ القائمة لا تُعاد عند الكتابة |
+| **لوحة التحكم** | أقسام مستقلة (`_Header`, `_StatsGrid`, charts…) مع `select`/`watch` محلي |
+| **الحجوزات** | شريط فلاتر + قائمة؛ البطاقة `StatelessWidget` |
+| **القشرة الرئيسية** | `IndexedStack` + `_visited` لا يبني تبويباً قبل فتحه |
+| **أدوات الأعمال** | `TabBarView` أصلاً يعزل التبويبات |
+
+### 3. حجم التطبيق
+- حذف `cross_file` (غير مستخدم)
+- الأصول: `logo.svg` فقط في `flutter.assets`
+- `icon_full.png` ~450KB → يُفضّل ضغطه قبل إعادة توليد الأيقونات
+
+### 4. إدارة الحالة
+- **Provider** يبقى المعيار (مناسب للحجم الحالي)
+- لا ترفع `watch` لأعلى شجرة إذا احتجت حقلاً واحداً — استخدم `context.select`
+- المنطق في `providers/` و`services/`؛ الواجهة في `screens/`
+
+## نمط يُتبع لأي شاشة جديدة
 
 ```dart
-// جيد: ثابت
-const Text('عنوان');
-const SizedBox(height: 12);
+class FooScreen extends StatelessWidget {
+  const FooScreen({super.key});
 
-// جيد: فصل النموذج عن القائمة
-class MyScreen extends StatelessWidget {
-  const MyScreen({super.key});
   @override
-  Widget build(BuildContext context) => const Column(
-    children: [_Summary(), _Form(), _List()],
-  );
+  Widget build(BuildContext context) {
+    return const Column(
+      children: [
+        _FooForm(),   // Stateful محلي إن لزم
+        _FooList(),   // select على القائمة فقط
+      ],
+    );
+  }
 }
 
-// تجنّب: setState في أعلى الشاشة يعيد بناء كل شيء
+// setState هنا فقط — لا يعيد بناء القائمة
+class _FooForm extends StatefulWidget {
+  const _FooForm();
+  @override
+  State<_FooForm> createState() => _FooFormState();
+}
 ```
 
-## 2. حجم التطبيق
-
-| بند | ملاحظة |
-|-----|--------|
-| `cross_file` | حُذف من `pubspec.yaml` (غير مستخدم في `lib/`) |
-| `icon_full.png` (~450KB) | يُفضّل ضغطه أو تحويله لـ WebP قبل إعادة توليد الأيقونات |
-| الأصول | حالياً `logo.svg` فقط في `flutter.assets` — جيد |
-| الحزم | `firebase_storage` / `image_picker` / `qr_flutter` مستخدمة في الإعدادات فقط — أبقِها إن بقيت الميزة |
+## أوامر
 
 ```powershell
-# بعد حذف حزم:
+git pull origin main
 flutter pub get
-flutter build apk --analyze-size
-```
-
-## 3. الهيكل وإدارة الحالة
-
-- **Provider** هو الاختيار الحالي (مناسب لحجم المشروع).
-- المنطق في `providers/` و`services/`؛ الواجهة في `screens/`.
-- المالية: مصدر وحيد `FinanceProvider` + `OperatingExpense` / `DailyFinanceEntry`.
-- لا حاجة لـ Bloc/Riverpod الآن إلا إذا كبر التعقيد (نماذج متعددة متزامنة، offline queue معقّد).
-
-## 4. أوامر تحقق
-
-```powershell
 flutter analyze
-flutter test
-# اختياري — حجم الإصدار:
-flutter build apk --release
+flutter run --profile   # قياس أداء حقيقي
 ```
+
+## متبقي اختياري (لاحقاً)
+- تقسيم `business_management_tabs.dart` (~44KB) لملفات تبويب منفصلة
+- ضغط `assets/brand/icon_full.png`
+- `RepaintBoundary` حول الرسوم البيانية الثقيلة إن ظهر بطء على أجهزة ضعيفة

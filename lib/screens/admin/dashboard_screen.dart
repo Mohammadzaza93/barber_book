@@ -15,40 +15,46 @@ import '../../widgets/feature_labels.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/stat_card.dart';
 
+/// لوحة التحكم — كل قسم يستمع فقط لما يحتاجه (تقليل rebuild).
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final shop = context.watch<ShopProvider>();
-    final appointments = context.watch<AppointmentProvider>();
-    final finance = context.watch<FinanceProvider>();
-    final settings = shop.settings;
-    final currency = settings?.currency ?? 'SAR';
-    final accent = parseHexColor(settings?.accentColorHex ?? '0xFFC6CBD4');
-
-    final analytics = AnalyticsService.instance;
-    final now = DateTime.now();
-    final monthStart = DateTime(now.year, now.month, 1);
-    final revenueMonth =
-        analytics.revenue(appointments.appointments, from: monthStart);
-    final expenseMonth = finance.expenses
-        .where((e) => !e.date.isBefore(monthStart))
-        .fold<double>(0, (s, e) => s + e.amountSyp);
-    final profitMonth = revenueMonth - expenseMonth;
-    final expensesAuthoritative = !finance.loading && finance.error == null;
-    final weekStart = DateTime(now.year, now.month, now.day)
-        .subtract(const Duration(days: 6));
-    final daily =
-        analytics.dailyRevenue(appointments.appointments, weekStart, 7);
-    final dailyBookings =
-        analytics.dailyBookings(appointments.appointments, weekStart, 7);
-
     return ListView(
       padding: const EdgeInsets.all(16),
+      children: const [
+        _DashboardHeader(),
+        SizedBox(height: 16),
+        _DashboardStatsGrid(),
+        SizedBox(height: 8),
+        _RevenueSection(),
+        SizedBox(height: 8),
+        _BookingsSection(),
+        SizedBox(height: 8),
+        _PopularServicesSection(),
+        SizedBox(height: 8),
+        _TopStaffSection(),
+        SizedBox(height: 16),
+      ],
+    );
+  }
+}
+
+class _DashboardHeader extends StatelessWidget {
+  const _DashboardHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final shopName = context.select<ShopProvider, String>(
+      (s) => s.settings?.shopName ?? '',
+    );
+    final now = DateTime.now();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          t(context).welcomeBackName(settings?.shopName ?? ''),
+          t(context).welcomeBackName(shopName),
           style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
@@ -60,65 +66,113 @@ class DashboardScreen extends StatelessWidget {
           DateFormat('EEEE, d MMMM', Intl.getCurrentLocale()).format(now),
           style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
         ),
-        const SizedBox(height: 16),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 1.45,
-          children: [
-            StatCard(
-              icon: Icons.event_available_rounded,
-              label: t(context).todayAppointments,
-              value: '${appointments.todayAppointments.length}',
-              color: accent,
-            ),
-            StatCard(
-              icon: Icons.event_note_rounded,
-              label: t(context).upcomingAppointments,
-              value: '${appointments.upcomingAppointments.length}',
-              color: const Color(0xFF059669),
-            ),
-            StatCard(
-              icon: Icons.payments_rounded,
-              label: t(context).revenueThisMonth,
-              value: fmtPrice(revenueMonth, currency),
-              color: const Color(0xFFD97706),
-            ),
-            StatCard(
-              icon: Icons.person_off_rounded,
-              label: t(context).noShowRate,
-              value:
-                  '${analytics.noShowRate(appointments.appointments).toStringAsFixed(0)}%',
-              color: const Color(0xFFB91C1C),
-            ),
-            StatCard(
-              icon: Icons.trending_up_rounded,
-              label: t(context).netProfit,
-              value: expensesAuthoritative
-                  ? fmtPrice(profitMonth, currency)
-                  : t(context).restrictedValue,
-              color: const Color(0xFF7C3AED),
-            ),
-            StatCard(
-              icon: Icons.people_alt_rounded,
-              label: t(context).customersCount,
-              value:
-                  '${analytics.uniqueCustomers(appointments.appointments)}',
-              color: const Color(0xFF0891B2),
-            ),
-            StatCard(
-              icon: Icons.receipt_long_rounded,
-              label: t(context).avgTicket,
-              value: fmtPrice(
-                  analytics.avgTicket(appointments.appointments), currency),
-              color: const Color(0xFFEA580C),
-            ),
-          ],
+      ],
+    );
+  }
+}
+
+class _DashboardStatsGrid extends StatelessWidget {
+  const _DashboardStatsGrid();
+
+  @override
+  Widget build(BuildContext context) {
+    final appointments = context.watch<AppointmentProvider>();
+    final finance = context.watch<FinanceProvider>();
+    final settings = context.watch<ShopProvider>().settings;
+    final currency = settings?.currency ?? 'SAR';
+    final accent = parseHexColor(settings?.accentColorHex ?? '0xFFC6CBD4');
+    final analytics = AnalyticsService.instance;
+    final now = DateTime.now();
+    final monthStart = DateTime(now.year, now.month, 1);
+    final revenueMonth =
+        analytics.revenue(appointments.appointments, from: monthStart);
+    final expenseMonth = finance.expenses
+        .where((e) => !e.date.isBefore(monthStart))
+        .fold<double>(0, (s, e) => s + e.amountSyp);
+    final profitMonth = revenueMonth - expenseMonth;
+    final expensesAuthoritative = !finance.loading && finance.error == null;
+
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: 1.45,
+      children: [
+        StatCard(
+          icon: Icons.event_available_rounded,
+          label: t(context).todayAppointments,
+          value: '${appointments.todayAppointments.length}',
+          color: accent,
         ),
-        const SizedBox(height: 8),
+        StatCard(
+          icon: Icons.event_note_rounded,
+          label: t(context).upcomingAppointments,
+          value: '${appointments.upcomingAppointments.length}',
+          color: const Color(0xFF059669),
+        ),
+        StatCard(
+          icon: Icons.payments_rounded,
+          label: t(context).revenueThisMonth,
+          value: fmtPrice(revenueMonth, currency),
+          color: const Color(0xFFD97706),
+        ),
+        StatCard(
+          icon: Icons.person_off_rounded,
+          label: t(context).noShowRate,
+          value:
+              '${analytics.noShowRate(appointments.appointments).toStringAsFixed(0)}%',
+          color: const Color(0xFFB91C1C),
+        ),
+        StatCard(
+          icon: Icons.trending_up_rounded,
+          label: t(context).netProfit,
+          value: expensesAuthoritative
+              ? fmtPrice(profitMonth, currency)
+              : t(context).restrictedValue,
+          color: const Color(0xFF7C3AED),
+        ),
+        StatCard(
+          icon: Icons.people_alt_rounded,
+          label: t(context).customersCount,
+          value: '${analytics.uniqueCustomers(appointments.appointments)}',
+          color: const Color(0xFF0891B2),
+        ),
+        StatCard(
+          icon: Icons.receipt_long_rounded,
+          label: t(context).avgTicket,
+          value: fmtPrice(
+              analytics.avgTicket(appointments.appointments), currency),
+          color: const Color(0xFFEA580C),
+        ),
+      ],
+    );
+  }
+}
+
+class _RevenueSection extends StatelessWidget {
+  const _RevenueSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final appointments =
+        context.select<AppointmentProvider, List<Appointment>>(
+            (p) => p.appointments);
+    final accentHex = context.select<ShopProvider, String>(
+        (s) => s.settings?.accentColorHex ?? '0xFFC6CBD4');
+    final currency = context.select<ShopProvider, String>(
+        (s) => s.settings?.currency ?? 'SAR');
+    final accent = parseHexColor(accentHex);
+    final now = DateTime.now();
+    final weekStart = DateTime(now.year, now.month, now.day)
+        .subtract(const Duration(days: 6));
+    final daily =
+        AnalyticsService.instance.dailyRevenue(appointments, weekStart, 7);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         SectionHeader(
           title: t(context).revenueLast7Days,
           trailing: Text(
@@ -136,12 +190,33 @@ class DashboardScreen extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 8),
+      ],
+    );
+  }
+}
+
+class _BookingsSection extends StatelessWidget {
+  const _BookingsSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final appointments =
+        context.select<AppointmentProvider, List<Appointment>>(
+            (p) => p.appointments);
+    final analytics = AnalyticsService.instance;
+    final now = DateTime.now();
+    final weekStart = DateTime(now.year, now.month, now.day)
+        .subtract(const Duration(days: 6));
+    final dailyBookings = analytics.dailyBookings(appointments, weekStart, 7);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         SectionHeader(
           title: FeatureLabels.text(
               context, 'الحجوزات (آخر 7 أيام)', 'Bookings (last 7 days)'),
           trailing: Text(
-            '${FeatureLabels.text(context, 'مكتمل', 'Completed')}: ${analytics.completionRate(appointments.appointments).toStringAsFixed(0)}%',
+            '${FeatureLabels.text(context, 'مكتمل', 'Completed')}: ${analytics.completionRate(appointments).toStringAsFixed(0)}%',
             style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
           ),
         ),
@@ -155,18 +230,49 @@ class DashboardScreen extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 8),
+      ],
+    );
+  }
+}
+
+class _PopularServicesSection extends StatelessWidget {
+  const _PopularServicesSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final shop = context.watch<ShopProvider>();
+    final appointments =
+        context.select<AppointmentProvider, List<Appointment>>(
+            (p) => p.appointments);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         SectionHeader(title: t(context).popularServices),
-        _PopularServices(
-            shop: shop, appointments: appointments.appointments),
-        const SizedBox(height: 8),
+        _PopularServices(shop: shop, appointments: appointments),
+      ],
+    );
+  }
+}
+
+class _TopStaffSection extends StatelessWidget {
+  const _TopStaffSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final shop = context.watch<ShopProvider>();
+    final appointments =
+        context.select<AppointmentProvider, List<Appointment>>(
+            (p) => p.appointments);
+    final currency = shop.settings?.currency ?? 'SAR';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         SectionHeader(title: t(context).topStaff),
         _TopStaff(
           shop: shop,
-          appointments: appointments.appointments,
+          appointments: appointments,
           currency: currency,
         ),
-        const SizedBox(height: 16),
       ],
     );
   }

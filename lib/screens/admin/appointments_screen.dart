@@ -13,6 +13,7 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/status_chip.dart';
 import 'appointment_edit_screen.dart';
 
+/// الحجوزات — الفلاتر محلية؛ البطاقة Stateless ولا تعيد بناء الشجرة كلها.
 class AppointmentsScreen extends StatefulWidget {
   const AppointmentsScreen({super.key});
 
@@ -27,83 +28,23 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final appointments = context.watch<AppointmentProvider>().appointments;
-    final shop = context.read<ShopProvider>();
-
-    final filtered = appointments.where((a) {
-if (_onlyToday) {
-      // Compared against the shop's local day, not the device's, and not the
-      // raw UTC components of the appointment.
-      if (!isSameShopDay(
-          a.startTime, DateTime.now(), ShopManager.timezoneOffsetMinutes)) {
-        return false;
-      }
-    }
-      if (_onlyPending && a.status != AppointmentStatus.requested) {
-        return false;
-      }
-      if (_filter != null && a.status != _filter) return false;
-      return true;
-    }).toList()
-      ..sort((a, b) => a.startTime.compareTo(b.startTime));
-
     return Scaffold(
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  FilterChip(
-                    label: Text(t(context).today),
-                    selected: _onlyToday,
-                    onSelected: (v) => setState(() => _onlyToday = v),
-                  ),
-                  const SizedBox(width: 8),
-                  FilterChip(
-                    label: Text(t(context).pending),
-                    selected: _onlyPending,
-                    onSelected: (v) => setState(() => _onlyPending = v),
-                  ),
-                  const SizedBox(width: 8),
-                  for (final s in AppointmentStatus.values)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        label: Text(statusLabel(context, s)),
-                        selected: _filter == s,
-                        onSelected: (v) =>
-                            setState(() => _filter = v ? s : null),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+          _FilterBar(
+            onlyToday: _onlyToday,
+            onlyPending: _onlyPending,
+            filter: _filter,
+            onToday: (v) => setState(() => _onlyToday = v),
+            onPending: (v) => setState(() => _onlyPending = v),
+            onStatus: (s) => setState(() => _filter = s),
           ),
           Expanded(
-            child: filtered.isEmpty
-                ? EmptyState(
-                    icon: Icons.event_note_rounded,
-                    title: t(context).noAppointments,
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, i) {
-                      final a = filtered[i];
-                      return _AppointmentCard(
-                        appointment: a,
-                        employeeName:
-                            shop.employeeById(a.employeeId)?.name ?? '-',
-                        serviceNames: a.serviceIds
-                            .map((id) => shop.serviceById(id)?.name ?? '')
-                            .where((n) => n.isNotEmpty)
-                            .join(' + '),
-                      );
-                    },
-                  ),
+            child: _AppointmentsList(
+              onlyToday: _onlyToday,
+              onlyPending: _onlyPending,
+              filter: _filter,
+            ),
           ),
         ],
       ),
@@ -116,6 +57,117 @@ if (_onlyToday) {
         icon: const Icon(Icons.add_rounded),
         label: Text(t(context).newAppointment),
       ),
+    );
+  }
+}
+
+class _FilterBar extends StatelessWidget {
+  const _FilterBar({
+    required this.onlyToday,
+    required this.onlyPending,
+    required this.filter,
+    required this.onToday,
+    required this.onPending,
+    required this.onStatus,
+  });
+
+  final bool onlyToday;
+  final bool onlyPending;
+  final AppointmentStatus? filter;
+  final ValueChanged<bool> onToday;
+  final ValueChanged<bool> onPending;
+  final ValueChanged<AppointmentStatus?> onStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            FilterChip(
+              label: Text(t(context).today),
+              selected: onlyToday,
+              onSelected: onToday,
+            ),
+            const SizedBox(width: 8),
+            FilterChip(
+              label: Text(t(context).pending),
+              selected: onlyPending,
+              onSelected: onPending,
+            ),
+            const SizedBox(width: 8),
+            for (final s in AppointmentStatus.values)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilterChip(
+                  label: Text(statusLabel(context, s)),
+                  selected: filter == s,
+                  onSelected: (v) => onStatus(v ? s : null),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AppointmentsList extends StatelessWidget {
+  const _AppointmentsList({
+    required this.onlyToday,
+    required this.onlyPending,
+    required this.filter,
+  });
+
+  final bool onlyToday;
+  final bool onlyPending;
+  final AppointmentStatus? filter;
+
+  @override
+  Widget build(BuildContext context) {
+    final appointments =
+        context.select<AppointmentProvider, List<Appointment>>(
+            (p) => p.appointments);
+    final shop = context.watch<ShopProvider>();
+
+    final filtered = appointments.where((a) {
+      if (onlyToday) {
+        if (!isSameShopDay(
+            a.startTime, DateTime.now(), ShopManager.timezoneOffsetMinutes)) {
+          return false;
+        }
+      }
+      if (onlyPending && a.status != AppointmentStatus.requested) {
+        return false;
+      }
+      if (filter != null && a.status != filter) return false;
+      return true;
+    }).toList()
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+    if (filtered.isEmpty) {
+      return EmptyState(
+        icon: Icons.event_note_rounded,
+        title: t(context).noAppointments,
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: filtered.length,
+      itemBuilder: (context, i) {
+        final a = filtered[i];
+        return _AppointmentCard(
+          appointment: a,
+          employeeName: shop.employeeById(a.employeeId)?.name ?? '-',
+          serviceNames: a.serviceIds
+              .map((id) => shop.serviceById(id)?.name ?? '')
+              .where((n) => n.isNotEmpty)
+              .join(' + '),
+        );
+      },
     );
   }
 }
@@ -142,10 +194,10 @@ class _AppointmentCard extends StatelessWidget {
             builder: (_) => AppointmentEditScreen(appointment: a),
           ),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         leading: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Text(
               DateFormat('HH:mm').format(a.startTime),
