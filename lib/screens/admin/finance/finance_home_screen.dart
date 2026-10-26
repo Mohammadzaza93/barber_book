@@ -6,7 +6,6 @@ import 'barber_settlement_screen.dart';
 import 'cash_boxes_screen.dart';
 import 'daily_sales_screen.dart';
 import 'expenses_screen.dart';
-import 'payments_screen.dart';
 import 'reports_screen.dart';
 import 'startup_costs_screen.dart';
 
@@ -36,9 +35,9 @@ class FinanceHomeScreen extends StatelessWidget {
                   const SizedBox(height: 8),
                   _row('إجمالي التكاليف التأسيسية', f.sumStartup()),
                   _row('إجمالي المصاريف التشغيلية', f.sumExpenses()),
-                  _row('إجمالي المبيعات', f.sumDailyTotal()),
+                  _row('إجمالي وارد الزبائن', f.sumDailyTotal()),
                   _row('حصة الحلاقين', f.sumBarberShares()),
-                  _row('حصة الصالون', f.sumSalonShares()),
+                  _row('حصة الصالون (وارد المحل)', f.sumSalonShares()),
                   const Divider(),
                   _row(
                     'صافي الربح بعد توزيع الصناديق',
@@ -55,15 +54,8 @@ class FinanceHomeScreen extends StatelessWidget {
           const SizedBox(height: 12),
           _tile(
             context,
-            'المدفوعات',
-            'تسجيل المبالغ المحصّلة، تكلفة المواد، والطريقة (نقد / بطاقة / تحويل)',
-            Icons.payments_rounded,
-            const PaymentsScreen(),
-          ),
-          _tile(
-            context,
-            'المبيعات اليومية',
-            'أدخل كل عملية: المبلغ، الحلاق، النسبة يدوياً، وتكلفة المواد',
+            'وارد الزبائن',
+            'المبيعات والمدفوعات — حدّد نوع الوارد (أجرة حلاقة، صبغة...) والمبلغ والحلاق',
             Icons.point_of_sale_rounded,
             const DailySalesScreen(),
           ),
