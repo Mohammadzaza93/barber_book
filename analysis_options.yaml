@@ -5,6 +5,15 @@ linter:
     prefer_single_quotes: true
     always_declare_return_types: false
     avoid_print: false
+    # —— أداء البناء ——
+    prefer_const_constructors: true
+    prefer_const_literals_to_create_immutables: true
+    prefer_const_declarations: true
+    unnecessary_const: true
+    # —— نظافة الكود ——
+    avoid_unnecessary_containers: true
+    sized_box_for_whitespace: true
+    use_key_in_widget_constructors: true
 
 analyzer:
   errors:

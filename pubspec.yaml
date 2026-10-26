@@ -43,14 +43,11 @@ dependencies:
 
   # Utils
   uuid: ^4.5.1
-  cross_file: ^0.3.4
   shared_preferences: ^2.3.2
 
   # Brand assets
   flutter_svg: ^2.0.10+1
   # Pinned to the 6.x line: 7.x requires AGP >= 8.12.1 / compileSdk 36
-  # (androidx.core 1.18.0), which this project's AGP 8.3.0 / compileSdk 35
-  # toolchain does not support. The 6.x API used here is identical.
   connectivity_plus: ^6.1.5
 
 dev_dependencies:
@@ -58,10 +55,6 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^4.0.0
   flutter_launcher_icons: ^0.14.1
-  # Used by test/widget_test.dart so the widget tree can be pumped without a
-  # real Firebase app. Test-only, never shipped. Must stay in step with the
-  # constraint declared by firebase_core; pinning it lower forces pub to pick a
-  # firebase_core whose native channels do not match.
   firebase_core_platform_interface: ^6.0.0
 
 flutter_launcher_icons:
