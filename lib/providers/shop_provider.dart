@@ -33,6 +33,7 @@ class ShopProvider extends ChangeNotifier {
   List<Employee> employees = [];
   bool loading = true;
 
+  /// First non-permission stream failure, surfaced instead of hanging.
   String? error;
   String? errorSuggestion;
   bool fromCache = false;
@@ -54,6 +55,8 @@ class ShopProvider extends ChangeNotifier {
     _hydrateCache(shopId);
     _listen(_watchSettings(shopId), (s) {
       settings = s;
+      // Publish the shop's UTC offset so day-bucketing in providers and screens
+      // agrees with the server's working-hours validation.
       ShopManager.timezoneOffsetMinutes = s.timezoneOffsetMinutes;
       loading = false;
       fromCache = false;
@@ -151,6 +154,8 @@ class ShopProvider extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// Subscribes [stream] with a shared error path so a denied or offline read
+  /// clears [loading] instead of spinning forever.
   void _listen<T>(
     Stream<T> stream,
     void Function(T value) onData, {
@@ -195,48 +200,31 @@ class ShopProvider extends ChangeNotifier {
     return null;
   }
 
-  Future<void> saveSettings(BookingSettings s) async {
-    final id = _boundShopId ?? ShopManager.shopId;
-    if (id == null) return;
-    await FirestoreService.instance.updateSettings(id, s.toMap());
+  Future<void> saveSettings(BookingSettings s, String shopId) async {
+    await FirestoreService.instance.updateSettings(shopId, s.toMap());
   }
 
-  Future<void> addService(Service s) async {
-    final id = _boundShopId ?? ShopManager.shopId;
-    if (id == null) return;
-    await FirestoreService.instance.addService(id, s);
+  Future<void> addService(Service s, String shopId) =>
+      FirestoreService.instance.addService(shopId, s);
+
+  Future<void> updateService(Service s, String shopId) async {
+    await FirestoreService.instance.updateService(shopId, s);
   }
 
-  Future<void> updateService(Service s) async {
-    final id = _boundShopId ?? ShopManager.shopId;
-    if (id == null) return;
-    await FirestoreService.instance.updateService(id, s);
+  Future<void> deleteService(String id, String shopId) =>
+      FirestoreService.instance.deleteService(shopId, id);
+
+  Future<void> addEmployee(Employee e, String shopId) =>
+      FirestoreService.instance.addEmployee(shopId, e);
+
+  Future<void> updateEmployee(Employee e, String shopId) async {
+    await FirestoreService.instance.updateEmployee(shopId, e);
   }
 
-  Future<void> deleteService(String serviceId) async {
-    final id = _boundShopId ?? ShopManager.shopId;
-    if (id == null) return;
-    await FirestoreService.instance.deleteService(id, serviceId);
-  }
+  Future<void> deleteEmployee(String id, String shopId) =>
+      FirestoreService.instance.deleteEmployee(shopId, id);
 
-  Future<void> addEmployee(Employee e) async {
-    final id = _boundShopId ?? ShopManager.shopId;
-    if (id == null) return;
-    await FirestoreService.instance.addEmployee(id, e);
-  }
-
-  Future<void> updateEmployee(Employee e) async {
-    final id = _boundShopId ?? ShopManager.shopId;
-    if (id == null) return;
-    await FirestoreService.instance.updateEmployee(id, e);
-  }
-
-  Future<void> deleteEmployee(String employeeId) async {
-    final id = _boundShopId ?? ShopManager.shopId;
-    if (id == null) return;
-    await FirestoreService.instance.deleteEmployee(id, employeeId);
-  }
-
+  /// Clears in-memory shop data on sign-out so the next session starts clean.
   void reset() {
     for (final s in _subs) {
       s.cancel();
