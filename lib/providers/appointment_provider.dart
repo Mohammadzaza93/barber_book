@@ -8,16 +8,23 @@ import '../models/appointment.dart';
 import '../models/enums.dart';
 import '../models/shop_time.dart';
 import '../models/unavailability_request.dart';
+import '../services/app_error.dart';
 import '../services/firestore_service.dart';
+import '../services/local_cache.dart';
 import '../services/shop_manager.dart';
 
 class AppointmentProvider extends ChangeNotifier {
   List<Appointment> appointments = [];
   List<UnavailabilityRequest> requests = [];
   bool loading = true;
+  bool fromCache = false;
 
-  /// First non-permission stream failure, surfaced instead of hanging.
+  /// رسالة مفهومة للمستخدم (عبر AppError).
   String? error;
+  String? errorSuggestion;
+
+  /// نافذة التحميل الكسول (أيام للخلف + للأمام).
+  int windowDays = 120;
 
   String? _boundShopId;
   final List<StreamSubscription> _subs = [];
@@ -31,18 +38,74 @@ class AppointmentProvider extends ChangeNotifier {
     _subs.clear();
     loading = true;
     error = null;
-    _listen(FirestoreService.instance.watchAppointments(shopId), (list) {
-      appointments = list;
-      loading = false;
-    }, gatesLoading: true);
+    errorSuggestion = null;
+    fromCache = false;
+    _hydrateCache(shopId);
+    _listen(
+      FirestoreService.instance.watchAppointments(
+        shopId,
+        windowDays: windowDays,
+      ),
+      (list) {
+        appointments = list;
+        loading = false;
+        fromCache = false;
+        _persistCache(shopId, list);
+      },
+      gatesLoading: true,
+    );
     _listen(FirestoreService.instance.watchUnavailabilityRequests(shopId),
         (list) {
       requests = list;
     });
   }
 
-  /// Subscribes [stream] with a shared error path so a denied or offline read
-  /// clears [loading] instead of spinning forever.
+  /// إعادة الاشتراك (مثلاً بعد خطأ شبكة).
+  void rebind() {
+    final id = _boundShopId;
+    if (id == null) return;
+    _boundShopId = null;
+    bind(id);
+  }
+
+  Future<void> _hydrateCache(String shopId) async {
+    try {
+      final raw = await LocalCache.instance.getJson(
+        LocalCache.instance.shopKey(shopId, 'appointments'),
+        maxAge: const Duration(days: 7),
+      );
+      if (raw is! List || _boundShopId != shopId) return;
+      if (appointments.isNotEmpty) return;
+      final list = <Appointment>[];
+      for (final item in raw) {
+        if (item is Map) {
+          final m = item.cast<String, dynamic>();
+          final id = m['id'] as String? ?? '';
+          if (id.isEmpty) continue;
+          list.add(Appointment.fromMap(id, m));
+        }
+      }
+      if (list.isEmpty) return;
+      appointments = list;
+      loading = false;
+      fromCache = true;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> _persistCache(String shopId, List<Appointment> list) async {
+    try {
+      final payload = list
+          .take(300)
+          .map((a) => a.toMap()..['id'] = a.id)
+          .toList();
+      await LocalCache.instance.putJson(
+        LocalCache.instance.shopKey(shopId, 'appointments'),
+        payload,
+      );
+    } catch (_) {}
+  }
+
   void _listen<T>(
     Stream<List<T>> stream,
     void Function(List<T> value) onData, {
@@ -55,9 +118,11 @@ class AppointmentProvider extends ChangeNotifier {
         notifyListeners();
       },
       onError: (Object e, StackTrace _) {
-        final code = e is FirebaseException ? e.code : '';
+        final app = AppError.from(e);
+        final code = e is FirebaseException ? e.code : app.code;
         if (code != 'permission-denied' && error == null) {
-          error = e.toString();
+          error = app.message;
+          errorSuggestion = app.suggestion;
         }
         if (gatesLoading) loading = false;
         notifyListeners();
@@ -67,8 +132,6 @@ class AppointmentProvider extends ChangeNotifier {
 
   List<Appointment> get todayAppointments {
     final now = DateTime.now();
-    // Window boundaries come from the shop's UTC offset, not the device zone,
-    // so "today" matches the shop's calendar day on any device.
     final offset = ShopManager.timezoneOffsetMinutes;
     final start = shopDayStart(now, offset);
     final end = shopDayEnd(now, offset);
@@ -114,12 +177,6 @@ class AppointmentProvider extends ChangeNotifier {
     });
   }
 
-  /// Creates an appointment after an in-memory conflict check, then writes
-  /// inside a transaction that re-validates the same documents when possible.
-  ///
-  /// Note: full collection queries cannot be done transactionally in Firestore.
-  /// For a single-owner admin app this is acceptable; two devices creating the
-  /// exact same slot at the same millisecond can still race.
   Future<String> create({
     required String shopId,
     required String employeeId,
@@ -137,7 +194,6 @@ class AppointmentProvider extends ChangeNotifier {
     required double totalAmount,
     String? createdById,
   }) async {
-    // Fast path against the already-loaded list (UI should also call hasConflict).
     if (hasConflict(
       employeeId: employeeId,
       chairId: chairId,
@@ -151,13 +207,12 @@ class AppointmentProvider extends ChangeNotifier {
     final col = db.collection('shops').doc(shopId).collection('appointments');
     final ref = col.doc();
 
-    // Collect candidate docs that might overlap (same employee, near the window).
-    // We re-check them inside the transaction with tx.get.
     final windowStart = start.subtract(const Duration(hours: 12));
     final windowEnd = end.add(const Duration(hours: 12));
     final candidates = await col
         .where('employeeId', isEqualTo: employeeId)
-        .where('startTime', isGreaterThanOrEqualTo: Timestamp.fromDate(windowStart))
+        .where('startTime',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(windowStart))
         .where('startTime', isLessThanOrEqualTo: Timestamp.fromDate(windowEnd))
         .get();
 
@@ -173,7 +228,6 @@ class AppointmentProvider extends ChangeNotifier {
         if (start.isBefore(e) && end.isAfter(s)) {
           throw Exception('appointment-conflict');
         }
-        // Chair overlap if both have the same chair.
         if (chairId != null &&
             data['chairId'] != null &&
             data['chairId'] == chairId) {
@@ -243,7 +297,6 @@ class AppointmentProvider extends ChangeNotifier {
         .delete();
   }
 
-  /// Cancel series in one operation
   Future<void> cancelSeries(String shopId, String seriesId) async {
     final db = FirebaseFirestore.instance;
     final snap = await db
@@ -283,7 +336,6 @@ class AppointmentProvider extends ChangeNotifier {
         .update({'status': s.name});
   }
 
-  /// Records a payment with caps
   Future<void> recordPayment(Appointment a, String shopId,
       {required String method, required double amount}) async {
     if (amount <= 0) throw Exception('invalid-input');
@@ -346,8 +398,6 @@ class AppointmentProvider extends ChangeNotifier {
     await FirestoreService.instance.updateUnavailabilityRequest(shopId, r);
   }
 
-  /// Drops the bound shop and all cached appointments/requests. Used on
-  /// sign-out so customer PII never survives into the next session.
   void reset() {
     for (final s in _subs) {
       s.cancel();
@@ -358,6 +408,8 @@ class AppointmentProvider extends ChangeNotifier {
     requests = [];
     loading = true;
     error = null;
+    errorSuggestion = null;
+    fromCache = false;
     notifyListeners();
   }
 
