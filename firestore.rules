@@ -167,7 +167,6 @@ service cloud.firestore {
         allow write: if isAdmin(shopId);
       }
 
-      // —— إدارة الفريق ——
       match /team_tasks/{docId} {
         allow read: if canReadShopData(shopId);
         allow create, update: if isAdmin(shopId) || isStaff(shopId);
@@ -187,6 +186,18 @@ service cloud.firestore {
       match /team_time_off/{docId} {
         allow read: if canReadShopData(shopId);
         allow create: if isAdmin(shopId) || isStaff(shopId);
+        allow update, delete: if isAdmin(shopId);
+      }
+
+      match /activity_log/{docId} {
+        allow read: if isAdmin(shopId);
+        allow create: if isAdmin(shopId) || isStaff(shopId);
+        allow update, delete: if false;
+      }
+
+      match /backups/{docId} {
+        allow read: if isAdmin(shopId);
+        allow create: if isAdmin(shopId);
         allow update, delete: if isAdmin(shopId);
       }
     }
