@@ -8,6 +8,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/business_tools_provider.dart';
 import '../../providers/shop_provider.dart';
 import 'business_management_tabs.dart';
+import 'inventory_tab.dart';
 
 class BusinessToolsScreen extends StatelessWidget {
   const BusinessToolsScreen({super.key});
@@ -15,7 +16,7 @@ class BusinessToolsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Column(
         children: [
           Material(
@@ -37,7 +38,10 @@ class BusinessToolsScreen extends StatelessWidget {
                     icon: const Icon(Icons.event_seat_outlined)),
                 Tab(
                     text: t(context).tabQueue,
-                    icon: const Icon(Icons.people_alt_outlined)),
+                    icon: const Icon(Icons.queue_outlined)),
+                const Tab(
+                    text: 'المخزون',
+                    icon: Icon(Icons.inventory_2_outlined)),
               ],
             ),
           ),
@@ -49,6 +53,7 @@ class BusinessToolsScreen extends StatelessWidget {
                 LoyaltyProgramTab(),
                 ChairOperationsTab(),
                 _QueueTab(),
+                InventoryTab(),
               ],
             ),
           ),
@@ -82,94 +87,83 @@ class _PortfolioTab extends StatelessWidget {
                     InputDecoration(labelText: t(context).portfolioImageUrl)),
             TextField(
                 controller: category,
-                decoration: InputDecoration(labelText: t(context).category)),
+                decoration:
+                    InputDecoration(labelText: t(context).portfolioCategory)),
             TextField(
                 controller: description,
+                maxLines: 2,
                 decoration:
                     InputDecoration(labelText: t(context).description)),
           ]),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(context, false),
               child: Text(t(context).cancel)),
           FilledButton(
-            onPressed: () {
-              if (title.text.trim().isEmpty || url.text.trim().isEmpty) return;
-              Navigator.pop(context, true);
-            },
-            child: Text(t(context).save),
-          ),
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(t(context).save)),
         ],
       ),
     );
-    if (result != true || !context.mounted) return;
-    final tools = context.read<BusinessToolsProvider>();
-    await tools.addPortfolio(PortfolioItem(
-      id: tools.newId(),
-      title: title.text.trim(),
-      imageUrl: url.text.trim(),
-      category: category.text.trim(),
-      description: description.text.trim(),
-      createdAt: DateTime.now(),
-    ));
+    final titleText = title.text.trim();
+    final urlText = url.text.trim();
+    final categoryText = category.text.trim();
+    final descriptionText = description.text.trim();
+    title.dispose();
+    url.dispose();
+    category.dispose();
+    description.dispose();
+    if (result != true || !context.mounted || titleText.isEmpty) return;
+    await context.read<BusinessToolsProvider>().addPortfolio(PortfolioItem(
+          id: context.read<BusinessToolsProvider>().newId(),
+          title: titleText,
+          imageUrl: urlText,
+          category: categoryText.isEmpty ? 'general' : categoryText,
+          description: descriptionText,
+          createdAt: DateTime.now(),
+        ));
   }
 
   @override
   Widget build(BuildContext context) {
     final tools = context.watch<BusinessToolsProvider>();
-    final canManage = context.watch<AuthProvider>().canManageRules;
     return Scaffold(
-      floatingActionButton: canManage
-          ? FloatingActionButton.extended(
-              heroTag: 'bt_portfolio_fab',
-              onPressed: () => _add(context),
-              icon: const Icon(Icons.add_photo_alternate_outlined),
-              label: Text(t(context).addPhoto),
-            )
-          : null,
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'portfolio_fab',
+        onPressed: () => _add(context),
+        icon: const Icon(Icons.add_photo_alternate_outlined),
+        label: Text(t(context).add),
+      ),
       body: tools.portfolio.isEmpty
           ? Center(child: Text(t(context).portfolioEmpty))
-          : GridView.builder(
-              padding: const EdgeInsets.all(16),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: .78),
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
               itemCount: tools.portfolio.length,
-              itemBuilder: (_, index) {
+              itemBuilder: (context, index) {
                 final item = tools.portfolio[index];
                 return Card(
-                  clipBehavior: Clip.antiAlias,
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Image.network(item.imageUrl,
-                              width: double.infinity,
+                  child: ListTile(
+                    leading: item.imageUrl.isEmpty
+                        ? const Icon(Icons.image_not_supported_outlined)
+                        : ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              item.imageUrl,
+                              width: 48,
+                              height: 48,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Center(
-                                  child: Icon(Icons.broken_image_outlined,
-                                      size: 40))),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
-                          child: Row(children: [
-                            Expanded(
-                                child: Text(item.title,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w700))),
-                            if (canManage)
-                              IconButton(
-                                  icon: const Icon(Icons.delete_outline),
-                                  onPressed: () =>
-                                      tools.deletePortfolio(item.id)),
-                          ]),
-                        ),
-                      ]),
+                              errorBuilder: (_, __, ___) =>
+                                  const Icon(Icons.broken_image_outlined),
+                            ),
+                          ),
+                    title: Text(item.title),
+                    subtitle: Text(item.category),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => tools.deletePortfolio(item.id),
+                    ),
+                  ),
                 );
               },
             ),
@@ -180,101 +174,106 @@ class _PortfolioTab extends StatelessWidget {
 class _QueueTab extends StatelessWidget {
   const _QueueTab();
 
-  Future<void> _addQueue(BuildContext context) async {
+  Future<void> _add(BuildContext context) async {
     final name = TextEditingController();
     final phone = TextEditingController();
     final shop = context.read<ShopProvider>();
-    String? employeeId = shop.activeEmployees.firstOrNull?.id;
-    final ok = await showDialog<bool>(
+    String? employeeId =
+        shop.activeEmployees.isEmpty ? null : shop.activeEmployees.first.id;
+    final result = await showDialog<bool>(
       context: context,
       builder: (_) => StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
-                title: Text(t(context).queueAddTitle),
-                content: Column(mainAxisSize: MainAxisSize.min, children: [
-                  TextField(
-                      controller: name,
-                      decoration: InputDecoration(
-                          labelText: t(context).customerNameField)),
-                  TextField(
-                      controller: phone,
-                      decoration:
-                          InputDecoration(labelText: t(context).phone)),
-                  DropdownButtonFormField<String>(
-                    value: employeeId,
-                    decoration:
-                        InputDecoration(labelText: t(context).employee),
-                    items: shop.activeEmployees
-                        .map((e) =>
-                            DropdownMenuItem(value: e.id, child: Text(e.name)))
-                        .toList(),
-                    onChanged: (v) => setState(() => employeeId = v),
-                  ),
-                ]),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text(t(context).cancel)),
-                  FilledButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: Text(t(context).add)),
-                ],
-              )),
+        builder: (context, setState) => AlertDialog(
+          title: Text(t(context).queueAddTitle),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                  controller: name,
+                  decoration:
+                      InputDecoration(labelText: t(context).customerNameField)),
+              TextField(
+                  controller: phone,
+                  keyboardType: TextInputType.phone,
+                  decoration:
+                      InputDecoration(labelText: t(context).phoneNumberField)),
+              if (shop.activeEmployees.isNotEmpty)
+                DropdownButtonFormField<String>(
+                  value: employeeId,
+                  decoration:
+                      InputDecoration(labelText: t(context).assignedBarberField),
+                  items: shop.activeEmployees
+                      .map((e) =>
+                          DropdownMenuItem(value: e.id, child: Text(e.name)))
+                      .toList(),
+                  onChanged: (v) => setState(() => employeeId = v),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(t(context).cancel)),
+            FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(t(context).save)),
+          ],
+        ),
+      ),
     );
-    if (ok != true || !context.mounted || employeeId == null) return;
-    final tools = context.read<BusinessToolsProvider>();
-    await tools.addQueue(QueueEntry(
-      id: tools.newId(),
-      customerName: name.text.trim(),
-      customerPhone: phone.text.trim(),
-      employeeId: employeeId!,
-      joinedAt: DateTime.now(),
-    ));
+    final nameText = name.text.trim();
+    final phoneText = phone.text.trim();
+    name.dispose();
+    phone.dispose();
+    if (result != true || !context.mounted || nameText.isEmpty) return;
+    await context.read<BusinessToolsProvider>().addQueue(QueueEntry(
+          id: context.read<BusinessToolsProvider>().newId(),
+          customerName: nameText,
+          customerPhone: phoneText,
+          employeeId: employeeId ?? '',
+          joinedAt: DateTime.now(),
+        ));
   }
 
   @override
   Widget build(BuildContext context) {
     final tools = context.watch<BusinessToolsProvider>();
-    final staff = context.watch<ShopProvider>().activeEmployees;
-    final waiting =
-        tools.queue.where((e) => e.status == QueueStatus.waiting).length;
+    final auth = context.watch<AuthProvider>();
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
-          heroTag: 'bt_queue_fab',
-          onPressed: () => _addQueue(context),
-          icon: const Icon(Icons.person_add),
-          label: Text(t(context).queueAddFab('$waiting'))),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: tools.queue.map((entry) {
-          final employee =
-              staff.where((e) => e.id == entry.employeeId).firstOrNull;
-          final next = entry.status == QueueStatus.waiting
-              ? QueueStatus.inService
-              : QueueStatus.completed;
-          return Card(
-            child: ListTile(
-              leading:
-                  CircleAvatar(child: Text('${tools.queue.indexOf(entry) + 1}')),
-              title: Text(entry.customerName),
-              subtitle: Text(
-                  '${employee?.name ?? t(context).unassigned} · ${entry.status.name} · ${DateFormat('HH:mm').format(entry.joinedAt)}'),
-              trailing: IconButton(
-                  icon: Icon(next == QueueStatus.inService
-                      ? Icons.play_arrow
-                      : Icons.check),
-                  onPressed: () => tools.saveQueue(entry.copyWith(
-                        status: next,
-                        startedAt: next == QueueStatus.inService
-                            ? DateTime.now()
-                            : entry.startedAt,
-                        completedAt: next == QueueStatus.completed
-                            ? DateTime.now()
-                            : entry.completedAt,
-                      ))),
-            ),
-          );
-        }).toList(),
+        heroTag: 'queue_fab',
+        onPressed: () => _add(context),
+        icon: const Icon(Icons.person_add_alt_1),
+        label: Text(t(context).add),
       ),
+      body: tools.queue.isEmpty
+          ? Center(child: Text(t(context).queueEmpty))
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
+              itemCount: tools.queue.length,
+              itemBuilder: (context, index) {
+                final entry = tools.queue[index];
+                return Card(
+                  child: ListTile(
+                    title: Text(entry.customerName),
+                    subtitle: Text(
+                      '${entry.customerPhone}  •  ${DateFormat('HH:mm').format(entry.joinedAt)}  •  ${entry.status.name}',
+                    ),
+                    trailing: auth.canManageRules
+                        ? IconButton(
+                            icon: const Icon(Icons.check_circle_outline),
+                            onPressed: () => tools.saveQueue(
+                                  entry.copyWith(
+                                    status: QueueStatus.completed,
+                                    completedAt: DateTime.now(),
+                                  ),
+                                ),
+                          )
+                        : null,
+                  ),
+                );
+              },
+            ),
     );
   }
 }
