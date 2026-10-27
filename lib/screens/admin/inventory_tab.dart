@@ -19,21 +19,15 @@ class InventoryTab extends StatelessWidget {
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(item == null ? 'إضافة مادة للمخزون' : 'تعديل مادة المخزون'),
+        title: Text(item == null ? 'مادة جديدة' : 'تعديل المادة'),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(controller: name, decoration: const InputDecoration(labelText: 'اسم المادة')),
-            TextField(controller: sku, decoration: const InputDecoration(labelText: 'رمز المادة (اختياري)')),
-            Row(children: [
-              Expanded(child: TextField(controller: category, decoration: const InputDecoration(labelText: 'الفئة'))),
-              const SizedBox(width: 8),
-              Expanded(child: TextField(controller: unit, decoration: const InputDecoration(labelText: 'الوحدة'))),
-            ]),
-            Row(children: [
-              Expanded(child: TextField(controller: quantity, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'الرصيد الحالي'))),
-              const SizedBox(width: 8),
-              Expanded(child: TextField(controller: cost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'تكلفة الوحدة'))),
-            ]),
+            TextField(controller: sku, decoration: const InputDecoration(labelText: 'رمز / SKU')),
+            TextField(controller: category, decoration: const InputDecoration(labelText: 'التصنيف')),
+            TextField(controller: unit, decoration: const InputDecoration(labelText: 'الوحدة')),
+            TextField(controller: quantity, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'الكمية الحالية')),
+            TextField(controller: cost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'تكلفة الوحدة (آخر شراء)')),
             TextField(controller: reorder, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'حد إعادة الطلب')),
           ]),
         ),
@@ -53,6 +47,7 @@ class InventoryTab extends StatelessWidget {
     name.dispose(); sku.dispose(); category.dispose(); unit.dispose(); quantity.dispose(); cost.dispose(); reorder.dispose();
     if (saved != true || !context.mounted || nameValue.isEmpty) return;
     final tools = context.read<BusinessToolsProvider>();
+    final now = DateTime.now();
     await tools.saveInventoryItem(InventoryItem(
       id: item?.id ?? const Uuid().v4(),
       name: nameValue,
@@ -62,7 +57,8 @@ class InventoryTab extends StatelessWidget {
       quantity: quantityValue,
       unitCost: costValue,
       reorderLevel: reorderValue,
-      updatedAt: DateTime.now(),
+      createdAt: item?.createdAt ?? now,
+      updatedAt: now,
       active: item?.active ?? true,
     ));
   }
@@ -71,15 +67,37 @@ class InventoryTab extends StatelessWidget {
     final quantity = TextEditingController();
     final unitCost = TextEditingController(text: item.unitCost.toString());
     final reason = TextEditingController();
-    final labels = {'purchase': 'شراء وإضافة للمخزون', 'usage': 'صرف يدوي', 'waste': 'هدر أو تلف', 'adjustment': 'جرد وتصحيح الرصيد'};
+    final labels = {
+      'purchase': 'شراء وإضافة للمخزون',
+      'usage': 'صرف يدوي',
+      'waste': 'هدر أو تلف',
+      'adjustment': 'جرد وتصحيح الرصيد',
+    };
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(labels[type] ?? 'حركة مخزون'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: quantity, autofocus: true, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: type == 'adjustment' ? 'الرصيد الفعلي بعد الجرد' : 'الكمية')),
-          if (type == 'purchase') TextField(controller: unitCost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'تكلفة الوحدة')),
-          TextField(controller: reason, decoration: const InputDecoration(labelText: 'السبب أو الملاحظة')),
+          TextField(
+            controller: quantity,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: type == 'adjustment' ? 'الرصيد الفعلي بعد الجرد' : 'الكمية',
+            ),
+          ),
+          if (type == 'purchase')
+            TextField(
+              controller: unitCost,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'تكلفة الوحدة (تحدّث آخر شراء)'),
+            ),
+          TextField(
+            controller: reason,
+            decoration: InputDecoration(
+              labelText: type == 'purchase' ? 'ملاحظة (اختياري)' : 'السبب (مطلوب)',
+            ),
+          ),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
@@ -90,88 +108,150 @@ class InventoryTab extends StatelessWidget {
     final quantityValue = double.tryParse(quantity.text.replaceAll(',', '.')) ?? 0;
     final costValue = double.tryParse(unitCost.text.replaceAll(',', '.')) ?? item.unitCost;
     final reasonValue = reason.text.trim();
-    quantity.dispose(); unitCost.dispose(); reason.dispose();
+    quantity.dispose();
+    unitCost.dispose();
+    reason.dispose();
     if (saved != true || !context.mounted || quantityValue < 0) return;
+    if (type != 'purchase' && reasonValue.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('السبب مطلوب لصرف/هدر/جرد')),
+      );
+      return;
+    }
     try {
-      await context.read<BusinessToolsProvider>().applyInventoryMovement(InventoryMovement(
-        id: const Uuid().v4(),
-        itemId: item.id,
-        type: type,
-        quantity: quantityValue,
-        unitCost: costValue,
-        reason: reasonValue,
-        createdAt: DateTime.now(),
-      ));
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تسجيل حركة المخزون')));
+      await context.read<BusinessToolsProvider>().applyInventoryMovement(
+            InventoryMovement(
+              id: const Uuid().v4(),
+              itemId: item.id,
+              type: type,
+              quantity: quantityValue,
+              unitCost: costValue,
+              reason: reasonValue,
+              createdAt: DateTime.now(),
+            ),
+          );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم تسجيل حركة المخزون')),
+        );
+      }
     } catch (error) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Bad state: ', '')),
+          ),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final tools = context.watch<BusinessToolsProvider>();
-    final lowStock = tools.inventory.where((item) => item.lowStock).length;
+    final items = tools.inventory;
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'inventory_fab',
         onPressed: () => _showItemDialog(context),
-        icon: const Icon(Icons.add_box_outlined),
-        label: const Text('إضافة مادة'),
+        icon: const Icon(Icons.add),
+        label: const Text('مادة'),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
         children: [
-          Card(child: Padding(padding: const EdgeInsets.all(14), child: Row(children: [
-            const Icon(Icons.inventory_2_outlined, size: 30),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('المخزون المركزي', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-              Text('${tools.inventory.length} مادة  •  $lowStock مواد تحت حد الطلب', style: TextStyle(color: Colors.grey.shade600)),
-            ])),
-          ]))),
-          const SizedBox(height: 8),
-          if (tools.inventory.isEmpty)
-            const Card(child: Padding(padding: EdgeInsets.all(24), child: Center(child: Text('لم تتم إضافة مواد بعد'))))
-          else
-            ...tools.inventory.map((item) => Card(
-              margin: const EdgeInsets.only(bottom: 8),
+          _InventoryDashboard(items: items),
+          const SizedBox(height: 12),
+          if (items.isEmpty)
+            const Card(
               child: ListTile(
-                onTap: () => _showItemDialog(context, item: item),
-                leading: CircleAvatar(child: Icon(item.lowStock ? Icons.warning_amber_rounded : Icons.inventory_2_outlined, color: item.lowStock ? Colors.orange : null)),
-                title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                subtitle: Text('${item.quantity.toStringAsFixed(2)} ${item.unit}  •  قيمة ${item.stockValue.toStringAsFixed(2)}'),
-                trailing: PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'edit') _showItemDialog(context, item: item);
-                    if (value == 'purchase' || value == 'usage' || value == 'waste' || value == 'adjustment') _showMovementDialog(context, item, value);
-                    if (value == 'delete') context.read<BusinessToolsProvider>().deleteInventoryItem(item.id);
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'purchase', child: Text('تسجيل شراء')),
-                    PopupMenuItem(value: 'usage', child: Text('تسجيل صرف')),
-                    PopupMenuItem(value: 'waste', child: Text('تسجيل هدر')),
-                    PopupMenuItem(value: 'adjustment', child: Text('جرد وتصحيح')),
-                    PopupMenuDivider(),
-                    PopupMenuItem(value: 'edit', child: Text('تعديل المادة')),
-                    PopupMenuItem(value: 'delete', child: Text('حذف المادة')),
-                  ],
-                ),
+                title: Text('لا مواد بعد'),
+                subtitle: Text('أضف شامبو، صبغة، شفرات… ثم سجّل الشراء والصرف'),
               ),
-            )),
+            )
+          else
+            ...items.map((item) => Card(
+                  child: ListTile(
+                    leading: Icon(
+                      item.outOfStock
+                          ? Icons.warning_amber_rounded
+                          : item.lowStock
+                              ? Icons.inventory_2_outlined
+                              : Icons.inventory_2,
+                      color: item.outOfStock
+                          ? Colors.red
+                          : item.lowStock
+                              ? Colors.orange
+                              : null,
+                    ),
+                    title: Text(item.name,
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text(
+                      '${item.quantity.toStringAsFixed(2)} ${item.unit}'
+                      '  •  قيمة ${item.stockValue.toStringAsFixed(2)}'
+                      '${item.lowStock ? '  •  تحت الحد' : ''}'
+                      '${!item.active ? '  •  معطّل' : ''}',
+                    ),
+                    trailing: PopupMenuButton<String>(
+                      onSelected: (value) {
+                        if (value == 'edit') {
+                          _showItemDialog(context, item: item);
+                        }
+                        if (value == 'purchase' ||
+                            value == 'usage' ||
+                            value == 'waste' ||
+                            value == 'adjustment') {
+                          _showMovementDialog(context, item, value);
+                        }
+                        if (value == 'delete') {
+                          context
+                              .read<BusinessToolsProvider>()
+                              .deleteInventoryItem(item.id);
+                        }
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'purchase', child: Text('تسجيل شراء')),
+                        PopupMenuItem(value: 'usage', child: Text('تسجيل صرف')),
+                        PopupMenuItem(value: 'waste', child: Text('تسجيل هدر')),
+                        PopupMenuItem(
+                            value: 'adjustment', child: Text('جرد وتصحيح')),
+                        PopupMenuDivider(),
+                        PopupMenuItem(value: 'edit', child: Text('تعديل المادة')),
+                        PopupMenuItem(
+                            value: 'delete', child: Text('حذف / تعطيل')),
+                      ],
+                    ),
+                  ),
+                )),
           if (tools.inventoryMovements.isNotEmpty) ...[
             const SizedBox(height: 12),
-            const Text('آخر حركات المخزون', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+            const Text('آخر حركات المخزون',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
             ...tools.inventoryMovements.take(30).map((movement) {
-              final item = tools.inventory.where((x) => x.id == movement.itemId).firstOrNull;
-              final sign = movement.type == 'purchase' ? '+' : movement.type == 'adjustment' ? '↔' : '-';
-              return Card(child: ListTile(
-                dense: true,
-                leading: Icon(movement.type == 'purchase' ? Icons.add_circle_outline : Icons.remove_circle_outline),
-                title: Text('${item?.name ?? 'مادة محذوفة'}  $sign${movement.quantity.toStringAsFixed(2)}'),
-                subtitle: Text('${movement.reason.isEmpty ? _movementLabel(movement.type) : movement.reason}  •  ${_movementLabel(movement.type)}'),
-              ));
+              final item = tools.inventory
+                  .where((x) => x.id == movement.itemId)
+                  .firstOrNull;
+              final sign = movement.type == 'purchase'
+                  ? '+'
+                  : movement.type == 'adjustment'
+                      ? '↔'
+                      : '-';
+              return Card(
+                child: ListTile(
+                  dense: true,
+                  leading: Icon(movement.type == 'purchase'
+                      ? Icons.add_circle_outline
+                      : Icons.remove_circle_outline),
+                  title: Text(
+                      '${item?.name ?? 'مادة'}  $sign${movement.quantity.toStringAsFixed(2)}'),
+                  subtitle: Text(
+                    '${movement.reason.isEmpty ? _movementLabel(movement.type) : movement.reason}'
+                    '  •  ${_movementLabel(movement.type)}'
+                    '${movement.balanceAfter != null ? '  → ${movement.balanceAfter!.toStringAsFixed(2)}' : ''}',
+                  ),
+                ),
+              );
             }),
           ],
         ],
@@ -184,6 +264,48 @@ class InventoryTab extends StatelessWidget {
         'usage' => 'صرف',
         'waste' => 'هدر',
         'adjustment' => 'جرد',
+        'damage' => 'تلف',
+        'expiry' => 'انتهاء صلاحية',
         _ => 'حركة',
       };
+}
+
+class _InventoryDashboard extends StatelessWidget {
+  const _InventoryDashboard({required this.items});
+  final List<InventoryItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = items.where((i) => i.active).toList();
+    final value = active.fold<double>(0, (s, i) => s + i.stockValue);
+    final low = active.where((i) => i.lowStock).length;
+    final out = active.where((i) => i.outOfStock).length;
+    final exp = active.where((i) => i.isExpired || i.expiringSoon).length;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'ملخص المخزون (تكلفة آخر شراء)',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                Chip(label: Text('أصناف: ${active.length}')),
+                Chip(label: Text('قيمة ≈ ${value.toStringAsFixed(0)}')),
+                Chip(label: Text('تحت الحد: $low')),
+                Chip(label: Text('نافد: $out')),
+                Chip(label: Text('صلاحية: $exp')),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
