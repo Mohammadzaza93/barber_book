@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 
@@ -41,7 +40,7 @@ class AppError {
         raw.contains('network') ||
         raw.contains('failed host') ||
         raw.contains('connection')) {
-      return const AppError(
+      return AppError(
         message: 'لا يوجد اتصال بالإنترنت',
         suggestion:
             'تحقق من الواي فاي أو بيانات الجوال ثم أعد المحاولة. '
@@ -50,7 +49,7 @@ class AppError {
       );
     }
     if (raw.contains('permission-denied') || raw.contains('permission_denied')) {
-      return const AppError(
+      return AppError(
         message: 'ليس لديك صلاحية لهذا الإجراء',
         suggestion:
             'اطلب من مالك الصالون منحك الدور المناسب (مدير / موظف).',
@@ -76,26 +75,26 @@ class AppError {
       case 'wrong-password':
       case 'invalid-credential':
       case 'user-not-found':
-        return const AppError(
+        return AppError(
           message: 'بيانات الدخول غير صحيحة',
           suggestion: 'تحقق من البريد وكلمة المرور، أو استخدم «نسيت كلمة المرور».',
           code: 'auth',
           canRetry: true,
         );
       case 'too-many-requests':
-        return const AppError(
+        return AppError(
           message: 'محاولات كثيرة',
           suggestion: 'انتظر دقيقة ثم حاول مرة أخرى.',
           code: code,
         );
       case 'network-request-failed':
-        return const AppError(
+        return AppError(
           message: 'تعذر الاتصال بالخادم',
           suggestion: 'تحقق من الإنترنت ثم أعد المحاولة.',
           code: code,
         );
       case 'email-already-in-use':
-        return const AppError(
+        return AppError(
           message: 'البريد مستخدم مسبقاً',
           suggestion: 'سجّل الدخول بدل إنشاء حساب جديد.',
           code: code,
@@ -114,14 +113,14 @@ class AppError {
     switch (code) {
       case 'unavailable':
       case 'deadline-exceeded':
-        return const AppError(
+        return AppError(
           message: 'الخادم غير متاح حالياً',
           suggestion:
               'انتظر قليلاً وأعد المحاولة. التطبيق قد يعرض آخر بيانات محفوظة محلياً.',
           code: code,
         );
       case 'permission-denied':
-        return const AppError(
+        return AppError(
           message: 'صلاحيات غير كافية',
           suggestion:
               'تأكد أن حسابك عضو في هذا الصالون وأن قواعد Firestore منشورة.',
@@ -129,20 +128,20 @@ class AppError {
           canRetry: false,
         );
       case 'not-found':
-        return const AppError(
+        return AppError(
           message: 'البيانات غير موجودة',
           suggestion: 'حدّث الصفحة أو تحقق من رقم الصالون.',
           code: code,
         );
       case 'resource-exhausted':
-        return const AppError(
+        return AppError(
           message: 'تم تجاوز حد الاستخدام',
           suggestion:
               'قلّل التحديثات المتكررة أو راجع حصة Firebase في لوحة التحكم.',
           code: code,
         );
       case 'failed-precondition':
-        return const AppError(
+        return AppError(
           message: 'العملية غير جاهزة',
           suggestion:
               'قد تحتاج فهرساً في Firestore أو بيانات ناقصة. راجع Console إن تكرر.',
