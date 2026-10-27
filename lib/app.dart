@@ -12,6 +12,7 @@ import 'providers/feedback_provider.dart';
 import 'providers/finance_provider.dart';
 import 'providers/language_provider.dart';
 import 'providers/shop_provider.dart';
+import 'providers/theme_provider.dart';
 import 'screens/root_gate.dart';
 import 'theme/app_theme.dart';
 
@@ -23,6 +24,7 @@ class BarberApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => LanguageProvider()..load()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()..load()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ShopProvider()),
         ChangeNotifierProvider(create: (_) => AppointmentProvider()),
@@ -54,11 +56,13 @@ class _Material extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageProvider>();
+    final theme = context.watch<ThemeProvider>();
     return MaterialApp(
       title: 'BarberBook',
       debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.light,
-      theme: buildAppTheme(),
+      themeMode: theme.mode,
+      theme: buildAppTheme(brightness: Brightness.light),
+      darkTheme: buildAppTheme(brightness: Brightness.dark),
       locale: lang.locale,
       supportedLocales: const [Locale('ar'), Locale('en')],
       localizationsDelegates: const [
