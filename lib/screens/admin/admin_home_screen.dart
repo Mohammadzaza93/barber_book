@@ -21,6 +21,7 @@ import 'dashboard_screen.dart';
 import 'discounts_screen.dart';
 import 'feedback_screen.dart';
 import 'finance/finance_home_screen.dart';
+import 'ops/ops_security_screen.dart';
 import 'reports_screen.dart';
 import 'services_screen.dart';
 import 'settings_screen.dart';
@@ -102,7 +103,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         parseHexColor(shop.settings?.primaryColorHex ?? '0xFF121316');
     final accent =
         parseHexColor(shop.settings?.accentColorHex ?? '0xFFC6CBD4');
-    // احترم ThemeMode من MaterialApp (فاتح/داكن/نظام)
     final brightness = Theme.of(context).brightness;
     final theme = buildAppTheme(
       primary: primary,
@@ -312,6 +312,19 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               value: isDark,
               onChanged: (_) =>
                   context.read<ThemeProvider>().toggleLightDark(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.security_rounded),
+              title: const Text('الأمان والنسخ الاحتياطي'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const OpsSecurityScreen(),
+                  ),
+                );
+              },
             ),
             ListTile(
               leading: const Icon(Icons.link_rounded),
