@@ -9,9 +9,11 @@ import '../../providers/appointment_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/language_provider.dart';
 import '../../providers/shop_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/connection_banner.dart';
 import '../../widgets/feature_labels.dart';
+import '../../widgets/live_badge.dart';
 import '../profile_screen.dart';
 import 'appointments_screen.dart';
 import 'business_tools_screen.dart';
@@ -25,49 +27,37 @@ import 'settings_screen.dart';
 import 'staff_screen.dart';
 import 'unavailability_screen.dart';
 
-/// Admin shell tab indices, in the same order as `_AdminHomeScreenState._screens`:
-/// 0 dashboard, 1 appointments, 2 services, 3 staff, 4 discounts,
-/// 5 feedback, 6 out-of-hours requests, 7 reports, 8 booking-page settings,
-/// 9 business tools, 10 profile, 11 finance & accounting.
-///
-/// Expenses live only under Finance (OperatingExpense). The old standalone
-/// Expenses tab was removed.
-///
-/// This is a UI-only capability map. Hiding a tab is a UX affordance, not a
-/// security boundary — the backend rules remain authoritative.
 const Set<int> adminTabsSet = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 
-/// Pure capability check so the navigation policy can be unit-tested without a
-/// widget tree.
 bool adminTabVisible(AppRole role, int index, {StaffPermissions? perms}) {
   if (role.isAdmin) {
     return adminTabsSet.contains(index);
   }
   final p = perms ?? StaffPermissions.minimal;
   switch (index) {
-    case 0: // dashboard
+    case 0:
       return false;
-    case 1: // appointments
+    case 1:
       return p.appointments;
-    case 2: // services
+    case 2:
       return p.services;
-    case 3: // staff
+    case 3:
       return p.staff;
-    case 4: // discounts
+    case 4:
       return p.discounts;
-    case 5: // feedback
+    case 5:
       return p.feedback;
-    case 6: // out of hours
+    case 6:
       return p.outOfHours;
-    case 7: // reports
+    case 7:
       return p.reports;
-    case 8: // settings
+    case 8:
       return p.settings;
-    case 9: // business tools
+    case 9:
       return p.businessTools;
-    case 10: // profile
+    case 10:
       return true;
-    case 11: // finance
+    case 11:
       return p.finance;
     default:
       return false;
@@ -83,10 +73,6 @@ class AdminHomeScreen extends StatefulWidget {
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   int _index = 0;
-
-  /// Tabs that have been opened. Restricted tabs are never built until visited,
-  /// so a staff session does not initialise manager-only screens/listeners just
-  /// because the admin shell is mounted.
   final Set<int> _visited = {0};
 
   bool _visibleFor(BuildContext context, int index) {
@@ -94,27 +80,35 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     return adminTabVisible(auth.role, index, perms: auth.permissions);
   }
 
-  final _screens = [
-    const DashboardScreen(),
-    const AppointmentsScreen(),
-    const ServicesScreen(),
-    const StaffScreen(),
-    const DiscountsScreen(),
-    const FeedbackScreen(),
-    const UnavailabilityScreen(),
-    const ReportsScreen(),
-    const SettingsScreen(),
-    const BusinessToolsScreen(),
-    const ProfileScreen(),
-    const FinanceHomeScreen(),
+  final _screens = const [
+    DashboardScreen(),
+    AppointmentsScreen(),
+    ServicesScreen(),
+    StaffScreen(),
+    DiscountsScreen(),
+    FeedbackScreen(),
+    UnavailabilityScreen(),
+    ReportsScreen(),
+    SettingsScreen(),
+    BusinessToolsScreen(),
+    ProfileScreen(),
+    FinanceHomeScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
     final shop = context.watch<ShopProvider>();
-    final primary = parseHexColor(shop.settings?.primaryColorHex ?? '0xFF121316');
-    final accent = parseHexColor(shop.settings?.accentColorHex ?? '0xFFC6CBD4');
-    final theme = buildAppTheme(primary: primary, accent: accent);
+    final primary =
+        parseHexColor(shop.settings?.primaryColorHex ?? '0xFF121316');
+    final accent =
+        parseHexColor(shop.settings?.accentColorHex ?? '0xFFC6CBD4');
+    // احترم ThemeMode من MaterialApp (فاتح/داكن/نظام)
+    final brightness = Theme.of(context).brightness;
+    final theme = buildAppTheme(
+      primary: primary,
+      accent: accent,
+      brightness: brightness,
+    );
 
     return Theme(
       data: theme,
@@ -123,8 +117,31 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           final pendingCount = appointments.pendingRequests.length;
           return Scaffold(
             appBar: AppBar(
-              title: Text(shop.settings?.shopName ?? 'BarberBook'),
+              title: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      shop.settings?.shopName ?? 'BarberBook',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const LiveBadge(compact: true),
+                ],
+              ),
               actions: [
+                IconButton(
+                  tooltip: brightness == Brightness.dark
+                      ? 'المظهر الفاتح'
+                      : 'المظهر الداكن',
+                  onPressed: () =>
+                      context.read<ThemeProvider>().toggleLightDark(context),
+                  icon: Icon(
+                    brightness == Brightness.dark
+                        ? Icons.light_mode_rounded
+                        : Icons.dark_mode_rounded,
+                  ),
+                ),
                 IconButton(
                   tooltip: t(context).openBookingPage,
                   onPressed: () => Navigator.push(
@@ -163,7 +180,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
   Widget _buildDrawer(BuildContext context, int pendingCount) {
     final lang = context.watch<LanguageProvider>();
+    final themeProv = context.watch<ThemeProvider>();
     final shop = context.read<ShopProvider>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Drawer(
       child: SafeArea(
         child: Column(
@@ -196,11 +216,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                           style: const TextStyle(
                               fontWeight: FontWeight.w800, fontSize: 16),
                         ),
-                        Text(
-                          t(context).appName,
-                          style: TextStyle(
-                              color: Colors.grey.shade600, fontSize: 12),
-                        ),
+                        const SizedBox(height: 2),
+                        const LiveBadge(compact: true),
                       ],
                     ),
                   ),
@@ -225,20 +242,20 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                     _item(context, 0, Icons.dashboard_outlined, Icons.dashboard,
                         t(context).dashboard),
                   if (_visibleFor(context, 1))
-                    _item(context, 1, Icons.event_note_outlined, Icons.event_note,
-                        t(context).appointments),
+                    _item(context, 1, Icons.event_note_outlined,
+                        Icons.event_note, t(context).appointments),
                   if (_visibleFor(context, 2))
-                    _item(context, 2, Icons.content_cut_outlined, Icons.content_cut,
-                        t(context).servicesManagement),
+                    _item(context, 2, Icons.content_cut_outlined,
+                        Icons.content_cut, t(context).servicesManagement),
                   if (_visibleFor(context, 3))
                     _item(context, 3, Icons.people_outline_rounded,
                         Icons.people_rounded, t(context).staff),
                   if (_visibleFor(context, 4))
-                    _item(context, 4, Icons.local_offer_outlined, Icons.local_offer,
-                        t(context).discounts),
+                    _item(context, 4, Icons.local_offer_outlined,
+                        Icons.local_offer, t(context).discounts),
                   if (_visibleFor(context, 5))
-                    _item(context, 5, Icons.star_outline_rounded, Icons.star_rounded,
-                        t(context).feedback),
+                    _item(context, 5, Icons.star_outline_rounded,
+                        Icons.star_rounded, t(context).feedback),
                   if (_visibleFor(context, 6))
                     _item(
                       context,
@@ -279,6 +296,23 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               ),
             ),
             const Divider(),
+            SwitchListTile(
+              secondary: Icon(
+                isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+              ),
+              title: Text(isDark ? 'المظهر الداكن' : 'المظهر الفاتح'),
+              subtitle: Text(
+                switch (themeProv.mode) {
+                  ThemeMode.system => 'حسب النظام',
+                  ThemeMode.light => 'فاتح ثابت',
+                  ThemeMode.dark => 'داكن ثابت',
+                },
+                style: const TextStyle(fontSize: 12),
+              ),
+              value: isDark,
+              onChanged: (_) =>
+                  context.read<ThemeProvider>().toggleLightDark(context),
+            ),
             ListTile(
               leading: const Icon(Icons.link_rounded),
               title: Text(t(context).shareBookingLink),

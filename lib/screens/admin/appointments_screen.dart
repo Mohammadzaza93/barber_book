@@ -10,10 +10,11 @@ import '../../providers/appointment_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/shop_manager.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/live_badge.dart';
+import '../../widgets/search_field.dart';
 import '../../widgets/status_chip.dart';
 import 'appointment_edit_screen.dart';
 
-/// الحجوزات — الفلاتر محلية؛ البطاقة Stateless ولا تعيد بناء الشجرة كلها.
 class AppointmentsScreen extends StatefulWidget {
   const AppointmentsScreen({super.key});
 
@@ -25,12 +26,36 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   AppointmentStatus? _filter;
   bool _onlyToday = false;
   bool _onlyPending = false;
+  final _search = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SearchField(
+                    controller: _search,
+                    hint: 'بحث: اسم، هاتف، مرجع، خدمة...',
+                    onChanged: (v) => setState(() => _query = v.trim()),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const LiveBadge(compact: true),
+              ],
+            ),
+          ),
           _FilterBar(
             onlyToday: _onlyToday,
             onlyPending: _onlyPending,
@@ -44,6 +69,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
               onlyToday: _onlyToday,
               onlyPending: _onlyPending,
               filter: _filter,
+              query: _query,
             ),
           ),
         ],
@@ -81,7 +107,7 @@ class _FilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -119,11 +145,13 @@ class _AppointmentsList extends StatelessWidget {
     required this.onlyToday,
     required this.onlyPending,
     required this.filter,
+    required this.query,
   });
 
   final bool onlyToday;
   final bool onlyPending;
   final AppointmentStatus? filter;
+  final String query;
 
   @override
   Widget build(BuildContext context) {
@@ -131,6 +159,7 @@ class _AppointmentsList extends StatelessWidget {
         context.select<AppointmentProvider, List<Appointment>>(
             (p) => p.appointments);
     final shop = context.watch<ShopProvider>();
+    final q = query.toLowerCase();
 
     final filtered = appointments.where((a) {
       if (onlyToday) {
@@ -143,6 +172,21 @@ class _AppointmentsList extends StatelessWidget {
         return false;
       }
       if (filter != null && a.status != filter) return false;
+      if (q.isNotEmpty) {
+        final employee = shop.employeeById(a.employeeId)?.name ?? '';
+        final services = a.serviceIds
+            .map((id) => shop.serviceById(id)?.name ?? id)
+            .join(' ');
+        final hay = [
+          a.customerName,
+          a.customerPhone,
+          a.reference,
+          a.notes,
+          employee,
+          services,
+        ].join(' ').toLowerCase();
+        if (!hay.contains(q)) return false;
+      }
       return true;
     }).toList()
       ..sort((a, b) => a.startTime.compareTo(b.startTime));
@@ -205,7 +249,10 @@ class _AppointmentCard extends StatelessWidget {
             ),
             Text(
               DateFormat('d MMM').format(a.startTime),
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+              style: TextStyle(
+                color: Theme.of(context).hintColor,
+                fontSize: 11,
+              ),
             ),
           ],
         ),
@@ -226,11 +273,13 @@ class _AppointmentCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(serviceNames,
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+              Text(serviceNames),
               Text(
                 '$employeeName · ${a.reference}',
-                style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                style: TextStyle(
+                  color: Theme.of(context).hintColor,
+                  fontSize: 12,
+                ),
               ),
             ],
           ),

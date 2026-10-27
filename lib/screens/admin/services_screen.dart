@@ -10,96 +10,193 @@ import '../../services/shop_manager.dart';
 import '../../widgets/confirm.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/labeled_field.dart';
+import '../../widgets/live_badge.dart';
+import '../../widgets/search_field.dart';
 
-class ServicesScreen extends StatelessWidget {
+class ServicesScreen extends StatefulWidget {
   const ServicesScreen({super.key});
+
+  @override
+  State<ServicesScreen> createState() => _ServicesScreenState();
+}
+
+class _ServicesScreenState extends State<ServicesScreen> {
+  final _search = TextEditingController();
+  String _query = '';
+  String? _categoryFilter; // null = الكل
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  String _categoryLabel(BuildContext context, String category) {
+    switch (category) {
+      case 'haircut':
+        return t(context).catHaircut;
+      case 'beard':
+        return t(context).catBeard;
+      case 'shave':
+        return t(context).catShave;
+      case 'styling':
+        return t(context).catStyling;
+      case 'color':
+        return t(context).catColor;
+      case 'treatment':
+        return t(context).catTreatment;
+      default:
+        return t(context).catOther;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final shop = context.watch<ShopProvider>();
-    // firestore.rules keeps catalog writes owner-only, so manager/staff get a
-    // read-only view. Hiding the controls is a UX affordance; the rules remain
-    // the authority and reject any write that bypasses the UI.
     final canManage = context.watch<AuthProvider>().canManageRules;
+    final q = _query.toLowerCase();
+
+    final filtered = shop.services.where((s) {
+      if (_categoryFilter != null && s.category != _categoryFilter) {
+        return false;
+      }
+      if (q.isEmpty) return true;
+      final hay = '${s.name} ${s.description} ${s.category}'.toLowerCase();
+      return hay.contains(q);
+    }).toList();
+
     return Scaffold(
-      body: shop.services.isEmpty
-          ? EmptyState(
-              icon: Icons.content_cut_rounded,
-              title: t(context).noServices,
-              action: canManage
-                  ? FilledButton.icon(
-                      onPressed: () => _editService(context),
-                      icon: const Icon(Icons.add_rounded),
-                      label: Text(t(context).addService),
-                    )
-                  : null,
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: shop.services.length,
-              itemBuilder: (context, i) {
-                final s = shop.services[i];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: ListTile(
-                    onTap: canManage
-                        ? () => _editService(context, service: s)
-                        : null,
-                    leading: CircleAvatar(
-                      backgroundColor: Color(s.colorValue).withOpacity(0.15),
-                      child: Icon(Icons.content_cut_rounded,
-                          color: Color(s.colorValue), size: 20),
-                    ),
-                    title: Row(
-                      children: [
-                        Expanded(
-                          child: Text(s.name,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w700)),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SearchField(
+                    controller: _search,
+                    hint: 'بحث عن خدمة...',
+                    onChanged: (v) => setState(() => _query = v.trim()),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const LiveBadge(compact: true),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  FilterChip(
+                    label: const Text('الكل'),
+                    selected: _categoryFilter == null,
+                    onSelected: (_) =>
+                        setState(() => _categoryFilter = null),
+                  ),
+                  const SizedBox(width: 8),
+                  for (final c in const [
+                    'haircut',
+                    'beard',
+                    'shave',
+                    'styling',
+                    'color',
+                    'treatment',
+                    'other',
+                  ])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: Text(_categoryLabel(context, c)),
+                        selected: _categoryFilter == c,
+                        onSelected: (v) => setState(
+                          () => _categoryFilter = v ? c : null,
                         ),
-                        if (s.highDemand)
-                          Container(
-                            margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.amber.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Text(
-                              '⚡',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          ),
-                      ],
+                      ),
                     ),
-                    subtitle: Text(
-                      '${fmtPrice(s.price, shop.settings?.currency ?? 'SAR')}'
-                      ' · ${s.durationMinutes} ${t(context).minutesShort}'
-                      ' · ${_categoryLabel(context, s.category)}',
-                      style:
-                          TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                    ),
-                    trailing: canManage
-                        ? IconButton(
-                            onPressed: () async {
-                              final ok = await confirmDialog(context,
-                                  title: t(context).deleteServiceConfirm,
-                                  confirmText: t(context).delete,
-                                  destructive: true);
-                              if (ok && context.mounted) {
-                                await context
-                                    .read<ShopProvider>()
-                                    .deleteService(s.id, ShopManager.shopId!);
-                              }
-                            },
-                            icon: const Icon(Icons.delete_outline_rounded),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: filtered.isEmpty
+                ? EmptyState(
+                    icon: Icons.content_cut_rounded,
+                    title: t(context).noServices,
+                    action: canManage
+                        ? FilledButton.icon(
+                            onPressed: () => _editService(context),
+                            icon: const Icon(Icons.add_rounded),
+                            label: Text(t(context).addService),
                           )
                         : null,
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, i) {
+                      final s = filtered[i];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: ListTile(
+                          onTap: canManage
+                              ? () => _editService(context, service: s)
+                              : null,
+                          leading: CircleAvatar(
+                            backgroundColor:
+                                Color(s.colorValue).withOpacity(0.15),
+                            child: Icon(Icons.content_cut_rounded,
+                                color: Color(s.colorValue), size: 20),
+                          ),
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  s.name,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              if (s.highDemand)
+                                const Text('⚡', style: TextStyle(fontSize: 12)),
+                            ],
+                          ),
+                          subtitle: Text(
+                            '${fmtPrice(s.price, shop.settings?.currency ?? 'SAR')}'
+                            ' · ${s.durationMinutes} ${t(context).minutesShort}'
+                            ' · ${_categoryLabel(context, s.category)}',
+                            style: TextStyle(
+                              color: Theme.of(context).hintColor,
+                              fontSize: 12,
+                            ),
+                          ),
+                          trailing: canManage
+                              ? IconButton(
+                                  onPressed: () async {
+                                    final ok = await confirmDialog(context,
+                                        title: t(context).deleteServiceConfirm,
+                                        confirmText: t(context).delete,
+                                        destructive: true);
+                                    if (ok && context.mounted) {
+                                      await context
+                                          .read<ShopProvider>()
+                                          .deleteService(
+                                              s.id, ShopManager.shopId!);
+                                    }
+                                  },
+                                  icon: const Icon(
+                                      Icons.delete_outline_rounded),
+                                )
+                              : null,
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
+          ),
+        ],
+      ),
       floatingActionButton: canManage
           ? FloatingActionButton.extended(
               heroTag: 'services_fab',
@@ -111,25 +208,13 @@ class ServicesScreen extends StatelessWidget {
     );
   }
 
-  String _categoryLabel(BuildContext context, String category) {
-    switch (category) {
-      case 'haircut': return t(context).catHaircut;
-      case 'beard': return t(context).catBeard;
-      case 'shave': return t(context).catShave;
-      case 'styling': return t(context).catStyling;
-      case 'color': return t(context).catColor;
-      case 'treatment': return t(context).catTreatment;
-      default: return t(context).catOther;
-    }
-  }
-
   Future<void> _editService(BuildContext context, {Service? service}) async {
     final shop = context.read<ShopProvider>();
     final currency = shop.settings?.currency ?? 'SAR';
     final name = TextEditingController(text: service?.name ?? '');
     final desc = TextEditingController(text: service?.description ?? '');
-    final price = TextEditingController(
-        text: service?.price.toString() ?? '');
+    final price =
+        TextEditingController(text: service?.price.toString() ?? '');
     final dur = TextEditingController(
         text: (service?.durationMinutes ?? 30).toString());
     final deposit = TextEditingController(
@@ -143,9 +228,8 @@ class ServicesScreen extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
-          title: Text(service == null
-              ? t(ctx).addService
-              : t(ctx).editService),
+          title: Text(
+              service == null ? t(ctx).addService : t(ctx).editService),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -174,7 +258,8 @@ class ServicesScreen extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: LabeledField(
-                        label: '${t(ctx).durationMinutes} (${t(ctx).minutesShort})',
+                        label:
+                            '${t(ctx).durationMinutes} (${t(ctx).minutesShort})',
                         child: TextField(
                           controller: dur,
                           keyboardType: TextInputType.number,
@@ -186,10 +271,16 @@ class ServicesScreen extends StatelessWidget {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   value: category,
-                  decoration: InputDecoration(
-                      labelText: t(ctx).category),
+                  decoration:
+                      InputDecoration(labelText: t(ctx).category),
                   items: [
-                    'haircut', 'beard', 'shave', 'styling', 'color', 'treatment', 'other',
+                    'haircut',
+                    'beard',
+                    'shave',
+                    'styling',
+                    'color',
+                    'treatment',
+                    'other',
                   ].map((c) {
                     return DropdownMenuItem(
                       value: c,
