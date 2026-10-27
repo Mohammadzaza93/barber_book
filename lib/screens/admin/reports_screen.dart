@@ -14,6 +14,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/stat_card.dart';
+import 'performance_report_screen.dart';
 
 enum _Period { daily, weekly, monthly }
 
@@ -54,6 +55,25 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        Card(
+          color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.35),
+          child: ListTile(
+            leading: const Icon(Icons.assessment_rounded),
+            title: const Text(
+              'تقرير الأداء الشامل',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            subtitle: const Text('مقارنة شهرية وسنوية للإيراد والمصروف والحجوزات'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const PerformanceReportScreen(),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
         SegmentedButton<_Period>(
           segments: [
             ButtonSegment(

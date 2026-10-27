@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../providers/finance_provider.dart';
+import '../performance_report_screen.dart';
 import 'barber_settlement_screen.dart';
 import 'cash_boxes_screen.dart';
 import 'daily_sales_screen.dart';
@@ -93,6 +94,13 @@ class FinanceHomeScreen extends StatelessWidget {
             'الإيرادات والمصروفات وصافي ما تبقى',
             Icons.bar_chart_rounded,
             const ReportsScreen(),
+          ),
+          _tile(
+            context,
+            'تقرير الأداء الشامل',
+            'مقارنة شهرية وسنوية للإيراد والمصروف والحجوزات ونسب التغير',
+            Icons.assessment_rounded,
+            const PerformanceReportScreen(),
           ),
         ],
       ),
