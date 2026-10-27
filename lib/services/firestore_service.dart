@@ -1,1 +1,1 @@
-PLACEHOLDER
+@/tmp/full_fs.dart
