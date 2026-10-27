@@ -5,12 +5,14 @@ import 'package:uuid/uuid.dart';
 import '../../l10n/strings.dart';
 import '../../models/employee.dart';
 import '../../models/staff_permissions.dart';
+import '../../models/team/team_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/shop_manager.dart';
 import '../../widgets/confirm.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/work_hours_editor.dart';
+import 'team/team_hub_screen.dart';
 
 class StaffScreen extends StatelessWidget {
   const StaffScreen({super.key});
@@ -18,101 +20,122 @@ class StaffScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shop = context.watch<ShopProvider>();
-    // Employees are an owner-only collection in firestore.rules, so manager and
-    // staff get a read-only roster. The rules stay authoritative regardless.
     final canManage = context.watch<AuthProvider>().canManageRules;
     return Scaffold(
-      body: shop.employees.isEmpty
-          ? EmptyState(
-              icon: Icons.content_cut_rounded,
-              title: t(context).noStaff,
-              action: canManage
-                  ? FilledButton.icon(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const StaffEditScreen()),
-                      ),
-                      icon: const Icon(Icons.add_rounded),
-                      label: Text(t(context).addStaff),
-                    )
-                  : null,
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: shop.employees.length,
-              itemBuilder: (context, i) {
-                final e = shop.employees[i];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: ListTile(
-                    onTap: canManage
-                        ? () => Navigator.push(
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TeamHubScreen()),
+              ),
+              icon: const Icon(Icons.groups_2_outlined),
+              label: const Text('إدارة الفريق: مهام · تقييم · حضور · إجازات'),
+            ),
+          ),
+          Expanded(
+            child: shop.employees.isEmpty
+                ? EmptyState(
+                    icon: Icons.content_cut_rounded,
+                    title: t(context).noStaff,
+                    action: canManage
+                        ? FilledButton.icon(
+                            onPressed: () => Navigator.push(
                               context,
                               MaterialPageRoute(
-                                  builder: (_) => StaffEditScreen(employee: e)),
-                            )
-                        : null,
-                    leading: CircleAvatar(
-                      backgroundColor: Color(e.colorValue).withOpacity(0.15),
-                      child: Text(
-                        e.name.isEmpty ? '?' : e.name.characters.first,
-                        style: TextStyle(
-                          color: Color(e.colorValue),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    title: Row(
-                      children: [
-                        Expanded(
-                          child: Text(e.name,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w700)),
-                        ),
-                        if (!e.active)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(10),
+                                  builder: (_) => const StaffEditScreen()),
                             ),
-                            child: Text(
-                              t(context).inactive,
-                              style: const TextStyle(
-                                  fontSize: 11, color: Colors.grey),
-                            ),
-                          ),
-                      ],
-                    ),
-                    subtitle: Text(
-                      e.email?.isNotEmpty == true
-                          ? e.email!
-                          : '${e.serviceIds.length} ${t(context).servicesSelected}',
-                      style:
-                          TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                    ),
-                    trailing: canManage
-                        ? IconButton(
-                            onPressed: () async {
-                              final ok = await confirmDialog(context,
-                                  title: t(context).deleteStaffConfirm,
-                                  confirmText: t(context).delete,
-                                  destructive: true);
-                              if (ok && context.mounted) {
-                                await context
-                                    .read<ShopProvider>()
-                                    .deleteEmployee(e.id, ShopManager.shopId!);
-                              }
-                            },
-                            icon: const Icon(Icons.delete_outline_rounded),
+                            icon: const Icon(Icons.add_rounded),
+                            label: Text(t(context).addStaff),
                           )
                         : null,
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: shop.employees.length,
+                    itemBuilder: (context, i) {
+                      final e = shop.employees[i];
+                      final role =
+                          TeamRolePreset.fromId(e.role).labelAr;
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: ListTile(
+                          onTap: canManage
+                              ? () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          StaffEditScreen(employee: e),
+                                    ),
+                                  )
+                              : null,
+                          leading: CircleAvatar(
+                            backgroundColor:
+                                Color(e.colorValue).withOpacity(0.15),
+                            child: Text(
+                              e.name.isEmpty ? '?' : e.name.characters.first,
+                              style: TextStyle(
+                                color: Color(e.colorValue),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(e.name,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700)),
+                              ),
+                              if (!e.active)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    t(context).inactive,
+                                    style: const TextStyle(
+                                        fontSize: 11, color: Colors.grey),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          subtitle: Text(
+                            '$role · ${e.serviceIds.length} ${t(context).servicesSelected}',
+                            style: TextStyle(
+                                color: Theme.of(context).hintColor,
+                                fontSize: 12),
+                          ),
+                          trailing: canManage
+                              ? IconButton(
+                                  onPressed: () async {
+                                    final ok = await confirmDialog(context,
+                                        title: t(context).deleteStaffConfirm,
+                                        confirmText: t(context).delete,
+                                        destructive: true);
+                                    if (ok && context.mounted) {
+                                      await context
+                                          .read<ShopProvider>()
+                                          .deleteEmployee(
+                                              e.id, ShopManager.shopId!);
+                                    }
+                                  },
+                                  icon:
+                                      const Icon(Icons.delete_outline_rounded),
+                                )
+                              : null,
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
+          ),
+        ],
+      ),
       floatingActionButton: canManage
           ? FloatingActionButton.extended(
               heroTag: 'staff_fab',
@@ -138,10 +161,10 @@ class StaffEditScreen extends StatefulWidget {
 
 class _StaffEditScreenState extends State<StaffEditScreen> {
   late final TextEditingController _name;
-  final _role = TextEditingController();
   final _phone = TextEditingController();
   final _email = TextEditingController();
   final _authUid = TextEditingController();
+  late String _roleId;
   late Map<int, List<WorkSlot>> _hours;
   late List<String> _serviceIds;
   late bool _active;
@@ -153,30 +176,34 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     super.initState();
     final e = widget.employee;
     _name = TextEditingController(text: e?.name ?? '');
-    _role.text = e?.role ?? 'barber';
+    _roleId = TeamRolePreset.fromId(e?.role).id;
     _phone.text = e?.phone ?? '';
     _email.text = e?.email ?? '';
     _authUid.text = e?.authUid ?? '';
     _hours = Map.from(e?.workingHours ?? {});
     _serviceIds = List.from(e?.serviceIds ?? []);
     _active = e?.active ?? true;
-    _perms = e?.permissions ?? StaffPermissions.minimal;
+    _perms = e?.permissions ?? StaffPermissions.forRole(_roleId);
   }
 
   @override
   void dispose() {
     _name.dispose();
-    _role.dispose();
     _phone.dispose();
     _email.dispose();
     _authUid.dispose();
     super.dispose();
   }
 
+  void _applyRolePreset(String roleId) {
+    setState(() {
+      _roleId = roleId;
+      _perms = StaffPermissions.forRole(roleId);
+    });
+  }
+
   Future<void> _save() async {
     if (_busy) return;
-    // Defensive: never attempt an owner-only write from a non-owner session,
-    // even if this screen was reached through an unguarded route.
     if (!context.read<AuthProvider>().canManageRules) return;
     final shop = context.read<ShopProvider>();
     final shopId = ShopManager.shopId!;
@@ -188,7 +215,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     final e = Employee(
       id: widget.employee?.id ?? const Uuid().v4(),
       name: _name.text.trim(),
-      role: _role.text.trim().isEmpty ? 'barber' : _role.text.trim(),
+      role: _roleId,
       phone: _phone.text.trim(),
       email: _email.text.trim().isEmpty ? '' : _email.text.trim(),
       authUid: _authUid.text.trim().isEmpty ? null : _authUid.text.trim(),
@@ -205,7 +232,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
         await shop.updateEmployee(e, shopId);
       }
       if (mounted) Navigator.pop(context);
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       showSnack(context, t(context).error);
     } finally {
@@ -216,8 +243,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
   @override
   Widget build(BuildContext context) {
     final shop = context.watch<ShopProvider>();
-    final auth = context.watch<AuthProvider>();
-    final canManage = auth.canManageRules;
+    final canManage = context.watch<AuthProvider>().canManageRules;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.employee == null
@@ -229,29 +255,37 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
         children: [
           TextFormField(
             controller: _name,
-            decoration:
-                InputDecoration(labelText: t(context).staffName, prefixIcon: const Icon(Icons.person_outline_rounded)),
+            decoration: InputDecoration(
+              labelText: t(context).staffName,
+              prefixIcon: const Icon(Icons.person_outline_rounded),
+            ),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  controller: _role,
-                  decoration:
-                      InputDecoration(labelText: t(context).role),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextFormField(
-                  controller: _phone,
-                  keyboardType: TextInputType.phone,
-                  decoration:
-                      InputDecoration(labelText: t(context).phone),
-                ),
-              ),
-            ],
+          DropdownButtonFormField<String>(
+            value: _roleId,
+            items: TeamRolePreset.all
+                .map(
+                  (r) => DropdownMenuItem(
+                    value: r.id,
+                    child: Text(r.labelAr),
+                  ),
+                )
+                .toList(),
+            onChanged: canManage
+                ? (v) {
+                    if (v != null) _applyRolePreset(v);
+                  }
+                : null,
+            decoration: InputDecoration(
+              labelText: t(context).role,
+              helperText: 'تطبيق قالب صلاحيات جاهز (يمكن تعديله يدوياً بالأسفل)',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _phone,
+            keyboardType: TextInputType.phone,
+            decoration: InputDecoration(labelText: t(context).phone),
           ),
           const SizedBox(height: 12),
           TextFormField(
@@ -260,7 +294,6 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
             decoration: const InputDecoration(
               labelText: 'بريد الموظف لربط الحساب',
               prefixIcon: Icon(Icons.email_outlined),
-              hintText: 'example@domain.com',
             ),
           ),
           const SizedBox(height: 12),
@@ -269,26 +302,28 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
             decoration: const InputDecoration(
               labelText: 'UID الحساب (اختياري)',
               prefixIcon: Icon(Icons.key_rounded),
-              hintText: 'يتم ربطه بحساب الموظف مباشرة',
             ),
           ),
           const SizedBox(height: 16),
-          Text(t(context).workingHours,
-              style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF0F172A))),
+          Text(
+            t(context).workingHours,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'جدول عمل ديناميكي — أيام وساعات لكل موظف',
+            style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+          ),
           const SizedBox(height: 8),
           WorkHoursEditor(
             value: _hours,
             onChanged: (m) => setState(() => _hours = m),
           ),
           const SizedBox(height: 16),
-          Text(t(context).availableFor,
-              style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF0F172A))),
+          Text(
+            t(context).availableFor,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -317,14 +352,15 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
           ),
           if (canManage) ...[
             const SizedBox(height: 16),
-            const Text('صلاحيات الموظف',
-                style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF0F172A))),
+            const Text(
+              'صلاحيات الموظف',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 4),
-            const Text('حدد الأقسام التي يمكن لهذا الموظف الوصول إليها',
-                style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const Text(
+              'حدد الأقسام — تتغير تلقائياً عند اختيار الدور ويمكن تخصيصها',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
             const SizedBox(height: 10),
             Card(
               child: Column(
@@ -332,8 +368,8 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                   SwitchListTile(
                       title: const Text('المواعيد'),
                       value: _perms.appointments,
-                      onChanged: (v) =>
-                          setState(() => _perms = _perms.copyWith(appointments: v))),
+                      onChanged: (v) => setState(
+                          () => _perms = _perms.copyWith(appointments: v))),
                   SwitchListTile(
                       title: const Text('المدفوعات'),
                       value: _perms.payments,
@@ -352,8 +388,8 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                   SwitchListTile(
                       title: const Text('الخصومات'),
                       value: _perms.discounts,
-                      onChanged: (v) =>
-                          setState(() => _perms = _perms.copyWith(discounts: v))),
+                      onChanged: (v) => setState(
+                          () => _perms = _perms.copyWith(discounts: v))),
                   SwitchListTile(
                       title: const Text('المصروفات'),
                       value: _perms.expenses,
@@ -367,8 +403,8 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                   SwitchListTile(
                       title: const Text('طلبات خارج الدوام'),
                       value: _perms.outOfHours,
-                      onChanged: (v) =>
-                          setState(() => _perms = _perms.copyWith(outOfHours: v))),
+                      onChanged: (v) => setState(
+                          () => _perms = _perms.copyWith(outOfHours: v))),
                   SwitchListTile(
                       title: const Text('التقارير'),
                       value: _perms.reports,
@@ -377,8 +413,8 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                   SwitchListTile(
                       title: const Text('أدوات الأعمال'),
                       value: _perms.businessTools,
-                      onChanged: (v) =>
-                          setState(() => _perms = _perms.copyWith(businessTools: v))),
+                      onChanged: (v) => setState(
+                          () => _perms = _perms.copyWith(businessTools: v))),
                   SwitchListTile(
                       title: const Text('المالية والمحاسبة'),
                       value: _perms.finance,
@@ -395,8 +431,9 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
           ],
           const SizedBox(height: 16),
           FilledButton(
-              onPressed: _busy ? null : _save,
-              child: Text(t(context).save)),
+            onPressed: _busy ? null : _save,
+            child: Text(t(context).save),
+          ),
         ],
       ),
     );
