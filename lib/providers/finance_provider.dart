@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/finance/finance_models.dart';
+import '../services/activity_log_service.dart';
 
 class FinanceProvider extends ChangeNotifier {
   String? _shopId;
@@ -70,6 +71,23 @@ class FinanceProvider extends ChangeNotifier {
         .collection('finance_daily');
   }
 
+  Future<void> _audit({
+    required String action,
+    required String entity,
+    String entityId = '',
+    String summary = '',
+  }) async {
+    final sid = _shopId;
+    if (sid == null) return;
+    await ActivityLogService.instance.log(
+      shopId: sid,
+      action: action,
+      entity: entity,
+      entityId: entityId,
+      summary: summary,
+    );
+  }
+
   void _listen(String shopId) {
     _subStartup = _col('startup').orderBy('date').snapshots().listen((snap) {
       startupCosts = snap.docs
@@ -112,36 +130,66 @@ class FinanceProvider extends ChangeNotifier {
   Future<void> addStartupCost(StartupCost c) async {
     if (_shopId == null) return;
     await _col('startup').doc(c.id).set(c.toMap());
+    await _audit(
+      action: 'create',
+      entity: 'startup_cost',
+      entityId: c.id,
+      summary: 'تأسيس: ${c.title}',
+    );
   }
 
   Future<void> deleteStartupCost(String id) async {
     if (_shopId == null) return;
     await _col('startup').doc(id).delete();
+    await _audit(
+        action: 'delete', entity: 'startup_cost', entityId: id, summary: 'حذف بند تأسيس');
   }
 
   Future<void> addExpense(OperatingExpense e) async {
     if (_shopId == null) return;
     await _col('expenses').doc(e.id).set(e.toMap());
+    await _audit(
+      action: 'create',
+      entity: 'expense',
+      entityId: e.id,
+      summary: 'مصروف: ${e.title} (${e.amountSyp})',
+    );
   }
 
   Future<void> deleteExpense(String id) async {
     if (_shopId == null) return;
     await _col('expenses').doc(id).delete();
+    await _audit(
+        action: 'delete', entity: 'expense', entityId: id, summary: 'حذف مصروف');
   }
 
   Future<void> saveBarber(BarberSettlement b) async {
     if (_shopId == null) return;
     await _col('barbers').doc(b.barberId).set(b.toMap(), SetOptions(merge: true));
+    await _audit(
+      action: 'update',
+      entity: 'barber_settlement',
+      entityId: b.barberId,
+      summary: 'تسوية حلاق ${b.barberId}',
+    );
   }
 
   Future<void> addDailyEntry(DailyFinanceEntry e) async {
     if (_shopId == null) return;
     await _daily().doc(e.id).set(e.toMap());
+    await _audit(
+      action: 'create',
+      entity: 'daily_sale',
+      entityId: e.id,
+      summary: 'وارد: ${e.serviceName} ${e.totalAmount}',
+    );
   }
 
   Future<void> deleteDailyEntry(String id) async {
     if (_shopId == null) return;
     await _daily().doc(id).delete();
+    await _audit(
+        action: 'delete', entity: 'daily_sale', entityId: id, summary: 'حذف وارد');
   }
 
   double sumStartup() => startupCosts.fold(0, (s, c) => s + c.amountSyp);

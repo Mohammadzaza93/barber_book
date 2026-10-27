@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/team/team_models.dart';
+import '../services/activity_log_service.dart';
 import '../services/firestore_team.dart';
 import '../services/shop_manager.dart';
 
@@ -57,23 +58,61 @@ class TeamProvider extends ChangeNotifier {
 
   String get _sid => shopId ?? ShopManager.shopId ?? '';
 
-  Future<void> saveTask(TeamTask t) => _api.saveTask(_sid, t);
-  Future<void> deleteTask(String id) => _api.deleteTask(_sid, id);
+  Future<void> _audit(String action, String entity, String entityId, String summary) async {
+    final sid = _sid;
+    if (sid.isEmpty) return;
+    await ActivityLogService.instance.log(
+      shopId: sid,
+      action: action,
+      entity: entity,
+      entityId: entityId,
+      summary: summary,
+    );
+  }
 
-  Future<void> saveEvaluation(TeamEvaluation e) =>
-      _api.saveEvaluation(_sid, e);
-  Future<void> deleteEvaluation(String id) =>
-      _api.deleteEvaluation(_sid, id);
+  Future<void> saveTask(TeamTask t) async {
+    await _api.saveTask(_sid, t);
+    await _audit('update', 'team_task', t.id, 'مهمة: ${t.title}');
+  }
 
-  Future<void> saveAttendance(TeamAttendance a) =>
-      _api.saveAttendance(_sid, a);
-  Future<void> deleteAttendance(String id) =>
-      _api.deleteAttendance(_sid, id);
+  Future<void> deleteTask(String id) async {
+    await _api.deleteTask(_sid, id);
+    await _audit('delete', 'team_task', id, 'حذف مهمة');
+  }
 
-  Future<void> saveTimeOff(TeamTimeOff t) => _api.saveTimeOff(_sid, t);
-  Future<void> deleteTimeOff(String id) => _api.deleteTimeOff(_sid, id);
+  Future<void> saveEvaluation(TeamEvaluation e) async {
+    await _api.saveEvaluation(_sid, e);
+    await _audit('create', 'team_evaluation', e.id,
+        'تقييم ${e.employeeName}: ${e.score}/5');
+  }
 
-  /// شهادة عمل مبسّطة لشهر معيّن.
+  Future<void> deleteEvaluation(String id) async {
+    await _api.deleteEvaluation(_sid, id);
+    await _audit('delete', 'team_evaluation', id, 'حذف تقييم');
+  }
+
+  Future<void> saveAttendance(TeamAttendance a) async {
+    await _api.saveAttendance(_sid, a);
+    await _audit('create', 'team_attendance', a.id,
+        'حضور ${a.employeeName}');
+  }
+
+  Future<void> deleteAttendance(String id) async {
+    await _api.deleteAttendance(_sid, id);
+    await _audit('delete', 'team_attendance', id, 'حذف حضور');
+  }
+
+  Future<void> saveTimeOff(TeamTimeOff t) async {
+    await _api.saveTimeOff(_sid, t);
+    await _audit('update', 'team_time_off', t.id,
+        'إجازة ${t.employeeName}: ${t.status.name}');
+  }
+
+  Future<void> deleteTimeOff(String id) async {
+    await _api.deleteTimeOff(_sid, id);
+    await _audit('delete', 'team_time_off', id, 'حذف إجازة');
+  }
+
   WorkCertificate buildCertificate({
     required String employeeId,
     required String employeeName,
