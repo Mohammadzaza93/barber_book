@@ -48,6 +48,33 @@ class StaffPermissions {
     finance: false,
   );
 
+  /// قوالب حسب دور الفريق (مالك / مدير / حلاق / موظف إداري).
+  static StaffPermissions forRole(String roleId) {
+    switch (roleId) {
+      case 'owner':
+      case 'manager':
+        return all;
+      case 'admin_staff':
+        return const StaffPermissions(
+          appointments: true,
+          payments: true,
+          services: false,
+          staff: false,
+          discounts: true,
+          expenses: true,
+          feedback: true,
+          reports: false,
+          settings: false,
+          businessTools: false,
+          outOfHours: true,
+          finance: false,
+        );
+      case 'barber':
+      default:
+        return minimal;
+    }
+  }
+
   Map<String, dynamic> toMap() => {
         'appointments': appointments,
         'services': services,

@@ -49,7 +49,6 @@ service cloud.firestore {
       allow update: if isAdmin(shopId);
       allow delete: if isShopOwner(shopId);
 
-      // Admin can manage members
       match /members/{memberId} {
         allow read: if isShopOwner(shopId) || isAdmin(shopId)
           || (signedIn() && request.auth.uid == memberId);
@@ -57,7 +56,6 @@ service cloud.firestore {
         allow update, delete: if isShopOwner(shopId);
       }
 
-      // Appointments - direct writes with role checks
       match /appointments/{docId} {
         allow read: if canReadShopData(shopId);
         allow create: if isAdmin(shopId) || isStaff(shopId);
@@ -65,7 +63,6 @@ service cloud.firestore {
         allow delete: if isAdmin(shopId);
       }
 
-      // Staff can enter appointments/payments, admin manages all
       match /expenses/{docId} {
         allow read: if isAdmin(shopId);
         allow create, update: if isAdmin(shopId) || isStaff(shopId);
@@ -78,8 +75,6 @@ service cloud.firestore {
         allow update, delete: if isAdmin(shopId);
       }
 
-      // Finance & accounting is admin-only (startup costs, expenses,
-      // barber settlements, daily sales entries and cash-box splits).
       match /finance/{group}/items/{itemId} {
         allow read, write: if isAdmin(shopId);
       }
@@ -171,11 +166,31 @@ service cloud.firestore {
         allow read: if canReadShopData(shopId);
         allow write: if isAdmin(shopId);
       }
+
+      // —— إدارة الفريق ——
+      match /team_tasks/{docId} {
+        allow read: if canReadShopData(shopId);
+        allow create, update: if isAdmin(shopId) || isStaff(shopId);
+        allow delete: if isAdmin(shopId);
+      }
+
+      match /team_evaluations/{docId} {
+        allow read: if isAdmin(shopId);
+        allow write: if isAdmin(shopId);
+      }
+
+      match /team_attendance/{docId} {
+        allow read: if isAdmin(shopId) || isStaff(shopId);
+        allow write: if isAdmin(shopId);
+      }
+
+      match /team_time_off/{docId} {
+        allow read: if canReadShopData(shopId);
+        allow create: if isAdmin(shopId) || isStaff(shopId);
+        allow update, delete: if isAdmin(shopId);
+      }
     }
 
-    // A user profile is readable by its owner and writable by nobody on the
-    // client. The shop binding (joinedShopId) is written by joinShopByCode,
-    // which is the only place membership is granted.
     match /users/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
       allow write: if false;

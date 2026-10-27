@@ -12,6 +12,7 @@ import 'providers/feedback_provider.dart';
 import 'providers/finance_provider.dart';
 import 'providers/language_provider.dart';
 import 'providers/shop_provider.dart';
+import 'providers/team_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/root_gate.dart';
 import 'theme/app_theme.dart';
@@ -42,6 +43,14 @@ class BarberApp extends StatelessWidget {
             finance ??= FinanceProvider();
             finance.bind(auth.shopId);
             return finance;
+          },
+        ),
+        ChangeNotifierProxyProvider<AuthProvider, TeamProvider>(
+          create: (_) => TeamProvider(),
+          update: (_, auth, team) {
+            team ??= TeamProvider();
+            team.bind(auth.shopId);
+            return team;
           },
         ),
       ],
