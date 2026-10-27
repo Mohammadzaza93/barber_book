@@ -306,7 +306,7 @@ class Chair {
         'number': number,
         'employeeId': employeeId,
         'active': active,
-      );
+      };
 
   factory Chair.fromMap(String id, Map<String, dynamic> m) => Chair(
         id: id,
@@ -314,5 +314,411 @@ class Chair {
         number: (m['number'] as String?) ?? '',
         employeeId: m['employeeId'] as String?,
         active: (m['active'] as bool?) ?? true,
+      );
+}
+
+class ChairSupply {
+  final String id;
+  final String chairId;
+  final String name;
+  final String category;
+  final String unit;
+  final double quantity;
+  final double unitCost;
+  final double reorderLevel;
+  final DateTime updatedAt;
+
+  const ChairSupply({
+    required this.id,
+    required this.chairId,
+    required this.name,
+    this.category = 'general',
+    this.unit = 'piece',
+    this.quantity = 0,
+    this.unitCost = 0,
+    this.reorderLevel = 0,
+    required this.updatedAt,
+  });
+
+  double get stockValue => quantity * unitCost;
+  bool get lowStock => quantity <= reorderLevel;
+
+  ChairSupply copyWith({
+    String? chairId,
+    String? name,
+    String? category,
+    String? unit,
+    double? quantity,
+    double? unitCost,
+    double? reorderLevel,
+    DateTime? updatedAt,
+  }) => ChairSupply(
+        id: id,
+        chairId: chairId ?? this.chairId,
+        name: name ?? this.name,
+        category: category ?? this.category,
+        unit: unit ?? this.unit,
+        quantity: quantity ?? this.quantity,
+        unitCost: unitCost ?? this.unitCost,
+        reorderLevel: reorderLevel ?? this.reorderLevel,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'chairId': chairId,
+        'name': name,
+        'category': category,
+        'unit': unit,
+        'quantity': quantity,
+        'unitCost': unitCost,
+        'reorderLevel': reorderLevel,
+        'updatedAt': updatedAt,
+      };
+
+  factory ChairSupply.fromMap(String id, Map<String, dynamic> m) => ChairSupply(
+        id: id,
+        chairId: (m['chairId'] as String?) ?? '',
+        name: (m['name'] as String?) ?? '',
+        category: (m['category'] as String?) ?? 'general',
+        unit: (m['unit'] as String?) ?? 'piece',
+        quantity: ((m['quantity'] as num?) ?? 0).toDouble(),
+        unitCost: ((m['unitCost'] as num?) ?? 0).toDouble(),
+        reorderLevel: ((m['reorderLevel'] as num?) ?? 0).toDouble(),
+        updatedAt: _readDate(m['updatedAt']),
+      );
+}
+
+class ChairWeeklyProfit {
+  final String id;
+  final String chairId;
+  final DateTime weekStart;
+  final DateTime weekEnd;
+  final double revenue;
+  final double supplyCost;
+  final double? manualProfit;
+  final int completedVisits;
+  final int workingMinutes;
+  final String notes;
+  final DateTime updatedAt;
+
+  const ChairWeeklyProfit({
+    required this.id,
+    required this.chairId,
+    required this.weekStart,
+    required this.weekEnd,
+    this.revenue = 0,
+    this.supplyCost = 0,
+    this.manualProfit,
+    this.completedVisits = 0,
+    this.workingMinutes = 0,
+    this.notes = '',
+    required this.updatedAt,
+  });
+
+  double get profit => manualProfit ?? (revenue - supplyCost);
+  double get utilizationPercent => workingMinutes <= 0
+      ? 0
+      : ((workingMinutes / (7 * 8 * 60)) * 100).clamp(0, 100).toDouble();
+
+  ChairWeeklyProfit copyWith({
+    double? revenue,
+    double? supplyCost,
+    double? manualProfit,
+    int? completedVisits,
+    int? workingMinutes,
+    String? notes,
+    DateTime? updatedAt,
+  }) => ChairWeeklyProfit(
+        id: id,
+        chairId: chairId,
+        weekStart: weekStart,
+        weekEnd: weekEnd,
+        revenue: revenue ?? this.revenue,
+        supplyCost: supplyCost ?? this.supplyCost,
+        manualProfit: manualProfit ?? this.manualProfit,
+        completedVisits: completedVisits ?? this.completedVisits,
+        workingMinutes: workingMinutes ?? this.workingMinutes,
+        notes: notes ?? this.notes,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'chairId': chairId,
+        'weekStart': weekStart,
+        'weekEnd': weekEnd,
+        'revenue': revenue,
+        'supplyCost': supplyCost,
+        'manualProfit': manualProfit,
+        'completedVisits': completedVisits,
+        'workingMinutes': workingMinutes,
+        'notes': notes,
+        'updatedAt': updatedAt,
+      };
+
+  factory ChairWeeklyProfit.fromMap(String id, Map<String, dynamic> m) => ChairWeeklyProfit(
+        id: id,
+        chairId: (m['chairId'] as String?) ?? '',
+        weekStart: _readDate(m['weekStart']),
+        weekEnd: _readDate(m['weekEnd']),
+        revenue: ((m['revenue'] as num?) ?? 0).toDouble(),
+        supplyCost: ((m['supplyCost'] as num?) ?? 0).toDouble(),
+        manualProfit: (m['manualProfit'] as num?)?.toDouble(),
+        completedVisits: (m['completedVisits'] as num?)?.toInt() ?? 0,
+        workingMinutes: (m['workingMinutes'] as num?)?.toInt() ?? 0,
+        notes: (m['notes'] as String?) ?? '',
+        updatedAt: _readDate(m['updatedAt']),
+      );
+}
+
+class QueueEntry {
+  final String id;
+  final String customerName;
+  final String customerPhone;
+  final String employeeId;
+  final String? chairId;
+  final List<String> serviceIds;
+  final QueueStatus status;
+  final DateTime joinedAt;
+  final DateTime? startedAt;
+  final DateTime? completedAt;
+
+  const QueueEntry({
+    required this.id,
+    required this.customerName,
+    required this.customerPhone,
+    required this.employeeId,
+    this.chairId,
+    this.serviceIds = const [],
+    this.status = QueueStatus.waiting,
+    required this.joinedAt,
+    this.startedAt,
+    this.completedAt,
+  });
+
+  QueueEntry copyWith({
+    String? employeeId,
+    String? chairId,
+    List<String>? serviceIds,
+    QueueStatus? status,
+    DateTime? startedAt,
+    DateTime? completedAt,
+  }) => QueueEntry(
+        id: id,
+        customerName: customerName,
+        customerPhone: customerPhone,
+        employeeId: employeeId ?? this.employeeId,
+        chairId: chairId ?? this.chairId,
+        serviceIds: serviceIds ?? this.serviceIds,
+        status: status ?? this.status,
+        joinedAt: joinedAt,
+        startedAt: startedAt ?? this.startedAt,
+        completedAt: completedAt ?? this.completedAt,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'customerName': customerName,
+        'customerPhone': customerPhone,
+        'employeeId': employeeId,
+        'chairId': chairId,
+        'serviceIds': serviceIds,
+        'status': status.name,
+        'joinedAt': joinedAt,
+        'startedAt': startedAt,
+        'completedAt': completedAt,
+      };
+
+  factory QueueEntry.fromMap(String id, Map<String, dynamic> m) => QueueEntry(
+        id: id,
+        customerName: (m['customerName'] as String?) ?? '',
+        customerPhone: (m['customerPhone'] as String?) ?? '',
+        employeeId: (m['employeeId'] as String?) ?? '',
+        chairId: m['chairId'] as String?,
+        serviceIds: (m['serviceIds'] as List<dynamic>? ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+        status: QueueStatus.values.firstWhere(
+          (x) => x.name == m['status'],
+          orElse: () => QueueStatus.waiting,
+        ),
+        joinedAt: _readDate(m['joinedAt']),
+        startedAt: _readNullableDate(m['startedAt']),
+        completedAt: _readNullableDate(m['completedAt']),
+      );
+}
+
+class Payment {
+  final String id;
+  final String appointmentId;
+  final String customerName;
+  final String customerPhone;
+  final String? chairId;
+  final String? employeeId;
+  final double amount;
+  final double materialCost;
+  final String method;
+  final DateTime paidAt;
+  final String notes;
+
+  const Payment({
+    required this.id,
+    required this.appointmentId,
+    required this.customerName,
+    this.customerPhone = '',
+    this.chairId,
+    this.employeeId,
+    required this.amount,
+    this.materialCost = 0,
+    required this.method,
+    required this.paidAt,
+    this.notes = '',
+  });
+
+  double get profit => amount - materialCost;
+
+  Map<String, dynamic> toMap() => {
+        'appointmentId': appointmentId,
+        'customerName': customerName,
+        'customerPhone': customerPhone,
+        'chairId': chairId,
+        'employeeId': employeeId,
+        'amount': amount,
+        'materialCost': materialCost,
+        'method': method,
+        'paidAt': paidAt,
+        'notes': notes,
+      };
+
+  factory Payment.fromMap(String id, Map<String, dynamic> m) => Payment(
+        id: id,
+        appointmentId: (m['appointmentId'] as String?) ?? '',
+        customerName: (m['customerName'] as String?) ?? '',
+        customerPhone: (m['customerPhone'] as String?) ?? '',
+        chairId: m['chairId'] as String?,
+        employeeId: m['employeeId'] as String?,
+        amount: ((m['amount'] as num?) ?? 0).toDouble(),
+        materialCost: ((m['materialCost'] as num?) ?? 0).toDouble(),
+        method: (m['method'] as String?) ?? 'cash',
+        paidAt: _readDate(m['paidAt']),
+        notes: (m['notes'] as String?) ?? '',
+      );
+}
+
+/// مادة في المخزون المركزي للمحل.
+class InventoryItem {
+  final String id;
+  final String name;
+  final String sku;
+  final String category;
+  final String unit;
+  final double quantity;
+  final double unitCost;
+  final double reorderLevel;
+  final bool active;
+  final DateTime updatedAt;
+
+  const InventoryItem({
+    required this.id,
+    required this.name,
+    this.sku = '',
+    this.category = 'general',
+    this.unit = 'piece',
+    this.quantity = 0,
+    this.unitCost = 0,
+    this.reorderLevel = 0,
+    this.active = true,
+    required this.updatedAt,
+  });
+
+  double get stockValue => quantity * unitCost;
+  bool get lowStock => quantity <= reorderLevel;
+
+  InventoryItem copyWith({
+    String? name,
+    String? sku,
+    String? category,
+    String? unit,
+    double? quantity,
+    double? unitCost,
+    double? reorderLevel,
+    bool? active,
+    DateTime? updatedAt,
+  }) => InventoryItem(
+        id: id,
+        name: name ?? this.name,
+        sku: sku ?? this.sku,
+        category: category ?? this.category,
+        unit: unit ?? this.unit,
+        quantity: quantity ?? this.quantity,
+        unitCost: unitCost ?? this.unitCost,
+        reorderLevel: reorderLevel ?? this.reorderLevel,
+        active: active ?? this.active,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'sku': sku,
+        'category': category,
+        'unit': unit,
+        'quantity': quantity,
+        'unitCost': unitCost,
+        'reorderLevel': reorderLevel,
+        'active': active,
+        'updatedAt': updatedAt,
+      };
+
+  factory InventoryItem.fromMap(String id, Map<String, dynamic> m) =>
+      InventoryItem(
+        id: id,
+        name: (m['name'] as String?) ?? '',
+        sku: (m['sku'] as String?) ?? '',
+        category: (m['category'] as String?) ?? 'general',
+        unit: (m['unit'] as String?) ?? 'piece',
+        quantity: ((m['quantity'] as num?) ?? 0).toDouble(),
+        unitCost: ((m['unitCost'] as num?) ?? 0).toDouble(),
+        reorderLevel: ((m['reorderLevel'] as num?) ?? 0).toDouble(),
+        active: (m['active'] as bool?) ?? true,
+        updatedAt: _readDate(m['updatedAt']),
+      );
+}
+
+/// حركة مخزون: شراء / صرف / هدر / جرد.
+class InventoryMovement {
+  final String id;
+  final String itemId;
+  final String type; // purchase | usage | waste | adjustment
+  final double quantity;
+  final double unitCost;
+  final String reason;
+  final DateTime createdAt;
+
+  const InventoryMovement({
+    required this.id,
+    required this.itemId,
+    required this.type,
+    this.quantity = 0,
+    this.unitCost = 0,
+    this.reason = '',
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'itemId': itemId,
+        'type': type,
+        'quantity': quantity,
+        'unitCost': unitCost,
+        'reason': reason,
+        'createdAt': createdAt,
+      };
+
+  factory InventoryMovement.fromMap(String id, Map<String, dynamic> m) =>
+      InventoryMovement(
+        id: id,
+        itemId: (m['itemId'] as String?) ?? '',
+        type: (m['type'] as String?) ?? 'adjustment',
+        quantity: ((m['quantity'] as num?) ?? 0).toDouble(),
+        unitCost: ((m['unitCost'] as num?) ?? 0).toDouble(),
+        reason: (m['reason'] as String?) ?? '',
+        createdAt: _readDate(m['createdAt']),
       );
 }
