@@ -34,7 +34,8 @@ class SmartAnalyticsReport {
   final String? topServiceName;
   final String? topStaffName;
   final double peakHourRatio;
-  final int peakHour; // 0-23
+  final int peakHour;
+  final String forecastConfidence;
 
   const SmartAnalyticsReport({
     required this.today,
@@ -48,6 +49,7 @@ class SmartAnalyticsReport {
     this.topStaffName,
     this.peakHourRatio = 0,
     this.peakHour = 12,
+    this.forecastConfidence = '',
   });
 }
 
@@ -106,20 +108,15 @@ class SmartAnalytics {
 
     final monthVsLast = perf.compare(thisMonth, lastMonth);
 
-    // سلسلة يومية لـ 28 يوماً للتنبؤ
-    final series = <double>[];
-    for (var i = 27; i >= 0; i--) {
-      final d = todayStart.subtract(Duration(days: i));
-      final snap = perf.snapshot(
-        from: d,
-        to: d,
-        financeEntries: financeEntries,
-        expenses: expenses,
-        appointments: appointments,
-      );
-      series.add(snap.revenue);
-    }
-    final forecast = RevenueForecast.instance.forecastNextDays(series, days: 7);
+    final series = RevenueForecastService.instance.buildSeries(
+      financeEntries: financeEntries,
+      appointments: appointments,
+      lookbackDays: 90,
+    );
+    final forecastResult =
+        RevenueForecastService.instance.forecast(series, horizonDays: 7);
+    final forecast =
+        forecastResult.nextWeek.map((d) => d.amount).toList(growable: false);
 
     final serviceNames = {for (final s in services) s.id: s.name};
     final topService = _topService(appointments, serviceNames);
@@ -152,6 +149,7 @@ class SmartAnalytics {
       topStaffName: topStaff,
       peakHour: peak.$1,
       peakHourRatio: peak.$2,
+      forecastConfidence: forecastResult.confidenceLabelAr,
     );
   }
 
@@ -212,7 +210,6 @@ class SmartAnalytics {
   }) {
     final list = <SmartInsight>[];
 
-    // مقارنة شهرية
     if (lastMonth.revenue > 0 || thisMonth.revenue > 0) {
       final pct = monthVsLast.revenuePct;
       if (pct >= 10) {
@@ -234,7 +231,6 @@ class SmartAnalytics {
       }
     }
 
-    // نسبة الإكمال / عدم الحضور
     final relevant = appointments.where((a) =>
         a.status == AppointmentStatus.completed ||
         a.status == AppointmentStatus.noShow ||
@@ -250,7 +246,7 @@ class SmartAnalytics {
           kind: InsightKind.warning,
           title: 'معدل عدم الحضور مرتفع',
           body:
-              '${(rate * 100).toStringAsFixed(0)}% من المواعيد لم يحضر أصحابها. فعّل تذكيرات واتساب أو عربون حجز.',
+              '${(rate * 100).toStringAsFixed(0)}% من المواعيد لم يحضر أصحابها. فعّل تذكيرات أو عربون حجز.',
           icon: IconKey.schedule,
         ));
       } else if (rate <= 0.05) {
@@ -263,11 +259,10 @@ class SmartAnalytics {
       }
     }
 
-    // هامش الربح
     if (thisMonth.revenue > 0) {
       final margin = thisMonth.netProfit / thisMonth.revenue;
       if (margin < 0.1) {
-        list.add(SmartInsight(
+        list.add(const SmartInsight(
           kind: InsightKind.warning,
           title: 'هامش الربح ضيق',
           body:
@@ -289,7 +284,8 @@ class SmartAnalytics {
       list.add(SmartInsight(
         kind: InsightKind.info,
         title: 'الخدمة الأكثر طلباً',
-        body: '«$topService» تتصدّر الحجوزات. يمكن رفع سعرها قليلاً أو تقديم باقة معها.',
+        body:
+            '«$topService» تتصدّر الحجوزات. يمكن رفع سعرها قليلاً أو تقديم باقة معها.',
         icon: IconKey.star,
       ));
     }
@@ -313,12 +309,11 @@ class SmartAnalytics {
       ));
     }
 
-    // تنبؤ
     if (forecast.isNotEmpty) {
-      final sumF = forecast.fold(0.0, (a, b) => a + b);
+      final avgF = forecast.fold(0.0, (a, b) => a + b) / forecast.length;
       final avgPast = thisWeek.avgDailyRevenue;
-      if (avgPast > 0 && sumF / 7 > avgPast * 1.15) {
-        list.add(SmartInsight(
+      if (avgPast > 0 && avgF > avgPast * 1.15) {
+        list.add(const SmartInsight(
           kind: InsightKind.tip,
           title: 'توقّع أسبوع أقوى',
           body:
