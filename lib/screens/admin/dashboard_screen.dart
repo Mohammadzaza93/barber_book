@@ -14,6 +14,7 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/feature_labels.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/stat_card.dart';
+import 'smart_analytics_screen.dart';
 
 /// لوحة التحكم — كل قسم يستمع فقط لما يحتاجه (تقليل rebuild).
 class DashboardScreen extends StatelessWidget {
@@ -25,6 +26,8 @@ class DashboardScreen extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: const [
         _DashboardHeader(),
+        SizedBox(height: 12),
+        _SmartAnalyticsEntry(),
         SizedBox(height: 16),
         _DashboardStatsGrid(),
         SizedBox(height: 8),
@@ -37,6 +40,30 @@ class DashboardScreen extends StatelessWidget {
         _TopStaffSection(),
         SizedBox(height: 16),
       ],
+    );
+  }
+}
+
+class _SmartAnalyticsEntry extends StatelessWidget {
+  const _SmartAnalyticsEntry();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.35),
+      child: ListTile(
+        leading: const Icon(Icons.auto_awesome_rounded),
+        title: const Text(
+          'تحليلات ذكية',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+        subtitle: const Text('رؤى · مقارنة شهرية · توقع 7 أيام · ساعة الذروة'),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const SmartAnalyticsScreen()),
+        ),
+      ),
     );
   }
 }
@@ -58,7 +85,6 @@ class _DashboardHeader extends StatelessWidget {
           style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
-            color: Color(0xFF0F172A),
           ),
         ),
         const SizedBox(height: 4),
@@ -83,68 +109,57 @@ class _DashboardStatsGrid extends StatelessWidget {
     final accent = parseHexColor(settings?.accentColorHex ?? '0xFFC6CBD4');
     final analytics = AnalyticsService.instance;
     final now = DateTime.now();
-    final monthStart = DateTime(now.year, now.month, 1);
-    final revenueMonth =
-        analytics.revenue(appointments.appointments, from: monthStart);
-    final expenseMonth = finance.expenses
-        .where((e) => !e.date.isBefore(monthStart))
-        .fold<double>(0, (s, e) => s + e.amountSyp);
-    final profitMonth = revenueMonth - expenseMonth;
-    final expensesAuthoritative = !finance.loading && finance.error == null;
+    final dayStart = DateTime(now.year, now.month, now.day);
+    final revenueToday = analytics.revenue(appointments.appointments,
+        from: dayStart, to: now);
+    final bookingsToday = appointments.todayAppointments.length;
+    final pending = appointments.pendingRequests.length;
+    final net = finance.sumSalonShares() - finance.sumExpenses();
 
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 1.45,
+    return Column(
       children: [
-        StatCard(
-          icon: Icons.event_available_rounded,
-          label: t(context).todayAppointments,
-          value: '${appointments.todayAppointments.length}',
-          color: accent,
+        Row(
+          children: [
+            Expanded(
+              child: StatCard(
+                icon: Icons.payments_rounded,
+                label: FeatureLabels.text(context, 'إيراد اليوم', 'Today revenue'),
+                value: fmtPrice(revenueToday, currency),
+                color: accent,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: StatCard(
+                icon: Icons.event_available_rounded,
+                label: FeatureLabels.text(context, 'مواعيد اليوم', 'Today bookings'),
+                value: '$bookingsToday',
+                color: const Color(0xFF059669),
+              ),
+            ),
+          ],
         ),
-        StatCard(
-          icon: Icons.event_note_rounded,
-          label: t(context).upcomingAppointments,
-          value: '${appointments.upcomingAppointments.length}',
-          color: const Color(0xFF059669),
-        ),
-        StatCard(
-          icon: Icons.payments_rounded,
-          label: t(context).revenueThisMonth,
-          value: fmtPrice(revenueMonth, currency),
-          color: const Color(0xFFD97706),
-        ),
-        StatCard(
-          icon: Icons.person_off_rounded,
-          label: t(context).noShowRate,
-          value:
-              '${analytics.noShowRate(appointments.appointments).toStringAsFixed(0)}%',
-          color: const Color(0xFFB91C1C),
-        ),
-        StatCard(
-          icon: Icons.trending_up_rounded,
-          label: t(context).netProfit,
-          value: expensesAuthoritative
-              ? fmtPrice(profitMonth, currency)
-              : t(context).restrictedValue,
-          color: const Color(0xFF7C3AED),
-        ),
-        StatCard(
-          icon: Icons.people_alt_rounded,
-          label: t(context).customersCount,
-          value: '${analytics.uniqueCustomers(appointments.appointments)}',
-          color: const Color(0xFF0891B2),
-        ),
-        StatCard(
-          icon: Icons.receipt_long_rounded,
-          label: t(context).avgTicket,
-          value: fmtPrice(
-              analytics.avgTicket(appointments.appointments), currency),
-          color: const Color(0xFFEA580C),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: StatCard(
+                icon: Icons.hourglass_top_rounded,
+                label: FeatureLabels.text(context, 'طلبات معلّقة', 'Pending'),
+                value: '$pending',
+                color: const Color(0xFFD97706),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: StatCard(
+                icon: Icons.trending_up_rounded,
+                label: FeatureLabels.text(context, 'صافي تقديري', 'Est. net'),
+                value: fmtPrice(net, currency),
+                color: const Color(0xFF7C3AED),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -156,37 +171,22 @@ class _RevenueSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appointments =
-        context.select<AppointmentProvider, List<Appointment>>(
-            (p) => p.appointments);
-    final accentHex = context.select<ShopProvider, String>(
-        (s) => s.settings?.accentColorHex ?? '0xFFC6CBD4');
-    final currency = context.select<ShopProvider, String>(
-        (s) => s.settings?.currency ?? 'SAR');
-    final accent = parseHexColor(accentHex);
-    final now = DateTime.now();
-    final weekStart = DateTime(now.year, now.month, now.day)
-        .subtract(const Duration(days: 6));
+    final appointments = context.watch<AppointmentProvider>().appointments;
+    final settings = context.watch<ShopProvider>().settings;
+    final accent = parseHexColor(settings?.accentColorHex ?? '0xFFC6CBD4');
+    final start = DateTime.now().subtract(const Duration(days: 6));
     final daily =
-        AnalyticsService.instance.dailyRevenue(appointments, weekStart, 7);
-
+        AnalyticsService.instance.dailyRevenue(appointments, start, 7);
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader(
-          title: t(context).revenueLast7Days,
-          trailing: Text(
-            t(context).last7Days,
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-          ),
-        ),
+        SectionHeader(title: t(context).revenueChart),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: SizedBox(
               height: 160,
-              child: _RevenueChart(
-                  daily: daily, color: accent, currency: currency),
+              child: _MiniBarChart(daily: daily, color: accent),
             ),
           ),
         ),
@@ -200,33 +200,26 @@ class _BookingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appointments =
-        context.select<AppointmentProvider, List<Appointment>>(
-            (p) => p.appointments);
-    final analytics = AnalyticsService.instance;
-    final now = DateTime.now();
-    final weekStart = DateTime(now.year, now.month, now.day)
-        .subtract(const Duration(days: 6));
-    final dailyBookings = analytics.dailyBookings(appointments, weekStart, 7);
-
+    final appointments = context.watch<AppointmentProvider>().appointments;
+    final start = DateTime.now().subtract(const Duration(days: 6));
+    final daily =
+        AnalyticsService.instance.dailyBookings(appointments, start, 7);
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionHeader(
-          title: FeatureLabels.text(
-              context, 'الحجوزات (آخر 7 أيام)', 'Bookings (last 7 days)'),
-          trailing: Text(
-            '${FeatureLabels.text(context, 'مكتمل', 'Completed')}: ${analytics.completionRate(appointments).toStringAsFixed(0)}%',
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-          ),
-        ),
+            title: FeatureLabels.text(context, 'الحجوزات', 'Bookings')),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: SizedBox(
-              height: 160,
-              child: _BookingsChart(
-                  daily: dailyBookings, color: const Color(0xFF059669)),
+              height: 140,
+              child: _MiniBarChart(
+                daily: {
+                  for (final e in daily.entries) e.key: e.value.toDouble()
+                },
+                color: const Color(0xFF059669),
+              ),
             ),
           ),
         ),
@@ -240,15 +233,30 @@ class _PopularServicesSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final shop = context.watch<ShopProvider>();
-    final appointments =
-        context.select<AppointmentProvider, List<Appointment>>(
-            (p) => p.appointments);
+    final appointments = context.watch<AppointmentProvider>().appointments;
+    final services = context.watch<ShopProvider>().services;
+    final names = {for (final s in services) s.id: s.name};
+    final map =
+        AnalyticsService.instance.popularServices(appointments, names);
+    final sorted = map.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionHeader(title: t(context).popularServices),
-        _PopularServices(shop: shop, appointments: appointments),
+        Card(
+          child: sorted.isEmpty
+              ? EmptyState(icon: Icons.content_cut, title: t(context).noData)
+              : Column(
+                  children: sorted.take(5).map((e) {
+                    return ListTile(
+                      title: Text(e.key),
+                      trailing: Text('${e.value}',
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                    );
+                  }).toList(),
+                ),
+        ),
       ],
     );
   }
@@ -259,38 +267,50 @@ class _TopStaffSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final shop = context.watch<ShopProvider>();
-    final appointments =
-        context.select<AppointmentProvider, List<Appointment>>(
-            (p) => p.appointments);
-    final currency = shop.settings?.currency ?? 'SAR';
+    final appointments = context.watch<AppointmentProvider>().appointments;
+    final employees = context.watch<ShopProvider>().employees;
+    final currency =
+        context.watch<ShopProvider>().settings?.currency ?? 'SAR';
+    final names = {for (final e in employees) e.id: e.name};
+    final map =
+        AnalyticsService.instance.staffPerformance(appointments, names);
+    final sorted = map.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader(title: t(context).topStaff),
-        _TopStaff(
-          shop: shop,
-          appointments: appointments,
-          currency: currency,
+        SectionHeader(title: t(context).staffPerformance),
+        Card(
+          child: sorted.isEmpty
+              ? EmptyState(icon: Icons.groups, title: t(context).noData)
+              : Column(
+                  children: sorted.take(5).map((e) {
+                    return ListTile(
+                      title: Text(e.key),
+                      trailing: Text(
+                        fmtPrice(e.value, currency),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    );
+                  }).toList(),
+                ),
         ),
       ],
     );
   }
 }
 
-class _RevenueChart extends StatelessWidget {
+class _MiniBarChart extends StatelessWidget {
   final Map<DateTime, double> daily;
   final Color color;
-  final String currency;
-  const _RevenueChart({
-    required this.daily,
-    required this.color,
-    required this.currency,
-  });
+  const _MiniBarChart({required this.daily, required this.color});
 
   @override
   Widget build(BuildContext context) {
     final entries = daily.entries.toList();
+    if (entries.isEmpty) {
+      return Center(child: Text(t(context).noData));
+    }
     final maxVal =
         entries.fold<double>(0, (m, e) => e.value > m ? e.value : m);
     return BarChart(
@@ -298,15 +318,6 @@ class _RevenueChart extends StatelessWidget {
         maxY: maxVal == 0 ? 100 : maxVal * 1.25,
         gridData: const FlGridData(show: false),
         borderData: FlBorderData(show: false),
-        barTouchData: BarTouchData(
-          touchTooltipData: BarTouchTooltipData(
-            getTooltipItem: (group, groupIndex, rod, rodIndex) =>
-                BarTooltipItem(
-              '${DateFormat('d/M').format(entries[group.x].key)}\n${rod.toY.toStringAsFixed(0)}',
-              const TextStyle(color: Colors.white, fontSize: 11),
-            ),
-          ),
-        ),
         titlesData: FlTitlesData(
           topTitles:
               const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -322,13 +333,10 @@ class _RevenueChart extends StatelessWidget {
                 if (i < 0 || i >= entries.length) {
                   return const SizedBox.shrink();
                 }
-                return Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    DateFormat('E').format(entries[i].key),
-                    style:
-                        TextStyle(fontSize: 10, color: Colors.grey.shade600),
-                  ),
+                return Text(
+                  DateFormat('E', Intl.getCurrentLocale())
+                      .format(entries[i].key),
+                  style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
                 );
               },
             ),
@@ -341,176 +349,11 @@ class _RevenueChart extends StatelessWidget {
               BarChartRodData(
                 toY: e.value.value,
                 color: color,
-                width: 16,
+                width: 12,
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(4)),
               ),
             ],
-          );
-        }).toList(),
-      ),
-    );
-  }
-}
-
-class _BookingsChart extends StatelessWidget {
-  final Map<DateTime, int> daily;
-  final Color color;
-  const _BookingsChart({required this.daily, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final entries = daily.entries.toList();
-    final maxVal = entries.fold<int>(0, (m, e) => e.value > m ? e.value : m);
-    return BarChart(
-      BarChartData(
-        maxY: (maxVal == 0 ? 1 : maxVal).toDouble() * 1.25,
-        gridData: const FlGridData(show: false),
-        borderData: FlBorderData(show: false),
-        barTouchData: BarTouchData(
-          touchTooltipData: BarTouchTooltipData(
-            getTooltipItem: (group, groupIndex, rod, rodIndex) =>
-                BarTooltipItem(
-              '${DateFormat('d/M').format(entries[group.x].key)}\n${rod.toY.round()}',
-              const TextStyle(color: Colors.white, fontSize: 11),
-            ),
-          ),
-        ),
-        titlesData: FlTitlesData(
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          leftTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (v, meta) {
-                final i = v.toInt();
-                if (i < 0 || i >= entries.length) {
-                  return const SizedBox.shrink();
-                }
-                return Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    DateFormat('E').format(entries[i].key),
-                    style:
-                        TextStyle(fontSize: 10, color: Colors.grey.shade600),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-        barGroups: entries.asMap().entries.map((e) => BarChartGroupData(
-              x: e.key,
-              barRods: [
-                BarChartRodData(
-                  toY: e.value.value.toDouble(),
-                  color: color,
-                  width: 16,
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(4)),
-                )
-              ],
-            )).toList(),
-      ),
-    );
-  }
-}
-
-class _PopularServices extends StatelessWidget {
-  final ShopProvider shop;
-  final List<Appointment> appointments;
-  const _PopularServices({required this.shop, required this.appointments});
-
-  @override
-  Widget build(BuildContext context) {
-    final popular = AnalyticsService.instance
-        .popularServices(appointments, shop.services);
-    if (popular.isEmpty) {
-      return Card(
-        child: EmptyState(
-            icon: Icons.bar_chart_rounded, title: t(context).noData),
-      );
-    }
-    final max = popular.values.fold<double>(0, (m, v) => v > m ? v : m);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: popular.entries.map((e) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(e.key,
-                          style: const TextStyle(fontWeight: FontWeight.w600)),
-                      Text(
-                        '${e.value.round()}×',
-                        style: TextStyle(
-                            color: Colors.grey.shade600, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: e.value / max,
-                      minHeight: 6,
-                      backgroundColor: const Color(0xFFEEF2F7),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-}
-
-class _TopStaff extends StatelessWidget {
-  final ShopProvider shop;
-  final List<Appointment> appointments;
-  final String currency;
-  const _TopStaff({
-    required this.shop,
-    required this.appointments,
-    required this.currency,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final names = {for (final e in shop.employees) e.id: e.name};
-    final perf =
-        AnalyticsService.instance.staffPerformance(appointments, names);
-    if (perf.isEmpty) {
-      return Card(
-        child: EmptyState(
-            icon: Icons.group_outlined, title: t(context).noData),
-      );
-    }
-    final sorted = perf.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    return Card(
-      child: Column(
-        children: sorted.take(5).map((e) {
-          return ListTile(
-            leading:
-                const Icon(Icons.person_rounded, color: Color(0xFF64748B)),
-            title: Text(e.key),
-            trailing: Text(
-              fmtPrice(e.value, currency),
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
           );
         }).toList(),
       ),
