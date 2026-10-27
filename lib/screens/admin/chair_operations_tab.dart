@@ -8,7 +8,6 @@ import '../../models/enums.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/business_tools_provider.dart';
 import '../../providers/shop_provider.dart';
-import '../../theme/app_theme.dart';
 
 class ChairOperationsTab extends StatefulWidget {
   const ChairOperationsTab({super.key});

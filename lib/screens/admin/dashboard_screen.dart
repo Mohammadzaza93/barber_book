@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../l10n/strings.dart';
-import '../../models/appointment.dart';
 import '../../providers/appointment_provider.dart';
 import '../../providers/finance_provider.dart';
 import '../../providers/shop_provider.dart';
@@ -235,9 +234,8 @@ class _PopularServicesSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final appointments = context.watch<AppointmentProvider>().appointments;
     final services = context.watch<ShopProvider>().services;
-    final names = {for (final s in services) s.id: s.name};
     final map =
-        AnalyticsService.instance.popularServices(appointments, names);
+        AnalyticsService.instance.popularServices(appointments, services);
     final sorted = map.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     return Column(
