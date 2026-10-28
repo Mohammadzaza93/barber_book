@@ -240,59 +240,149 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
   }
 
   Future<void> _addQueue(BuildContext context) async {
-    final name = TextEditingController();
-    final phone = TextEditingController();
+    final tools = context.read<BusinessToolsProvider>();
     final shop = context.read<ShopProvider>();
-    String? employeeId =
-        shop.activeEmployees.isEmpty ? null : shop.activeEmployees.first.id;
+    final customers = [...tools.customers]
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+    if (customers.isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا يوجد عملاء بعد. أضف عميلاً من تبويب العملاء أولاً'),
+        ),
+      );
+      return;
+    }
+
+    String? selectedCustomerId = customers.first.id;
+    String? employeeId = customers.first.preferredEmployeeId;
+    if (employeeId == null ||
+        !shop.activeEmployees.any((e) => e.id == employeeId)) {
+      employeeId =
+          shop.activeEmployees.isEmpty ? null : shop.activeEmployees.first.id;
+    }
+
     final result = await showDialog<bool>(
       context: context,
       builder: (_) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(t(context).queueAddTitle),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: name, decoration: InputDecoration(labelText: t(context).customerNameField)),
-            TextField(
-              controller: phone,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(labelText: t(context).phoneNumberField),
-            ),
-            if (shop.activeEmployees.isNotEmpty)
-              DropdownButtonFormField<String>(
-                value: employeeId,
-                isExpanded: true,
-                decoration: InputDecoration(labelText: t(context).assignedBarberField),
-                items: shop.activeEmployees
-                    .map((e) => DropdownMenuItem(value: e.id, child: Text(e.name)))
-                    .toList(),
-                onChanged: (v) => setState(() => employeeId = v),
+        builder: (context, setLocal) {
+          final selected =
+              customers.where((c) => c.id == selectedCustomerId).firstOrNull;
+          return AlertDialog(
+            title: Text(t(context).queueAddTitle),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: selectedCustomerId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'اختر الزبون',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: customers
+                        .map(
+                          (c) => DropdownMenuItem(
+                            value: c.id,
+                            child: Text(
+                              c.phone.trim().isEmpty
+                                  ? c.name
+                                  : '${c.name} — ${c.phone}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setLocal(() {
+                        selectedCustomerId = v;
+                        final c = customers.where((x) => x.id == v).firstOrNull;
+                        final pref = c?.preferredEmployeeId;
+                        if (pref != null &&
+                            shop.activeEmployees.any((e) => e.id == pref)) {
+                          employeeId = pref;
+                        }
+                      });
+                    },
+                  ),
+                  if (selected != null) ...[
+                    const SizedBox(height: 12),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      leading: const Icon(Icons.person_outline),
+                      title: Text(selected.name),
+                      subtitle: Text(
+                        [
+                          if (selected.phone.isNotEmpty) selected.phone,
+                          if (selected.visitCount > 0)
+                            '${selected.visitCount} زيارة',
+                        ].join('  •  '),
+                      ),
+                    ),
+                  ],
+                  if (shop.activeEmployees.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: shop.activeEmployees.any((e) => e.id == employeeId)
+                          ? employeeId
+                          : shop.activeEmployees.first.id,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: t(context).assignedBarberField,
+                        border: const OutlineInputBorder(),
+                      ),
+                      items: shop.activeEmployees
+                          .map((e) =>
+                              DropdownMenuItem(value: e.id, child: Text(e.name)))
+                          .toList(),
+                      onChanged: (v) => setLocal(() => employeeId = v),
+                    ),
+                  ],
+                ],
               ),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t(context).cancel)),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t(context).save)),
-          ],
-        ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(t(context).cancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(t(context).save),
+              ),
+            ],
+          );
+        },
       ),
     );
-    final nameText = name.text.trim();
-    final phoneText = phone.text.trim();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      name.dispose();
-      phone.dispose();
-    });
-    if (result != true || !context.mounted || nameText.isEmpty) return;
-    await context.read<BusinessToolsProvider>().addQueue(QueueEntry(
-          id: context.read<BusinessToolsProvider>().newId(),
-          customerName: nameText,
-          customerPhone: phoneText,
-          employeeId: employeeId ?? '',
-          joinedAt: DateTime.now(),
-        ));
+
+    if (result != true || !context.mounted || selectedCustomerId == null) {
+      return;
+    }
+    final customer =
+        customers.where((c) => c.id == selectedCustomerId).firstOrNull;
+    if (customer == null || customer.name.trim().isEmpty) return;
+
+    await tools.addQueue(
+      QueueEntry(
+        id: tools.newId(),
+        customerName: customer.name.trim(),
+        customerPhone: customer.phone.trim(),
+        employeeId: employeeId ?? '',
+        joinedAt: DateTime.now(),
+      ),
+    );
   }
 
   String _chairLabel(BuildContext context, Chair chair) =>
-      chair.number.trim().isEmpty ? chair.name : t(context).chairLabel(chair.number, chair.name);
+      chair.number.trim().isEmpty
+          ? chair.name
+          : t(context).chairLabel(chair.number, chair.name);
 
   ChairWeeklyProfit _computedReport(BusinessToolsProvider tools, Chair chair) {
     final end = _weekStart.add(const Duration(days: 7));
