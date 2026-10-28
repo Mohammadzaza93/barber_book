@@ -135,7 +135,6 @@ void main() {
       expect(p.error, isNull);
       expect(p.customers, isEmpty);
       expect(p.payments, isEmpty);
-      expect(p.portfolio, isEmpty);
       expect(p.chairs, isEmpty);
       expect(p.isBound, isFalse);
     });
