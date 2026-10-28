@@ -8,7 +8,6 @@ import '../../providers/auth_provider.dart';
 import '../../providers/business_tools_provider.dart';
 import '../../providers/shop_provider.dart';
 import 'business_management_tabs.dart';
-import 'inventory_tab.dart';
 
 class BusinessToolsScreen extends StatelessWidget {
   const BusinessToolsScreen({super.key});
@@ -16,7 +15,7 @@ class BusinessToolsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 6,
+      length: 5,
       child: Column(
         children: [
           Material(
@@ -39,9 +38,6 @@ class BusinessToolsScreen extends StatelessWidget {
                 Tab(
                     text: t(context).tabQueue,
                     icon: const Icon(Icons.queue_outlined)),
-                const Tab(
-                    text: 'المخزون',
-                    icon: Icon(Icons.inventory_2_outlined)),
               ],
             ),
           ),
@@ -53,7 +49,6 @@ class BusinessToolsScreen extends StatelessWidget {
                 LoyaltyProgramTab(),
                 ChairOperationsTab(),
                 _QueueTab(),
-                InventoryTab(),
               ],
             ),
           ),
