@@ -28,7 +28,6 @@ import 'services_screen.dart';
 import 'settings_screen.dart';
 import 'staff_screen.dart';
 import 'unavailability_screen.dart';
-import '../../widgets/error_panel.dart';
 
 const Set<int> adminTabsSet = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
 
@@ -124,9 +123,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             appBar: AppBar(
               title: Row(
                 children: [
-                  Text(
-                    shop.settings?.shopName ?? 'BarberBook',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  Flexible(
+                    child: Text(
+                      shop.settings?.shopName ?? 'BarberBook',
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   const LiveBadge(compact: true),
@@ -134,25 +135,34 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               ),
               actions: [
                 IconButton(
-                  tooltip: t(context).language,
-                  onPressed: () {
-                    final lang = context.read<LanguageProvider>();
-                    lang.setLocale(
-                      lang.isArabic ? const Locale('en') : const Locale('ar'),
-                    );
-                  },
-                  icon: Text(
-                    context.watch<LanguageProvider>().isArabic ? 'EN' : 'عربي',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  tooltip: brightness == Brightness.dark
+                      ? 'المظهر الفاتح'
+                      : 'المظهر الداكن',
+                  onPressed: () =>
+                      context.read<ThemeProvider>().toggleLightDark(context),
+                  icon: Icon(
+                    brightness == Brightness.dark
+                        ? Icons.light_mode_rounded
+                        : Icons.dark_mode_rounded,
                   ),
                 ),
+                IconButton(
+                  tooltip: t(context).openBookingPage,
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SettingsScreen(openShare: true),
+                    ),
+                  ),
+                  icon: const Icon(Icons.calendar_month_rounded),
+                ),
+                const SizedBox(width: 4),
               ],
             ),
             drawer: _buildDrawer(context, pendingCount),
             body: Column(
               children: [
                 const ConnectionBanner(),
-                const ErrorPanelBanner(),
                 Expanded(
                   child: IndexedStack(
                     index: _index,
@@ -173,9 +183,9 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   }
 
   Widget _buildDrawer(BuildContext context, int pendingCount) {
-    final shop = context.watch<ShopProvider>();
     final lang = context.watch<LanguageProvider>();
     final themeProv = context.watch<ThemeProvider>();
+    final shop = context.read<ShopProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Drawer(
@@ -183,12 +193,14 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+              padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
                   Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF121316),
+                    width: 52,
+                    height: 52,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF0B0B0D),
                       shape: BoxShape.circle,
                     ),
                     padding: const EdgeInsets.all(10),
@@ -231,29 +243,23 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               child: ListView(
                 children: [
                   if (_visibleFor(context, 0))
-                    _item(context, 0, Icons.dashboard_outlined,
-                        Icons.dashboard_rounded, t(context).dashboard),
+                    _item(context, 0, Icons.dashboard_outlined, Icons.dashboard,
+                        t(context).dashboard),
                   if (_visibleFor(context, 1))
-                    _item(
-                      context,
-                      1,
-                      Icons.event_note_outlined,
-                      Icons.event_note,
-                      t(context).appointments,
-                      badge: pendingCount,
-                    ),
+                    _item(context, 1, Icons.event_note_outlined,
+                        Icons.event_note, t(context).appointments),
                   if (_visibleFor(context, 2))
                     _item(context, 2, Icons.content_cut_outlined,
-                        Icons.content_cut, t(context).services),
+                        Icons.content_cut, t(context).servicesManagement),
                   if (_visibleFor(context, 3))
-                    _item(context, 3, Icons.groups_outlined, Icons.groups,
-                        t(context).staff),
+                    _item(context, 3, Icons.people_outline_rounded,
+                        Icons.people_rounded, t(context).staff),
                   if (_visibleFor(context, 4))
                     _item(context, 4, Icons.local_offer_outlined,
                         Icons.local_offer, t(context).discounts),
                   if (_visibleFor(context, 5))
-                    _item(context, 5, Icons.reviews_outlined, Icons.reviews,
-                        t(context).feedback),
+                    _item(context, 5, Icons.star_outline_rounded,
+                        Icons.star_rounded, t(context).feedback),
                   if (_visibleFor(context, 6))
                     _item(
                       context,
