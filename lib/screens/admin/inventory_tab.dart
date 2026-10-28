@@ -34,7 +34,6 @@ class InventoryTab extends StatelessWidget {
 
   Future<void> _showItemDialog(BuildContext context, {InventoryItem? item}) async {
     final name = TextEditingController(text: item?.name ?? '');
-    final sku = TextEditingController(text: item?.sku ?? '');
     final supplier = TextEditingController(text: item?.supplier ?? '');
     final quantity = TextEditingController(
         text: item == null ? '0' : item.quantity.toString());
@@ -89,14 +88,6 @@ class InventoryTab extends StatelessWidget {
                         ),
                         validator: (v) =>
                             (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: sku,
-                        decoration: const InputDecoration(
-                          labelText: 'رمز / SKU',
-                          border: OutlineInputBorder(),
-                        ),
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
@@ -240,19 +231,21 @@ class InventoryTab extends StatelessWidget {
     );
 
     final nameValue = name.text.trim();
-    final skuValue = sku.text.trim();
     final supplierValue = supplier.text.trim();
     final quantityValue =
         double.tryParse(quantity.text.replaceAll(',', '.')) ?? 0;
     final costValue = double.tryParse(cost.text.replaceAll(',', '.')) ?? 0;
     final reorderValue =
         double.tryParse(reorder.text.replaceAll(',', '.')) ?? 0;
-    name.dispose();
-    sku.dispose();
-    supplier.dispose();
-    quantity.dispose();
-    cost.dispose();
-    reorder.dispose();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      supplier.dispose();
+      quantity.dispose();
+      cost.dispose();
+      reorder.dispose();
+    });
+
     if (saved != true || !context.mounted || nameValue.isEmpty) return;
 
     final tools = context.read<BusinessToolsProvider>();
@@ -260,7 +253,7 @@ class InventoryTab extends StatelessWidget {
     await tools.saveInventoryItem(InventoryItem(
       id: item?.id ?? const Uuid().v4(),
       name: nameValue,
-      sku: skuValue,
+      sku: item?.sku ?? '',
       category: category,
       unit: unit,
       quantity: quantityValue,
@@ -378,9 +371,11 @@ class InventoryTab extends StatelessWidget {
     final costValue =
         double.tryParse(unitCost.text.replaceAll(',', '.')) ?? item.unitCost;
     final reasonValue = reason.text.trim();
-    quantity.dispose();
-    unitCost.dispose();
-    reason.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      quantity.dispose();
+      unitCost.dispose();
+      reason.dispose();
+    });
     if (saved != true || !context.mounted || quantityValue < 0) return;
     if (type != 'purchase' && reasonValue.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
