@@ -19,7 +19,6 @@ class BusinessToolsProvider extends ChangeNotifier {
   AppRole? _role;
   final List<StreamSubscription> _subs = [];
 
-  List<PortfolioItem> portfolio = [];
   List<CustomerProfile> customers = [];
   List<LoyaltyAccount> loyalty = [];
   List<LoyaltyRule> loyaltyRules = [];
@@ -54,7 +53,6 @@ class BusinessToolsProvider extends ChangeNotifier {
     final db = FirestoreService.instance;
     final inv = FirestoreInventory.instance;
 
-    _listen(db.watchPortfolio(shopId), (v) => portfolio = v);
     _listen(db.watchCustomers(shopId), (v) => customers = v);
     _listen(db.watchLoyalty(shopId), (v) => loyalty = v);
     _listen(db.watchLoyaltyRules(shopId), (v) => loyaltyRules = v);
@@ -105,11 +103,6 @@ class BusinessToolsProvider extends ChangeNotifier {
   String get shopId => _shopId ?? '';
   List<Appointment> get appointments => List.unmodifiable(_appointments);
   String newId() => const Uuid().v4();
-
-  Future<void> addPortfolio(PortfolioItem item) =>
-      FirestoreService.instance.addPortfolioItem(shopId, item);
-  Future<void> deletePortfolio(String id) =>
-      FirestoreService.instance.deletePortfolioItem(shopId, id);
 
   Future<void> saveCustomer(CustomerProfile customer) =>
       FirestoreService.instance.saveCustomer(shopId, customer);
@@ -368,7 +361,6 @@ class BusinessToolsProvider extends ChangeNotifier {
     }
     _subs.clear();
     _shopId = null;
-    portfolio = [];
     customers = [];
     loyalty = [];
     loyaltyRules = [];
