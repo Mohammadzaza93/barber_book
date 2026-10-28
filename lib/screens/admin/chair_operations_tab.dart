@@ -49,6 +49,7 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
               ),
               DropdownButtonFormField<String>(
                 value: employeeId,
+                isExpanded: true,
                 decoration: InputDecoration(labelText: t(context).assignedBarberField),
                 items: shop.activeEmployees
                     .map((e) => DropdownMenuItem(value: e.id, child: Text(e.name)))
@@ -128,6 +129,76 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
       notes: stored?.notes ?? '',
       updatedAt: stored?.updatedAt ?? DateTime.now(),
     );
+  }
+
+  Future<void> _addQueue(BuildContext context) async {
+    final name = TextEditingController();
+    final phone = TextEditingController();
+    final shop = context.read<ShopProvider>();
+    String? employeeId =
+        shop.activeEmployees.isEmpty ? null : shop.activeEmployees.first.id;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text(t(context).queueAddTitle),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: name,
+                decoration:
+                    InputDecoration(labelText: t(context).customerNameField),
+              ),
+              TextField(
+                controller: phone,
+                keyboardType: TextInputType.phone,
+                decoration:
+                    InputDecoration(labelText: t(context).phoneNumberField),
+              ),
+              if (shop.activeEmployees.isNotEmpty)
+                DropdownButtonFormField<String>(
+                  value: employeeId,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                      labelText: t(context).assignedBarberField),
+                  items: shop.activeEmployees
+                      .map((e) =>
+                          DropdownMenuItem(value: e.id, child: Text(e.name)))
+                      .toList(),
+                  onChanged: (v) => setState(() => employeeId = v),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(t(context).cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(t(context).save),
+            ),
+          ],
+        ),
+      ),
+    );
+    final nameText = name.text.trim();
+    final phoneText = phone.text.trim();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      phone.dispose();
+    });
+    if (result != true || !context.mounted || nameText.isEmpty) return;
+    await context.read<BusinessToolsProvider>().addQueue(
+          QueueEntry(
+            id: context.read<BusinessToolsProvider>().newId(),
+            customerName: nameText,
+            customerPhone: phoneText,
+            employeeId: employeeId ?? '',
+            joinedAt: DateTime.now(),
+          ),
+        );
   }
 
   @override
@@ -286,6 +357,53 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
               ),
             );
           }),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'الطابور',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                ),
+              ),
+              if (canManage)
+                TextButton.icon(
+                  onPressed: () => _addQueue(context),
+                  icon: const Icon(Icons.person_add_alt_1, size: 18),
+                  label: Text(t(context).add),
+                ),
+            ],
+          ),
+          if (tools.queue.isEmpty)
+            const Card(
+              child: ListTile(
+                title: Text('لا يوجد أحد في الطابور حالياً'),
+                subtitle: Text('أضف زبوناً ينتظر عند فتح الكراسي'),
+              ),
+            )
+          else
+            ...tools.queue.map((entry) {
+              return Card(
+                child: ListTile(
+                  title: Text(entry.customerName),
+                  subtitle: Text(
+                    '${entry.customerPhone}  •  ${DateFormat('HH:mm').format(entry.joinedAt)}  •  ${entry.status.name}',
+                  ),
+                  trailing: canManage
+                      ? IconButton(
+                          icon: const Icon(Icons.check_circle_outline),
+                          tooltip: 'إنهاء',
+                          onPressed: () => tools.saveQueue(
+                                entry.copyWith(
+                                  status: QueueStatus.completed,
+                                  completedAt: DateTime.now(),
+                                ),
+                              ),
+                        )
+                      : null,
+                ),
+              );
+            }),
         ],
       ),
     );
