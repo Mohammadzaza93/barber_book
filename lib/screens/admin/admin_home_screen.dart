@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
@@ -119,62 +120,99 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       child: Consumer<AppointmentProvider>(
         builder: (context, appointments, _) {
           final pendingCount = appointments.pendingRequests.length;
-          return Scaffold(
-            appBar: AppBar(
-              title: Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      shop.settings?.shopName ?? 'BarberBook',
-                      overflow: TextOverflow.ellipsis,
+          return PopScope(
+            canPop: false,
+            onPopInvokedWithResult: (didPop, _) async {
+              if (didPop) return;
+              if (_index != 0) {
+                setState(() => _index = 0);
+                return;
+              }
+              final leave = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('إغلاق التطبيق؟'),
+                  content:
+                      const Text('هل تريد الخروج من لوحة تحكم الصالون؟'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('إلغاء'),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  const LiveBadge(compact: true),
-                ],
-              ),
-              actions: [
-                IconButton(
-                  tooltip: brightness == Brightness.dark
-                      ? 'المظهر الفاتح'
-                      : 'المظهر الداكن',
-                  onPressed: () =>
-                      context.read<ThemeProvider>().toggleLightDark(context),
-                  icon: Icon(
-                    brightness == Brightness.dark
-                        ? Icons.light_mode_rounded
-                        : Icons.dark_mode_rounded,
-                  ),
-                ),
-                IconButton(
-                  tooltip: t(context).openBookingPage,
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const SettingsScreen(openShare: true),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('خروج'),
                     ),
-                  ),
-                  icon: const Icon(Icons.calendar_month_rounded),
+                  ],
                 ),
-                const SizedBox(width: 4),
-              ],
-            ),
-            drawer: _buildDrawer(context, pendingCount),
-            body: Column(
-              children: [
-                const ConnectionBanner(),
-                Expanded(
-                  child: IndexedStack(
-                    index: _index,
+              );
+              if (leave == true) {
+                SystemNavigator.pop();
+              }
+            },
+            child: GestureDetector(
+              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+              behavior: HitTestBehavior.opaque,
+              child: Scaffold(
+                appBar: AppBar(
+                  title: Row(
                     children: [
-                      for (var i = 0; i < _screens.length; i++)
-                        _visited.contains(i)
-                            ? _screens[i]
-                            : const SizedBox.shrink(),
+                      Flexible(
+                        child: Text(
+                          shop.settings?.shopName ?? 'BarberBook',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const LiveBadge(compact: true),
                     ],
                   ),
+                  actions: [
+                    IconButton(
+                      tooltip: brightness == Brightness.dark
+                          ? 'المظهر الفاتح'
+                          : 'المظهر الداكن',
+                      onPressed: () => context
+                          .read<ThemeProvider>()
+                          .toggleLightDark(context),
+                      icon: Icon(
+                        brightness == Brightness.dark
+                            ? Icons.light_mode_rounded
+                            : Icons.dark_mode_rounded,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: t(context).openBookingPage,
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const SettingsScreen(openShare: true),
+                        ),
+                      ),
+                      icon: const Icon(Icons.calendar_month_rounded),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
                 ),
-              ],
+                drawer: _buildDrawer(context, pendingCount),
+                body: Column(
+                  children: [
+                    const ConnectionBanner(),
+                    Expanded(
+                      child: IndexedStack(
+                        index: _index,
+                        children: [
+                          for (var i = 0; i < _screens.length; i++)
+                            _visited.contains(i)
+                                ? _screens[i]
+                                : const SizedBox.shrink(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           );
         },
