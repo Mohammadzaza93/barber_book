@@ -85,6 +85,7 @@ class _ExpenseFormState extends State<_ExpenseForm> {
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<ExpenseType>(
+              isExpanded: true,
               value: _type,
               items: const [
                 DropdownMenuItem(
@@ -142,9 +143,12 @@ class _ExpenseList extends StatelessWidget {
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
-            title: Text(e.title),
+            title: Text(e.title, maxLines: 1, overflow: TextOverflow.ellipsis),
             subtitle: Text(
-                '${e.type.name} • ${e.date.toLocal().toString().split(' ').first}'),
+              '${e.type.name} • ${e.date.toLocal().toString().split(' ').first}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
