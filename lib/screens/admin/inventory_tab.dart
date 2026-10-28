@@ -1,9 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/business_features.dart';
 import '../../providers/business_tools_provider.dart';
+import '../../providers/shop_provider.dart';
+
+const _categories = [
+  ('general', 'عام'),
+  ('shampoo', 'شامبو وبلسم'),
+  ('dye', 'صبغات وكيماويات'),
+  ('styling', 'جل وسبراي'),
+  ('shaving', 'حلاقة'),
+  ('blades', 'شفرات ومواد استهلاكية'),
+  ('hygiene', 'نظافة وتعقيم'),
+  ('retail', 'منتجات للبيع'),
+];
+
+const _units = [
+  ('piece', 'قطعة'),
+  ('bottle', 'زجاجة'),
+  ('box', 'علبة'),
+  ('pack', 'عبوة'),
+  ('ml', 'مل'),
+  ('liter', 'لتر'),
+  ('g', 'غرام'),
+  ('kg', 'كغ'),
+];
 
 class InventoryTab extends StatelessWidget {
   const InventoryTab({super.key});
@@ -11,59 +35,238 @@ class InventoryTab extends StatelessWidget {
   Future<void> _showItemDialog(BuildContext context, {InventoryItem? item}) async {
     final name = TextEditingController(text: item?.name ?? '');
     final sku = TextEditingController(text: item?.sku ?? '');
-    final category = TextEditingController(text: item?.category ?? 'general');
-    final unit = TextEditingController(text: item?.unit ?? 'piece');
-    final quantity = TextEditingController(text: item?.quantity.toString() ?? '0');
-    final cost = TextEditingController(text: item?.unitCost.toString() ?? '0');
-    final reorder = TextEditingController(text: item?.reorderLevel.toString() ?? '0');
-    final saved = await showDialog<bool>(
+    final supplier = TextEditingController(text: item?.supplier ?? '');
+    final quantity = TextEditingController(
+        text: item == null ? '0' : item.quantity.toString());
+    final cost = TextEditingController(
+        text: item == null ? '0' : item.unitCost.toString());
+    final reorder = TextEditingController(
+        text: item == null ? '0' : item.reorderLevel.toString());
+    var category = item?.category ?? 'general';
+    if (!_categories.any((c) => c.$1 == category)) category = 'general';
+    var unit = item?.unit ?? 'piece';
+    if (!_units.any((u) => u.$1 == unit)) unit = 'piece';
+    final formKey = GlobalKey<FormState>();
+
+    final saved = await showModalBottomSheet<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(item == null ? 'مادة جديدة' : 'تعديل المادة'),
-        content: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: name, decoration: const InputDecoration(labelText: 'اسم المادة')),
-            TextField(controller: sku, decoration: const InputDecoration(labelText: 'رمز / SKU')),
-            TextField(controller: category, decoration: const InputDecoration(labelText: 'التصنيف')),
-            TextField(controller: unit, decoration: const InputDecoration(labelText: 'الوحدة')),
-            TextField(controller: quantity, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'الكمية الحالية')),
-            TextField(controller: cost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'تكلفة الوحدة (آخر شراء)')),
-            TextField(controller: reorder, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'حد إعادة الطلب')),
-          ]),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حفظ')),
-        ],
-      ),
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 8,
+            bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20,
+          ),
+          child: StatefulBuilder(
+            builder: (context, setLocal) {
+              return Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        item == null ? 'مادة جديدة' : 'تعديل المادة',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: name,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(
+                          labelText: 'اسم المادة',
+                          prefixIcon: Icon(Icons.label_outline),
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: sku,
+                              decoration: const InputDecoration(
+                                labelText: 'رمز / SKU',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: category,
+                              decoration: const InputDecoration(
+                                labelText: 'التصنيف',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: [
+                                for (final c in _categories)
+                                  DropdownMenuItem(
+                                      value: c.$1, child: Text(c.$2)),
+                              ],
+                              onChanged: (v) =>
+                                  setLocal(() => category = v ?? 'general'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: unit,
+                              decoration: const InputDecoration(
+                                labelText: 'الوحدة',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: [
+                                for (final u in _units)
+                                  DropdownMenuItem(
+                                      value: u.$1, child: Text(u.$2)),
+                              ],
+                              onChanged: (v) =>
+                                  setLocal(() => unit = v ?? 'piece'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              controller: quantity,
+                              keyboardType: const TextInputType.numberWithOptions(
+                                  decimal: true),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                    RegExp(r'[0-9.,]')),
+                              ],
+                              decoration: const InputDecoration(
+                                labelText: 'الكمية الحالية',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: cost,
+                              keyboardType: const TextInputType.numberWithOptions(
+                                  decimal: true),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                    RegExp(r'[0-9.,]')),
+                              ],
+                              decoration: const InputDecoration(
+                                labelText: 'تكلفة الوحدة',
+                                helperText: 'آخر شراء',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              controller: reorder,
+                              keyboardType: const TextInputType.numberWithOptions(
+                                  decimal: true),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                    RegExp(r'[0-9.,]')),
+                              ],
+                              decoration: const InputDecoration(
+                                labelText: 'حد إعادة الطلب',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: supplier,
+                        decoration: const InputDecoration(
+                          labelText: 'المورد (اختياري)',
+                          prefixIcon: Icon(Icons.local_shipping_outlined),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      FilledButton.icon(
+                        onPressed: () {
+                          if (formKey.currentState?.validate() ?? false) {
+                            Navigator.pop(ctx, true);
+                          }
+                        },
+                        icon: const Icon(Icons.check_rounded),
+                        label: const Text('حفظ'),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(48),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('إلغاء'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
+
     final nameValue = name.text.trim();
     final skuValue = sku.text.trim();
-    final categoryValue = category.text.trim();
-    final unitValue = unit.text.trim();
-    final quantityValue = double.tryParse(quantity.text.replaceAll(',', '.')) ?? 0;
+    final supplierValue = supplier.text.trim();
+    final quantityValue =
+        double.tryParse(quantity.text.replaceAll(',', '.')) ?? 0;
     final costValue = double.tryParse(cost.text.replaceAll(',', '.')) ?? 0;
-    final reorderValue = double.tryParse(reorder.text.replaceAll(',', '.')) ?? 0;
-    name.dispose(); sku.dispose(); category.dispose(); unit.dispose(); quantity.dispose(); cost.dispose(); reorder.dispose();
+    final reorderValue =
+        double.tryParse(reorder.text.replaceAll(',', '.')) ?? 0;
+    name.dispose();
+    sku.dispose();
+    supplier.dispose();
+    quantity.dispose();
+    cost.dispose();
+    reorder.dispose();
     if (saved != true || !context.mounted || nameValue.isEmpty) return;
+
     final tools = context.read<BusinessToolsProvider>();
     final now = DateTime.now();
     await tools.saveInventoryItem(InventoryItem(
       id: item?.id ?? const Uuid().v4(),
       name: nameValue,
       sku: skuValue,
-      category: categoryValue.isEmpty ? 'general' : categoryValue,
-      unit: unitValue.isEmpty ? 'piece' : unitValue,
+      category: category,
+      unit: unit,
       quantity: quantityValue,
       unitCost: costValue,
       reorderLevel: reorderValue,
+      supplier: supplierValue,
       createdAt: item?.createdAt ?? now,
       updatedAt: now,
       active: item?.active ?? true,
     ));
   }
 
-  Future<void> _showMovementDialog(BuildContext context, InventoryItem item, String type) async {
+  Future<void> _showMovementDialog(
+      BuildContext context, InventoryItem item, String type) async {
     final quantity = TextEditingController();
     final unitCost = TextEditingController(text: item.unitCost.toString());
     final reason = TextEditingController();
@@ -73,40 +276,99 @@ class InventoryTab extends StatelessWidget {
       'waste': 'هدر أو تلف',
       'adjustment': 'جرد وتصحيح الرصيد',
     };
-    final saved = await showDialog<bool>(
+    final unitLabel =
+        _units.where((u) => u.$1 == item.unit).map((u) => u.$2).firstOrNull ??
+            item.unit;
+
+    final saved = await showModalBottomSheet<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(labels[type] ?? 'حركة مخزون'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
-            controller: quantity,
-            autofocus: true,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: type == 'adjustment' ? 'الرصيد الفعلي بعد الجرد' : 'الكمية',
-            ),
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 8,
+            bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20,
           ),
-          if (type == 'purchase')
-            TextField(
-              controller: unitCost,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'تكلفة الوحدة (تحدّث آخر شراء)'),
-            ),
-          TextField(
-            controller: reason,
-            decoration: InputDecoration(
-              labelText: type == 'purchase' ? 'ملاحظة (اختياري)' : 'السبب (مطلوب)',
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                labels[type] ?? 'حركة مخزون',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w800),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${item.name} · الرصيد: ${item.quantity.toStringAsFixed(2)} $unitLabel',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: quantity,
+                autofocus: true,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: type == 'adjustment'
+                      ? 'الرصيد الفعلي بعد الجرد'
+                      : 'الكمية ($unitLabel)',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              if (type == 'purchase') ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: unitCost,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'تكلفة الوحدة (تحدّث آخر شراء)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: reason,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: type == 'purchase'
+                      ? 'ملاحظة (اختياري)'
+                      : 'السبب (مطلوب)',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                child: const Text('تسجيل'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('إلغاء'),
+              ),
+            ],
           ),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('تسجيل')),
-        ],
-      ),
+        );
+      },
     );
-    final quantityValue = double.tryParse(quantity.text.replaceAll(',', '.')) ?? 0;
-    final costValue = double.tryParse(unitCost.text.replaceAll(',', '.')) ?? item.unitCost;
+
+    final quantityValue =
+        double.tryParse(quantity.text.replaceAll(',', '.')) ?? 0;
+    final costValue =
+        double.tryParse(unitCost.text.replaceAll(',', '.')) ?? item.unitCost;
     final reasonValue = reason.text.trim();
     quantity.dispose();
     unitCost.dispose();
@@ -114,7 +376,7 @@ class InventoryTab extends StatelessWidget {
     if (saved != true || !context.mounted || quantityValue < 0) return;
     if (type != 'purchase' && reasonValue.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('السبب مطلوب لصرف/هدر/جرد')),
+        const SnackBar(content: Text('السبب مطلوب لصرف / هدر / جرد')),
       );
       return;
     }
@@ -139,116 +401,205 @@ class InventoryTab extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error.toString().replaceFirst('Bad state: ', '')),
+            content:
+                Text(error.toString().replaceFirst('Bad state: ', '')),
           ),
         );
       }
     }
   }
 
+  String _catLabel(String code) =>
+      _categories.where((c) => c.$1 == code).map((c) => c.$2).firstOrNull ??
+      code;
+
+  String _unitLabel(String code) =>
+      _units.where((u) => u.$1 == code).map((u) => u.$2).firstOrNull ?? code;
+
   @override
   Widget build(BuildContext context) {
     final tools = context.watch<BusinessToolsProvider>();
+    final currency =
+        context.watch<ShopProvider>().settings?.currency ?? 'SAR';
     final items = tools.inventory;
+    final active = items.where((i) => i.active).toList();
+
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('المخزون'),
+        actions: [
+          IconButton(
+            tooltip: 'إضافة مادة',
+            onPressed: () => _showItemDialog(context),
+            icon: const Icon(Icons.add_box_outlined),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'inventory_fab',
+        heroTag: 'inventory_main_fab',
         onPressed: () => _showItemDialog(context),
         icon: const Icon(Icons.add),
         label: const Text('مادة'),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
         children: [
-          _InventoryDashboard(items: items),
-          const SizedBox(height: 12),
+          _SummaryCard(items: active, currency: currency),
+          const SizedBox(height: 16),
+          Text(
+            'المواد',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
           if (items.isEmpty)
-            const Card(
-              child: ListTile(
-                title: Text('لا مواد بعد'),
-                subtitle: Text('أضف شامبو، صبغة، شفرات… ثم سجّل الشراء والصرف'),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Icon(Icons.inventory_2_outlined,
+                        size: 48, color: Colors.grey.shade400),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'لا مواد بعد',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'أضف شامبو، صبغة، شفرات… ثم سجّل الشراء والصرف',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
               ),
             )
           else
-            ...items.map((item) => Card(
-                  child: ListTile(
-                    leading: Icon(
-                      item.outOfStock
-                          ? Icons.warning_amber_rounded
-                          : item.lowStock
-                              ? Icons.inventory_2_outlined
-                              : Icons.inventory_2,
-                      color: item.outOfStock
-                          ? Colors.red
-                          : item.lowStock
-                              ? Colors.orange
-                              : null,
+            ...items.map((item) {
+              final unitL = _unitLabel(item.unit);
+              Color? badgeColor;
+              String? badgeText;
+              if (!item.active) {
+                badgeText = 'معطّل';
+                badgeColor = Colors.grey;
+              } else if (item.outOfStock) {
+                badgeText = 'نافد';
+                badgeColor = Colors.red;
+              } else if (item.lowStock) {
+                badgeText = 'تحت الحد';
+                badgeColor = Colors.orange;
+              }
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  leading: CircleAvatar(
+                    backgroundColor: (badgeColor ?? Theme.of(context).colorScheme.primary)
+                        .withOpacity(0.12),
+                    child: Icon(
+                      Icons.inventory_2_outlined,
+                      color: badgeColor ?? Theme.of(context).colorScheme.primary,
                     ),
-                    title: Text(item.name,
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text(
-                      '${item.quantity.toStringAsFixed(2)} ${item.unit}'
-                      '  •  قيمة ${item.stockValue.toStringAsFixed(2)}'
-                      '${item.lowStock ? '  •  تحت الحد' : ''}'
-                      '${!item.active ? '  •  معطّل' : ''}',
-                    ),
-                    trailing: PopupMenuButton<String>(
-                      onSelected: (value) {
-                        if (value == 'edit') {
-                          _showItemDialog(context, item: item);
-                        }
-                        if (value == 'purchase' ||
-                            value == 'usage' ||
-                            value == 'waste' ||
-                            value == 'adjustment') {
-                          _showMovementDialog(context, item, value);
-                        }
-                        if (value == 'delete') {
-                          context
-                              .read<BusinessToolsProvider>()
-                              .deleteInventoryItem(item.id);
-                        }
-                      },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'purchase', child: Text('تسجيل شراء')),
-                        PopupMenuItem(value: 'usage', child: Text('تسجيل صرف')),
-                        PopupMenuItem(value: 'waste', child: Text('تسجيل هدر')),
-                        PopupMenuItem(
-                            value: 'adjustment', child: Text('جرد وتصحيح')),
-                        PopupMenuDivider(),
-                        PopupMenuItem(value: 'edit', child: Text('تعديل المادة')),
-                        PopupMenuItem(
-                            value: 'delete', child: Text('حذف / تعطيل')),
+                  ),
+                  title: Text(item.name,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${item.quantity.toStringAsFixed(2)} $unitL'
+                          '  ·  ${_catLabel(item.category)}'
+                          '  ·  ${item.stockValue.toStringAsFixed(0)} $currency',
+                        ),
+                        if (badgeText != null) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: badgeColor!.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              badgeText,
+                              style: TextStyle(
+                                color: badgeColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
-                )),
+                  isThreeLine: badgeText != null,
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'edit') {
+                        _showItemDialog(context, item: item);
+                      } else if (value == 'delete') {
+                        context
+                            .read<BusinessToolsProvider>()
+                            .deleteInventoryItem(item.id);
+                      } else {
+                        _showMovementDialog(context, item, value);
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'purchase', child: Text('شراء')),
+                      PopupMenuItem(value: 'usage', child: Text('صرف')),
+                      PopupMenuItem(value: 'waste', child: Text('هدر')),
+                      PopupMenuItem(value: 'adjustment', child: Text('جرد')),
+                      PopupMenuDivider(),
+                      PopupMenuItem(value: 'edit', child: Text('تعديل')),
+                      PopupMenuItem(
+                          value: 'delete', child: Text('حذف / تعطيل')),
+                    ],
+                  ),
+                ),
+              );
+            }),
           if (tools.inventoryMovements.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            const Text('آخر حركات المخزون',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 20),
+            Text(
+              'آخر الحركات',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
             const SizedBox(height: 8),
-            ...tools.inventoryMovements.take(30).map((movement) {
-              final item = tools.inventory
-                  .where((x) => x.id == movement.itemId)
-                  .firstOrNull;
-              final sign = movement.type == 'purchase'
+            ...tools.inventoryMovements.take(25).map((m) {
+              final item =
+                  items.where((x) => x.id == m.itemId).firstOrNull;
+              final sign = m.type == 'purchase'
                   ? '+'
-                  : movement.type == 'adjustment'
+                  : m.type == 'adjustment'
                       ? '↔'
-                      : '-';
+                      : '−';
               return Card(
                 child: ListTile(
                   dense: true,
-                  leading: Icon(movement.type == 'purchase'
-                      ? Icons.add_circle_outline
-                      : Icons.remove_circle_outline),
+                  leading: Icon(
+                    m.type == 'purchase'
+                        ? Icons.add_circle_outline
+                        : Icons.remove_circle_outline,
+                    color: m.type == 'purchase'
+                        ? Colors.green
+                        : Colors.orange.shade800,
+                  ),
                   title: Text(
-                      '${item?.name ?? 'مادة'}  $sign${movement.quantity.toStringAsFixed(2)}'),
+                      '${item?.name ?? 'مادة'}  $sign${m.quantity.toStringAsFixed(2)}'),
                   subtitle: Text(
-                    '${movement.reason.isEmpty ? _movementLabel(movement.type) : movement.reason}'
-                    '  •  ${_movementLabel(movement.type)}'
-                    '${movement.balanceAfter != null ? '  → ${movement.balanceAfter!.toStringAsFixed(2)}' : ''}',
+                    '${m.reason.isEmpty ? _moveLabel(m.type) : m.reason}'
+                    '${m.balanceAfter != null ? '  → ${m.balanceAfter!.toStringAsFixed(2)}' : ''}',
                   ),
                 ),
               );
@@ -259,53 +610,83 @@ class InventoryTab extends StatelessWidget {
     );
   }
 
-  String _movementLabel(String type) => switch (type) {
+  String _moveLabel(String type) => switch (type) {
         'purchase' => 'شراء',
         'usage' => 'صرف',
         'waste' => 'هدر',
         'adjustment' => 'جرد',
-        'damage' => 'تلف',
-        'expiry' => 'انتهاء صلاحية',
         _ => 'حركة',
       };
 }
 
-class _InventoryDashboard extends StatelessWidget {
-  const _InventoryDashboard({required this.items});
+class _SummaryCard extends StatelessWidget {
+  const _SummaryCard({required this.items, required this.currency});
   final List<InventoryItem> items;
+  final String currency;
 
   @override
   Widget build(BuildContext context) {
-    final active = items.where((i) => i.active).toList();
-    final value = active.fold<double>(0, (s, i) => s + i.stockValue);
-    final low = active.where((i) => i.lowStock).length;
-    final out = active.where((i) => i.outOfStock).length;
-    final exp = active.where((i) => i.isExpired || i.expiringSoon).length;
+    final value = items.fold<double>(0, (s, i) => s + i.stockValue);
+    final low = items.where((i) => i.lowStock).length;
+    final out = items.where((i) => i.outOfStock).length;
+    final scheme = Theme.of(context).colorScheme;
     return Card(
+      elevation: 0,
+      color: scheme.surfaceContainerHighest.withOpacity(0.45),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'ملخص المخزون (تكلفة آخر شراء)',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
+            Row(
               children: [
-                Chip(label: Text('أصناف: ${active.length}')),
-                Chip(label: Text('قيمة ≈ ${value.toStringAsFixed(0)}')),
-                Chip(label: Text('تحت الحد: $low')),
-                Chip(label: Text('نافد: $out')),
-                Chip(label: Text('صلاحية: $exp')),
+                Icon(Icons.analytics_outlined, color: scheme.primary),
+                const SizedBox(width: 8),
+                const Text(
+                  'ملخص المخزون',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'التقييم: تكلفة آخر شراء',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                    child: _metric('أصناف', '${items.length}', scheme.primary)),
+                Expanded(
+                    child: _metric(
+                        'القيمة',
+                        '${value.toStringAsFixed(0)} $currency',
+                        Colors.teal.shade700)),
+                Expanded(
+                    child: _metric('تحت الحد', '$low', Colors.orange.shade800)),
+                Expanded(
+                    child: _metric('نافد', '$out', Colors.red.shade700)),
               ],
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _metric(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(value,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontWeight: FontWeight.w800, fontSize: 15, color: color)),
+        const SizedBox(height: 2),
+        Text(label,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+      ],
     );
   }
 }
