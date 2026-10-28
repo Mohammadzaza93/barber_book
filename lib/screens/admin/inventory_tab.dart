@@ -91,35 +91,35 @@ class InventoryTab extends StatelessWidget {
                             (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
                       ),
                       const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: sku,
-                              decoration: const InputDecoration(
-                                labelText: 'رمز / SKU',
-                                border: OutlineInputBorder(),
+                      TextField(
+                        controller: sku,
+                        decoration: const InputDecoration(
+                          labelText: 'رمز / SKU',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: category,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'التصنيف',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 14),
+                        ),
+                        items: [
+                          for (final c in _categories)
+                            DropdownMenuItem(
+                              value: c.$1,
+                              child: Text(
+                                c.$2,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              value: category,
-                              decoration: const InputDecoration(
-                                labelText: 'التصنيف',
-                                border: OutlineInputBorder(),
-                              ),
-                              items: [
-                                for (final c in _categories)
-                                  DropdownMenuItem(
-                                      value: c.$1, child: Text(c.$2)),
-                              ],
-                              onChanged: (v) =>
-                                  setLocal(() => category = v ?? 'general'),
-                            ),
-                          ),
                         ],
+                        onChanged: (v) =>
+                            setLocal(() => category = v ?? 'general'),
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -127,14 +127,22 @@ class InventoryTab extends StatelessWidget {
                           Expanded(
                             child: DropdownButtonFormField<String>(
                               value: unit,
+                              isExpanded: true,
                               decoration: const InputDecoration(
                                 labelText: 'الوحدة',
                                 border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 14),
                               ),
                               items: [
                                 for (final u in _units)
                                   DropdownMenuItem(
-                                      value: u.$1, child: Text(u.$2)),
+                                    value: u.$1,
+                                    child: Text(
+                                      u.$2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
                               ],
                               onChanged: (v) =>
                                   setLocal(() => unit = v ?? 'piece'),
@@ -498,11 +506,13 @@ class InventoryTab extends StatelessWidget {
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   leading: CircleAvatar(
-                    backgroundColor: (badgeColor ?? Theme.of(context).colorScheme.primary)
+                    backgroundColor: (badgeColor ??
+                            Theme.of(context).colorScheme.primary)
                         .withOpacity(0.12),
                     child: Icon(
                       Icons.inventory_2_outlined,
-                      color: badgeColor ?? Theme.of(context).colorScheme.primary,
+                      color: badgeColor ??
+                          Theme.of(context).colorScheme.primary,
                     ),
                   ),
                   title: Text(item.name,
