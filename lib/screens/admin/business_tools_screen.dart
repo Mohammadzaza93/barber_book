@@ -87,8 +87,7 @@ class _PortfolioTab extends StatelessWidget {
                     InputDecoration(labelText: t(context).portfolioImageUrl)),
             TextField(
                 controller: category,
-                decoration:
-                    InputDecoration(labelText: t(context).portfolioCategory)),
+                decoration: InputDecoration(labelText: t(context).category)),
             TextField(
                 controller: description,
                 maxLines: 2,
@@ -200,8 +199,8 @@ class _QueueTab extends StatelessWidget {
               if (shop.activeEmployees.isNotEmpty)
                 DropdownButtonFormField<String>(
                   value: employeeId,
-                  decoration:
-                      InputDecoration(labelText: t(context).assignedBarberField),
+                  decoration: InputDecoration(
+                      labelText: t(context).assignedBarberField),
                   items: shop.activeEmployees
                       .map((e) =>
                           DropdownMenuItem(value: e.id, child: Text(e.name)))
@@ -247,7 +246,7 @@ class _QueueTab extends StatelessWidget {
         label: Text(t(context).add),
       ),
       body: tools.queue.isEmpty
-          ? Center(child: Text(t(context).queueEmpty))
+          ? const Center(child: Text('لا يوجد أحد في الطابور حالياً'))
           : ListView.builder(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
               itemCount: tools.queue.length,
