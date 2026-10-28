@@ -204,12 +204,15 @@ class _PortfolioTabState extends State<_PortfolioTab> {
     final titleText = title.text.trim();
     final categoryText = category.text.trim();
     final descriptionText = description.text.trim();
-    title.dispose();
-    category.dispose();
-    description.dispose();
+    final pickedFile = picked;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      title.dispose();
+      category.dispose();
+      description.dispose();
+    });
     if (result != true ||
         !context.mounted ||
-        picked == null ||
+        pickedFile == null ||
         titleText.isEmpty) {
       return;
     }
@@ -219,7 +222,7 @@ class _PortfolioTabState extends State<_PortfolioTab> {
       final tools = context.read<BusinessToolsProvider>();
       final url = await MediaUploadService.instance.uploadPortfolioImage(
         shopId: tools.shopId,
-        file: picked!,
+        file: pickedFile,
       );
       await tools.addPortfolio(PortfolioItem(
         id: tools.newId(),
@@ -237,7 +240,10 @@ class _PortfolioTabState extends State<_PortfolioTab> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('فشل الرفع: $e')),
+          SnackBar(
+            content: Text('$e'.replaceFirst('Bad state: ', '')),
+            duration: const Duration(seconds: 6),
+          ),
         );
       }
     } finally {
@@ -416,8 +422,10 @@ class _QueueTab extends StatelessWidget {
     );
     final nameText = name.text.trim();
     final phoneText = phone.text.trim();
-    name.dispose();
-    phone.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      phone.dispose();
+    });
     if (result != true || !context.mounted || nameText.isEmpty) return;
     await context.read<BusinessToolsProvider>().addQueue(QueueEntry(
           id: context.read<BusinessToolsProvider>().newId(),
