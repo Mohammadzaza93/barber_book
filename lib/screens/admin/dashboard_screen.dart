@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../l10n/strings.dart';
 import '../../providers/appointment_provider.dart';
 import '../../providers/finance_provider.dart';
 import '../../providers/shop_provider.dart';
@@ -427,7 +428,7 @@ class _BarChartCard extends StatelessWidget {
     final entries = daily.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
     final hasData = entries.any((e) => e.value > 0);
-    final total = entries.fold<double>(0, (s, e) => s + e.value);
+    final total = entries.fold<double>(0.0, (s, e) => s + e.value);
 
     return Card(
       elevation: 0,
@@ -464,8 +465,8 @@ class _BarChartCard extends StatelessWidget {
                       BarChartData(
                         maxY: () {
                           final m = entries.fold<double>(
-                              0, (x, e) => e.value > x ? e.value : x);
-                          return m == 0 ? 10 : m * 1.25;
+                              0.0, (x, e) => e.value > x ? e.value : x);
+                          return m == 0 ? 10.0 : m * 1.25;
                         }(),
                         gridData: FlGridData(
                           show: true,
