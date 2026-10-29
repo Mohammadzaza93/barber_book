@@ -7,6 +7,7 @@ import '../../models/business_features.dart';
 import '../../models/enums.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/business_tools_provider.dart';
+import '../../services/ops_helpers.dart';
 import '../../providers/shop_provider.dart';
 import 'queue_finish_payment.dart';
 
@@ -234,6 +235,43 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
     ));
   }
 
+  Future<void> _bumpPriority(QueueEntry entry, int delta) async {
+    final tools = context.read<BusinessToolsProvider>();
+    final next = (entry.priority + delta).clamp(0, 99);
+    if (next == entry.priority) return;
+    await tools.saveQueue(entry.copyWith(priority: next));
+  }
+
+  Future<void> _returnToWait(QueueEntry entry) async {
+    final tools = context.read<BusinessToolsProvider>();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('إرجاع للانتظار؟'),
+        content: Text(
+          'سيُعاد «${entry.customerName}» إلى الطابور ويُحرَّر الكرسي.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('إرجاع')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await tools.saveQueue(entry.copyWith(
+      status: QueueStatus.waiting,
+      clearChairId: true,
+      clearStartedAt: true,
+    ));
+  }
+
+  bool _isOvertime(QueueEntry entry, List<QueueEntry> queue) {
+    if (entry.startedAt == null) return false;
+    final avg = OpsHelpers.avgServiceMinutes(queue);
+    final limit = (avg * 1.6).round().clamp(30, 90);
+    return DateTime.now().difference(entry.startedAt!).inMinutes >= limit;
+  }
+
   Future<void> _finishService(QueueEntry entry) async {
     await QueueFinishPayment.show(context, entry);
   }
@@ -435,8 +473,14 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
       if (!c.active || c.onBreak) return false;
       return _activeOnChair(tools, c.id) == null;
     }).length;
-    final waiting = tools.queue.where((e) => e.status == QueueStatus.waiting).toList();
-    final inService = tools.queue.where((e) => e.status == QueueStatus.inService).toList();
+    final waiting = tools.queue.where((e) => e.status == QueueStatus.waiting).toList()
+      ..sort((a, b) {
+        final p = b.priority.compareTo(a.priority);
+        if (p != 0) return p;
+        return a.joinedAt.compareTo(b.joinedAt);
+      });
+    final inService = tools.queue.where((e) => e.status == QueueStatus.inService).toList()
+      ..sort((a, b) => (a.startedAt ?? a.joinedAt).compareTo(b.startedAt ?? b.joinedAt));
 
     return Scaffold(
       body: ListView(
@@ -685,19 +729,58 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                 padding: EdgeInsets.only(top: 4, bottom: 6),
                 child: Text('بانتظار الخدمة', style: TextStyle(fontWeight: FontWeight.w700)),
               ),
-              ...waiting.map((entry) => Card(
-                    child: ListTile(
-                      title: Text(entry.customerName),
-                      subtitle: Text(
-                          '${entry.customerPhone}  •  ${DateFormat('HH:mm').format(entry.joinedAt)}'),
-                      trailing: canManage
-                          ? FilledButton.tonal(
-                              onPressed: () => _startServiceFromQueue(entry),
-                              child: const Text('بدء'),
-                            )
-                          : null,
+              ...waiting.asMap().entries.map((pair) {
+                final i = pair.key;
+                final entry = pair.value;
+                final waitMin = OpsHelpers.estimatedWaitMinutes(
+                  queue: tools.queue,
+                  waitingAhead: i,
+                );
+                final waitLabel = waitMin <= 0
+                    ? 'قريب'
+                    : 'تقدير الانتظار ≈ $waitMin د';
+                return Card(
+                  child: ListTile(
+                    isThreeLine: true,
+                    leading: CircleAvatar(
+                      child: Text(
+                        entry.priority > 0 ? 'P${entry.priority}' : '${i + 1}',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                      ),
                     ),
-                  )),
+                    title: Text(entry.customerName),
+                    subtitle: Text(
+                      [
+                        if (entry.customerPhone.isNotEmpty) entry.customerPhone,
+                        DateFormat('HH:mm').format(entry.joinedAt),
+                        waitLabel,
+                        if (entry.priority > 0) 'أولوية ${entry.priority}',
+                      ].join('  •  '),
+                    ),
+                    trailing: canManage
+                        ? Wrap(
+                            spacing: 0,
+                            children: [
+                              IconButton(
+                                tooltip: 'رفع الأولوية',
+                                icon: const Icon(Icons.keyboard_arrow_up),
+                                onPressed: () => _bumpPriority(entry, 1),
+                              ),
+                              IconButton(
+                                tooltip: 'خفض الأولوية',
+                                icon: const Icon(Icons.keyboard_arrow_down),
+                                onPressed: () => _bumpPriority(entry, -1),
+                              ),
+                              FilledButton.tonal(
+                                onPressed: () => _startServiceFromQueue(entry),
+                                child: const Text('بدء'),
+                              ),
+                            ],
+                          )
+                        : null,
+                  ),
+                );
+              }),
             ],
             if (inService.isNotEmpty) ...[
               const Padding(
@@ -707,21 +790,46 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
               ...inService.map((entry) {
                 final chair =
                     tools.chairs.where((c) => c.id == entry.chairId).firstOrNull;
+                final overtime = _isOvertime(entry, tools.queue);
                 return Card(
+                  color: overtime
+                      ? Theme.of(context).colorScheme.errorContainer.withOpacity(0.35)
+                      : null,
                   child: ListTile(
-                    title: Text(entry.customerName),
+                    isThreeLine: overtime,
+                    title: Row(
+                      children: [
+                        Expanded(child: Text(entry.customerName)),
+                        if (overtime)
+                          const Padding(
+                            padding: EdgeInsets.only(right: 6),
+                            child: Icon(Icons.timer_off_outlined, size: 18, color: Color(0xFFB91C1C)),
+                          ),
+                      ],
+                    ),
                     subtitle: Text(
                       [
                         if (chair != null) _chairLabel(context, chair),
                         DateFormat('HH:mm').format(entry.startedAt ?? entry.joinedAt),
                         _durationLabel(entry.startedAt),
+                        if (overtime) 'طال الوقت — راجع الخدمة',
                       ].where((s) => s.isNotEmpty).join('  •  '),
                     ),
                     trailing: canManage
-                        ? IconButton(
-                            icon: const Icon(Icons.check_circle_outline),
-                            tooltip: 'إنهاء',
-                            onPressed: () => _finishService(entry),
+                        ? Wrap(
+                            spacing: 0,
+                            children: [
+                              IconButton(
+                                tooltip: 'إرجاع للانتظار',
+                                icon: const Icon(Icons.undo_rounded),
+                                onPressed: () => _returnToWait(entry),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.check_circle_outline),
+                                tooltip: 'إنهاء + تحصيل',
+                                onPressed: () => _finishService(entry),
+                              ),
+                            ],
                           )
                         : null,
                   ),
