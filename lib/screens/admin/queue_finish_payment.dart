@@ -8,8 +8,8 @@ import '../../models/finance/finance_models.dart';
 import '../../providers/business_tools_provider.dart';
 import '../../providers/finance_provider.dart';
 import '../../providers/shop_provider.dart';
+import '../../services/ops_helpers.dart';
 
-/// ينهي خدمة الطابور ويسجّل أجرة الزبون في المالية.
 class QueueFinishPayment {
   static Future<void> show(BuildContext context, QueueEntry entry) async {
     final tools = context.read<BusinessToolsProvider>();
@@ -45,7 +45,34 @@ class QueueFinishPayment {
         break;
       }
     }
-    final percentCtrl = TextEditingController(text: percent.toStringAsFixed(0));
+    final percentCtrl =
+        TextEditingController(text: percent.toStringAsFixed(0));
+
+    final phone = entry.customerPhone.trim();
+    final loyalty = phone.isEmpty
+        ? null
+        : tools.loyalty
+            .where((a) => a.customerPhone.trim() == phone)
+            .firstOrNull;
+    final gifts = tools.loyaltyGifts
+        .where((g) =>
+            g.isAvailable &&
+            (loyalty == null || loyalty.points >= g.pointsCost))
+        .toList();
+    String? selectedGiftId;
+    final lowStock = OpsHelpers.lowStockItems(tools.inventory);
+
+    final customerNote = tools.customers
+        .where((c) =>
+            c.phone.trim() == phone ||
+            (phone.isEmpty &&
+                c.name.trim() == entry.customerName.trim()))
+        .map((c) => [
+              if (c.notes.trim().isNotEmpty) c.notes.trim(),
+              if (c.allergies.trim().isNotEmpty) 'حساسية: ${c.allergies}',
+            ].where((x) => x.isNotEmpty).join(' — '))
+        .where((s) => s.isNotEmpty)
+        .firstOrNull;
 
     final result = await showDialog<String>(
       context: context,
@@ -73,13 +100,41 @@ class QueueFinishPayment {
                   if (entry.customerPhone.isNotEmpty)
                     Text(entry.customerPhone,
                         style: TextStyle(color: Colors.grey.shade700)),
+                  if (customerNote != null) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text('ملاحظة: $customerNote',
+                          style: const TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                  if (loyalty != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'نقاط الولاء: ${loyalty.points} (${loyalty.tier})',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.blue.shade800),
+                    ),
+                  ],
+                  if (lowStock.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'تنبيه مخزون: ${lowStock.take(3).map((i) => i.name).join('، ')}',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.red.shade800),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   if (activeServices.isNotEmpty)
                     DropdownButtonFormField<String>(
                       value: serviceId,
                       isExpanded: true,
                       decoration: const InputDecoration(
-                        labelText: 'الخدمة / نوع الأجرة',
+                        labelText: 'الخدمة / نوع الأجرة *',
                         border: OutlineInputBorder(),
                       ),
                       items: activeServices
@@ -95,8 +150,9 @@ class QueueFinishPayment {
                           .toList(),
                       onChanged: (v) => setLocal(() {
                         serviceId = v;
-                        final svc =
-                            activeServices.where((s) => s.id == v).firstOrNull;
+                        final svc = activeServices
+                            .where((s) => s.id == v)
+                            .firstOrNull;
                         if (svc != null && svc.price > 0) {
                           amountCtrl.text = svc.price.toStringAsFixed(0);
                         }
@@ -104,16 +160,16 @@ class QueueFinishPayment {
                     )
                   else
                     const Text(
-                      'لا توجد خدمات معرّفة — أدخل المبلغ يدوياً',
+                      'لا توجد خدمات — أضف خدمات من شاشة الخدمات',
                       style: TextStyle(fontSize: 12),
                     ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: amountCtrl,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true),
                     decoration: const InputDecoration(
-                      labelText: 'المبلغ الإجمالي',
+                      labelText: 'المبلغ الإجمالي *',
                       border: OutlineInputBorder(),
                     ),
                     onChanged: (_) => setLocal(() {}),
@@ -121,14 +177,39 @@ class QueueFinishPayment {
                   const SizedBox(height: 10),
                   TextField(
                     controller: materialCtrl,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true),
                     decoration: const InputDecoration(
                       labelText: 'تكلفة مواد (اختياري)',
                       border: OutlineInputBorder(),
                     ),
                     onChanged: (_) => setLocal(() {}),
                   ),
+                  if (gifts.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String?>(
+                      value: selectedGiftId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'استخدام هدية ولاء (اختياري)',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                            value: null, child: Text('بدون هدية')),
+                        ...gifts.map(
+                          (g) => DropdownMenuItem(
+                            value: g.id,
+                            child: Text(
+                              '${g.name} (${g.pointsCost} نقطة)',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                      onChanged: (v) => setLocal(() => selectedGiftId = v),
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   if (shop.activeEmployees.isNotEmpty)
                     DropdownButtonFormField<String>(
@@ -147,7 +228,8 @@ class QueueFinishPayment {
                         for (final s in finance.barberSettlements) {
                           if (s.barberId == v &&
                               s.payType == BarberPayType.percent) {
-                            percentCtrl.text = s.percent.toStringAsFixed(0);
+                            percentCtrl.text =
+                                s.percent.toStringAsFixed(0);
                             break;
                           }
                         }
@@ -177,7 +259,8 @@ class QueueFinishPayment {
                       DropdownMenuItem(
                           value: PaymentMethod.card, child: Text('بطاقة')),
                       DropdownMenuItem(
-                          value: PaymentMethod.transfer, child: Text('حوالة')),
+                          value: PaymentMethod.transfer,
+                          child: Text('حوالة')),
                       DropdownMenuItem(
                           value: PaymentMethod.other, child: Text('أخرى')),
                     ],
@@ -195,10 +278,11 @@ class QueueFinishPayment {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'صافي بعد المواد: ${net.toStringAsFixed(0)}  •  '
-                    'حصة الحلاق: ${barberShare.toStringAsFixed(0)}  •  '
-                    'الصالون: ${salonShare.toStringAsFixed(0)}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+                    'صافي: ${net.toStringAsFixed(0)}  •  '
+                    'حلاق: ${barberShare.toStringAsFixed(0)}  •  '
+                    'صالون: ${salonShare.toStringAsFixed(0)}',
+                    style:
+                        TextStyle(fontSize: 12, color: Colors.grey.shade800),
                   ),
                 ],
               ),
@@ -229,6 +313,7 @@ class QueueFinishPayment {
     final selectedServiceId = serviceId;
     final selectedBarberId = barberId;
     final selectedPay = payMethod;
+    final giftId = selectedGiftId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       amountCtrl.dispose();
       materialCtrl.dispose();
@@ -262,27 +347,46 @@ class QueueFinishPayment {
       return;
     }
 
-    final material =
-        double.tryParse(materialText.replaceAll(',', '').trim()) ?? 0;
-    final pct = (double.tryParse(percentText.replaceAll(',', '').trim()) ?? 50)
-        .clamp(0, 100)
-        .toDouble();
-    final net = (total - material).clamp(0, double.infinity).toDouble();
-    final barberShare = net * pct / 100;
-    final salonShare = net - barberShare;
-
-    String serviceName = 'أجرة خدمة';
+    String serviceName = '';
     if (selectedServiceId != null) {
       final svc =
           activeServices.where((s) => s.id == selectedServiceId).firstOrNull;
       if (svc != null) serviceName = svc.name;
     }
+    if (serviceName.trim().isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('حدّد نوع الوارد (مثال: أجرة حلاقة شعر)')),
+      );
+      return;
+    }
+
+    final material =
+        double.tryParse(materialText.replaceAll(',', '').trim()) ?? 0;
+    final pct =
+        (double.tryParse(percentText.replaceAll(',', '').trim()) ?? 50)
+            .clamp(0, 100)
+            .toDouble();
+    final net = (total - material).clamp(0, double.infinity).toDouble();
+    final barberShare = net * pct / 100;
+    final salonShare = net - barberShare;
 
     final barber = shop.activeEmployees
         .where((e) => e.id == selectedBarberId)
         .firstOrNull;
     final barberName = barber?.name ?? '';
     final barberIdFinal = barber?.id ?? selectedBarberId ?? '';
+
+    if (giftId != null && loyalty != null) {
+      final gift =
+          tools.loyaltyGifts.where((g) => g.id == giftId).firstOrNull;
+      if (gift != null) {
+        try {
+          await tools.redeemGift(loyalty.id, gift);
+        } catch (_) {}
+      }
+    }
 
     await finance.addDailyEntry(
       DailyFinanceEntry(
@@ -319,6 +423,19 @@ class QueueFinishPayment {
         notes: 'من الطابور — $serviceName',
       ),
     );
+
+    final match = tools.customers.where((c) {
+      if (phone.isNotEmpty) return c.phone.trim() == phone;
+      return c.name.trim() == entry.customerName.trim();
+    }).firstOrNull;
+    if (match != null) {
+      await tools.saveCustomer(
+        match.copyWith(
+          visitCount: match.visitCount + 1,
+          lastVisitAt: DateTime.now(),
+        ),
+      );
+    }
 
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
