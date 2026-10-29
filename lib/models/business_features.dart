@@ -542,6 +542,7 @@ class QueueEntry {
     DateTime? completedAt,
     int? priority,
     bool clearChairId = false,
+    bool clearStartedAt = false,
   }) =>
       QueueEntry(
         id: id,
@@ -552,7 +553,7 @@ class QueueEntry {
         serviceIds: serviceIds ?? this.serviceIds,
         status: status ?? this.status,
         joinedAt: joinedAt,
-        startedAt: startedAt ?? this.startedAt,
+        startedAt: clearStartedAt ? null : (startedAt ?? this.startedAt),
         completedAt: completedAt ?? this.completedAt,
         priority: priority ?? this.priority,
       );
