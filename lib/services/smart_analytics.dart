@@ -21,7 +21,15 @@ class SmartInsight {
   });
 }
 
-enum IconKey { insights, trendingUp, trendingDown, schedule, star, money, people }
+enum IconKey {
+  insights,
+  trendingUp,
+  trendingDown,
+  schedule,
+  star,
+  money,
+  people
+}
 
 class SmartAnalyticsReport {
   final PeriodSnapshot today;
@@ -119,9 +127,17 @@ class SmartAnalytics {
         forecastResult.nextWeek.map((d) => d.amount).toList(growable: false);
 
     final serviceNames = {for (final s in services) s.id: s.name};
-    final topService = _topService(appointments, serviceNames);
-    final topStaff = _topStaff(appointments, staffNames);
-    final peak = _peakHour(appointments);
+    final topService = _topService(
+      appointments,
+      serviceNames,
+      financeEntries: financeEntries,
+    );
+    final topStaff = _topStaff(
+      appointments,
+      staffNames,
+      financeEntries: financeEntries,
+    );
+    final peak = _peakHour(appointments, financeEntries: financeEntries);
 
     final insights = _buildInsights(
       today: today,
@@ -154,37 +170,64 @@ class SmartAnalytics {
   }
 
   String? _topService(
-      List<Appointment> appts, Map<String, String> names) {
+    List<Appointment> appts,
+    Map<String, String> names, {
+    List<DailyFinanceEntry> financeEntries = const [],
+  }) {
     final counts = <String, int>{};
     for (final a in appts) {
       if (a.status == AppointmentStatus.cancelled) continue;
       for (final id in a.serviceIds) {
-        counts[id] = (counts[id] ?? 0) + 1;
+        final label = names[id] ?? id;
+        if (label.isEmpty) continue;
+        counts[label] = (counts[label] ?? 0) + 1;
       }
+    }
+    for (final e in financeEntries) {
+      final n = e.serviceName.trim();
+      if (n.isEmpty) continue;
+      counts[n] = (counts[n] ?? 0) + 1;
     }
     if (counts.isEmpty) return null;
     final best = counts.entries.reduce((a, b) => a.value >= b.value ? a : b);
-    return names[best.key] ?? best.key;
+    return best.key;
   }
 
   String? _topStaff(
-      List<Appointment> appts, Map<String, String> names) {
+    List<Appointment> appts,
+    Map<String, String> names, {
+    List<DailyFinanceEntry> financeEntries = const [],
+  }) {
     final counts = <String, int>{};
     for (final a in appts) {
       if (a.status != AppointmentStatus.completed) continue;
-      counts[a.employeeId] = (counts[a.employeeId] ?? 0) + 1;
+      final label = names[a.employeeId] ?? a.employeeId;
+      if (label.isEmpty) continue;
+      counts[label] = (counts[label] ?? 0) + 1;
+    }
+    for (final e in financeEntries) {
+      final n = e.barberName.trim();
+      if (n.isEmpty) continue;
+      counts[n] = (counts[n] ?? 0) + 1;
     }
     if (counts.isEmpty) return null;
     final best = counts.entries.reduce((a, b) => a.value >= b.value ? a : b);
-    return names[best.key] ?? best.key;
+    return best.key;
   }
 
-  (int, double) _peakHour(List<Appointment> appts) {
+  (int, double) _peakHour(
+    List<Appointment> appts, {
+    List<DailyFinanceEntry> financeEntries = const [],
+  }) {
     final hours = List<int>.filled(24, 0);
     var total = 0;
     for (final a in appts) {
       if (a.status == AppointmentStatus.cancelled) continue;
       hours[a.startTime.hour]++;
+      total++;
+    }
+    for (final e in financeEntries) {
+      hours[e.date.hour]++;
       total++;
     }
     if (total == 0) return (12, 0);
@@ -193,6 +236,50 @@ class SmartAnalytics {
       if (hours[h] > hours[peak]) peak = h;
     }
     return (peak, hours[peak] / total);
+  }
+
+  Map<DateTime, double> dailyRevenueSeries(
+    List<DailyFinanceEntry> financeEntries, {
+    int days = 7,
+    DateTime? now,
+  }) {
+    final n = now ?? DateTime.now();
+    final start = DateTime(n.year, n.month, n.day)
+        .subtract(Duration(days: days - 1));
+    final map = <DateTime, double>{};
+    for (var i = 0; i < days; i++) {
+      final d = DateTime(start.year, start.month, start.day + i);
+      map[d] = 0;
+    }
+    for (final e in financeEntries) {
+      final d = DateTime(e.date.year, e.date.month, e.date.day);
+      if (map.containsKey(d)) {
+        map[d] = (map[d] ?? 0) + e.totalAmount;
+      }
+    }
+    return map;
+  }
+
+  Map<DateTime, double> dailyOpsSeries(
+    List<DailyFinanceEntry> financeEntries, {
+    int days = 7,
+    DateTime? now,
+  }) {
+    final n = now ?? DateTime.now();
+    final start = DateTime(n.year, n.month, n.day)
+        .subtract(Duration(days: days - 1));
+    final map = <DateTime, double>{};
+    for (var i = 0; i < days; i++) {
+      final d = DateTime(start.year, start.month, start.day + i);
+      map[d] = 0;
+    }
+    for (final e in financeEntries) {
+      final d = DateTime(e.date.year, e.date.month, e.date.day);
+      if (map.containsKey(d)) {
+        map[d] = (map[d] ?? 0) + 1;
+      }
+    }
+    return map;
   }
 
   List<SmartInsight> _buildInsights({
@@ -235,9 +322,8 @@ class SmartAnalytics {
         a.status == AppointmentStatus.completed ||
         a.status == AppointmentStatus.noShow ||
         a.status == AppointmentStatus.cancelled);
-    final noShow = appointments
-        .where((a) => a.status == AppointmentStatus.noShow)
-        .length;
+    final noShow =
+        appointments.where((a) => a.status == AppointmentStatus.noShow).length;
     final finished = relevant.length;
     if (finished >= 5) {
       final rate = noShow / finished;
@@ -285,7 +371,7 @@ class SmartAnalytics {
         kind: InsightKind.info,
         title: 'الخدمة الأكثر طلباً',
         body:
-            '«$topService» تتصدّر الحجوزات. يمكن رفع سعرها قليلاً أو تقديم باقة معها.',
+            '«$topService» تتصدّر. يمكن رفع سعرها قليلاً أو تقديم باقة معها.',
         icon: IconKey.star,
       ));
     }
@@ -304,7 +390,7 @@ class SmartAnalytics {
         kind: InsightKind.tip,
         title: 'ساعة الذروة',
         body:
-            'أكثر الحجوزات حول الساعة ${_fmtHour(peakHour)}. جهّز فريقاً إضافياً في هذا الوقت.',
+            'أكثر العمليات حول الساعة ${_fmtHour(peakHour)}. جهّز فريقاً إضافياً في هذا الوقت.',
         icon: IconKey.schedule,
       ));
     }
@@ -323,11 +409,11 @@ class SmartAnalytics {
       }
     }
 
-    if (today.bookings == 0 && thisWeek.bookings > 0) {
+    if (today.salesOps == 0 && today.bookings == 0 && thisWeek.revenue > 0) {
       list.add(const SmartInsight(
         kind: InsightKind.tip,
-        title: 'لا حجوزات لليوم بعد',
-        body: 'شارك رابط الحجز أو تواصل مع زبائن منتظمين لملء الجدول.',
+        title: 'لا وارد لليوم بعد',
+        body: 'سجّل التحصيل من الطابور أو شارك رابط الحجز.',
         icon: IconKey.schedule,
       ));
     }
@@ -337,7 +423,7 @@ class SmartAnalytics {
         kind: InsightKind.info,
         title: 'ابدأ بتسجيل البيانات',
         body:
-            'سجّل وارد الزبائن والمواعيد بانتظام لتحصل على تحليلات أدق وتوقعات أوضح.',
+            'سجّل وارد الزبائن بانتظام لتحصل على تحليلات أدق وتوقعات أوضح.',
         icon: IconKey.insights,
       ));
     }
