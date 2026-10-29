@@ -8,14 +8,16 @@ import '../../providers/appointment_provider.dart';
 import '../../providers/finance_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/analytics_service.dart';
+import '../../services/ops_helpers.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/feature_labels.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/stat_card.dart';
+import 'customers_to_call_screen.dart';
+import 'day_close_screen.dart';
 import 'smart_analytics_screen.dart';
 
-/// لوحة التحكم — كل قسم يستمع فقط لما يحتاجه (تقليل rebuild).
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
@@ -25,6 +27,10 @@ class DashboardScreen extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: const [
         _DashboardHeader(),
+        SizedBox(height: 12),
+        _CompareStrip(),
+        SizedBox(height: 12),
+        _OpsShortcuts(),
         SizedBox(height: 12),
         _SmartAnalyticsEntry(),
         SizedBox(height: 16),
@@ -38,6 +44,87 @@ class DashboardScreen extends StatelessWidget {
         SizedBox(height: 8),
         _TopStaffSection(),
         SizedBox(height: 16),
+      ],
+    );
+  }
+}
+
+class _CompareStrip extends StatelessWidget {
+  const _CompareStrip();
+
+  @override
+  Widget build(BuildContext context) {
+    final finance = context.watch<FinanceProvider>();
+    final now = DateTime.now();
+    final todayStart = OpsHelpers.dayStart(now);
+    final todayEnd = OpsHelpers.dayEnd(now);
+    final yStart = OpsHelpers.dayStart(now.subtract(const Duration(days: 1)));
+    final yEnd = OpsHelpers.dayEnd(now.subtract(const Duration(days: 1)));
+    final wStart = OpsHelpers.weekStart(now);
+    final today = finance.sumDailyTotal(from: todayStart, to: todayEnd);
+    final yesterday = finance.sumDailyTotal(from: yStart, to: yEnd);
+    final week = finance.sumDailyTotal(from: wStart, to: todayEnd);
+    final delta = today - yesterday;
+    final deltaLabel =
+        delta >= 0 ? '+${delta.toStringAsFixed(0)}' : delta.toStringAsFixed(0);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Expanded(child: _mini('اليوم', today.toStringAsFixed(0))),
+            Expanded(
+              child: _mini('أمس', yesterday.toStringAsFixed(0),
+                  sub: 'فرق $deltaLabel'),
+            ),
+            Expanded(child: _mini('هذا الأسبوع', week.toStringAsFixed(0))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _mini(String label, String value, {String? sub}) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+          Text(value,
+              style:
+                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+          if (sub != null) Text(sub, style: const TextStyle(fontSize: 10)),
+        ],
+      );
+}
+
+class _OpsShortcuts extends StatelessWidget {
+  const _OpsShortcuts();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const DayCloseScreen()),
+            ),
+            icon: const Icon(Icons.nightlight_round, size: 18),
+            label: const Text('إغلاق اليوم'),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CustomersToCallScreen()),
+            ),
+            icon: const Icon(Icons.phone_callback_outlined, size: 18),
+            label: const Text('اتصال'),
+          ),
+        ),
       ],
     );
   }
@@ -81,10 +168,7 @@ class _DashboardHeader extends StatelessWidget {
       children: [
         Text(
           t(context).welcomeBackName(shopName),
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-          ),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 4),
         Text(
@@ -122,7 +206,8 @@ class _DashboardStatsGrid extends StatelessWidget {
             Expanded(
               child: StatCard(
                 icon: Icons.payments_rounded,
-                label: FeatureLabels.text(context, 'إيراد اليوم', 'Today revenue'),
+                label:
+                    FeatureLabels.text(context, 'إيراد اليوم', 'Today revenue'),
                 value: fmtPrice(revenueToday, currency),
                 color: accent,
               ),
@@ -131,7 +216,8 @@ class _DashboardStatsGrid extends StatelessWidget {
             Expanded(
               child: StatCard(
                 icon: Icons.event_available_rounded,
-                label: FeatureLabels.text(context, 'مواعيد اليوم', 'Today bookings'),
+                label: FeatureLabels.text(
+                    context, 'مواعيد اليوم', 'Today bookings'),
                 value: '$bookingsToday',
                 color: const Color(0xFF059669),
               ),
