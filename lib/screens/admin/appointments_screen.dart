@@ -284,6 +284,50 @@ class _AppointmentCard extends StatelessWidget {
             ],
           ),
         ),
+        trailing: PopupMenuButton<String>(
+          onSelected: (v) async {
+            final ap = context.read<AppointmentProvider>();
+            final shopId = a.shopId;
+            if (shopId.isEmpty) return;
+            try {
+              if (v == 'noshow') {
+                await ap.setStatus(a, AppointmentStatus.noShow, shopId);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم تسجيل: لم يحضر')),
+                  );
+                }
+              } else if (v == 'completed') {
+                await ap.setStatus(a, AppointmentStatus.completed, shopId);
+              } else if (v == 'cancelled') {
+                await ap.setStatus(a, AppointmentStatus.cancelled, shopId);
+              }
+            } catch (e) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('تعذر التحديث: $e')),
+                );
+              }
+            }
+          },
+          itemBuilder: (_) => [
+            if (a.status != AppointmentStatus.noShow)
+              const PopupMenuItem(
+                value: 'noshow',
+                child: Text('لم يحضر (No-show)'),
+              ),
+            if (a.status != AppointmentStatus.completed)
+              const PopupMenuItem(
+                value: 'completed',
+                child: Text('تم الحضور'),
+              ),
+            if (a.status != AppointmentStatus.cancelled)
+              const PopupMenuItem(
+                value: 'cancelled',
+                child: Text('إلغاء'),
+              ),
+          ],
+        ),
       ),
     );
   }
