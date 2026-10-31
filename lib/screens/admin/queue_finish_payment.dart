@@ -19,6 +19,7 @@ class QueueFinishPayment {
 
     String? serviceId =
         activeServices.isEmpty ? null : activeServices.first.id;
+    final tipCtrl = TextEditingController(text: '0');
     final amountCtrl = TextEditingController(
       text: activeServices.isEmpty
           ? ''
@@ -82,6 +83,7 @@ class QueueFinishPayment {
           double numOf(TextEditingController c) =>
               double.tryParse(c.text.replaceAll(',', '').trim()) ?? 0;
           final total = numOf(amountCtrl);
+          final tip = numOf(tipCtrl);
           final material = numOf(materialCtrl);
           final pct = numOf(percentCtrl).clamp(0, 100);
           final net = (total - material).clamp(0, double.infinity);
@@ -169,7 +171,18 @@ class QueueFinishPayment {
                     keyboardType: const TextInputType.numberWithOptions(
                         decimal: true),
                     decoration: const InputDecoration(
-                      labelText: 'المبلغ الإجمالي *',
+                      labelText: 'أجرة الخدمة *',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) => setLocal(() {}),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: tipCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'بقشيش (اختياري)',
                       border: OutlineInputBorder(),
                     ),
                     onChanged: (_) => setLocal(() {}),
@@ -280,7 +293,8 @@ class QueueFinishPayment {
                   Text(
                     'صافي: ${net.toStringAsFixed(0)}  •  '
                     'حلاق: ${barberShare.toStringAsFixed(0)}  •  '
-                    'صالون: ${salonShare.toStringAsFixed(0)}',
+                    'صالون: ${salonShare.toStringAsFixed(0)}'
+                    '${tip > 0 ? '  •  بقشيش: ${tip.toStringAsFixed(0)}' : ''}',
                     style:
                         TextStyle(fontSize: 12, color: Colors.grey.shade800),
                   ),
@@ -307,6 +321,7 @@ class QueueFinishPayment {
     );
 
     final amountText = amountCtrl.text;
+    final tipText = tipCtrl.text;
     final materialText = materialCtrl.text;
     final percentText = percentCtrl.text;
     final notesText = notesCtrl.text;
@@ -315,6 +330,7 @@ class QueueFinishPayment {
     final selectedPay = payMethod;
     final giftId = selectedGiftId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      tipCtrl.dispose();
       amountCtrl.dispose();
       materialCtrl.dispose();
       percentCtrl.dispose();
@@ -338,6 +354,7 @@ class QueueFinishPayment {
       return;
     }
 
+    final tip = double.tryParse(tipText.replaceAll(',', '')) ?? 0;
     final total = double.tryParse(amountText.replaceAll(',', '').trim()) ?? 0;
     if (total <= 0) {
       if (!context.mounted) return;
@@ -405,6 +422,7 @@ class QueueFinishPayment {
         paymentMethod: selectedPay,
         notes: notesText.trim().isEmpty ? 'من الطابور' : notesText.trim(),
         manualBarberShare: true,
+        tipAmount: tip < 0 ? 0 : tip,
       ),
     );
 
@@ -440,7 +458,10 @@ class QueueFinishPayment {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('تم تحصيل $serviceName: ${total.toStringAsFixed(0)}'),
+        content: Text(
+          'تم تحصيل $serviceName: ${total.toStringAsFixed(0)}'
+          '${tip > 0 ? ' + بقشيش ${tip.toStringAsFixed(0)}' : ''}',
+        ),
       ),
     );
   }
