@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../../l10n/strings.dart';
 import '../../models/business_features.dart';
 import '../../models/finance/finance_models.dart';
+import '../../models/inventory_models.dart';
 import '../../providers/business_tools_provider.dart';
 import '../../providers/finance_provider.dart';
 import '../../providers/shop_provider.dart';
@@ -425,6 +426,27 @@ class QueueFinishPayment {
         tipAmount: tip < 0 ? 0 : tip,
       ),
     );
+
+    // استهلاك مخزون مرتبط بالخدمة
+    if (selectedServiceId != null) {
+      for (final item in tools.inventory) {
+        if (!item.active || item.consumePerUse <= 0) continue;
+        if (!item.linkedServiceIds.contains(selectedServiceId)) continue;
+        try {
+          await tools.applyInventoryMovement(
+            InventoryMovement(
+              id: const Uuid().v4(),
+              itemId: item.id,
+              type: 'usage',
+              quantity: item.consumePerUse,
+              unitCost: item.unitCost,
+              reason: 'استهلاك تلقائي — $serviceName',
+              createdAt: DateTime.now(),
+            ),
+          );
+        } catch (_) {}
+      }
+    }
 
     await tools.addPayment(
       Payment(
