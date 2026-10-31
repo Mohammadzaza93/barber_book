@@ -6,6 +6,7 @@ import '../../../models/finance/finance_models.dart';
 import '../../../models/service.dart';
 import '../../../providers/finance_provider.dart';
 import '../../../providers/shop_provider.dart';
+import '../../../services/finance_pdf_export.dart';
 
 /// شاشة وارد الزبائن — مقسّمة حتى لا يعيد setState بناء الملخص والسجل معاً.
 class DailySalesScreen extends StatelessWidget {
@@ -33,9 +34,6 @@ class DailySalesScreen extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// ملخص حسب نوع الوارد — يعاد بناؤه فقط عند تغيّر FinanceProvider
-// ─────────────────────────────────────────────
 class _RevenueByServiceSummary extends StatelessWidget {
   const _RevenueByServiceSummary();
 
@@ -65,7 +63,7 @@ class _RevenueByServiceSummary extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  'المجموع ${f.sumDailyTotal().toStringAsFixed(0)} ل.س',
+                  'المجموع ${f.sumDailyTotal().toStringAsFixed(0)}',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ],
@@ -83,7 +81,7 @@ class _RevenueByServiceSummary extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),
-                    Text('${e.value.toStringAsFixed(0)} ل.س'),
+                    Text(e.value.toStringAsFixed(0)),
                   ],
                 ),
               ),
@@ -95,9 +93,6 @@ class _RevenueByServiceSummary extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// نموذج الإدخال — setState محلي فقط داخل هذا الـ Widget
-// ─────────────────────────────────────────────
 class _NewRevenueForm extends StatefulWidget {
   const _NewRevenueForm();
 
@@ -114,6 +109,7 @@ class _NewRevenueFormState extends State<_NewRevenueForm> {
   final _customer = TextEditingController();
   final _customService = TextEditingController();
   final _notes = TextEditingController();
+  final _tip = TextEditingController(text: '0');
 
   String? _barberId;
   String? _serviceId;
@@ -128,6 +124,7 @@ class _NewRevenueFormState extends State<_NewRevenueForm> {
     _customer.dispose();
     _customService.dispose();
     _notes.dispose();
+    _tip.dispose();
     super.dispose();
   }
 
@@ -135,6 +132,7 @@ class _NewRevenueFormState extends State<_NewRevenueForm> {
       double.tryParse(c.text.replaceAll(',', '').trim()) ?? 0;
 
   double get _totalValue => _num(_total);
+  double get _tipValue => _num(_tip).clamp(0, double.infinity).toDouble();
   double get _materialValue => _num(_material);
   double get _percentValue => _num(_percent).clamp(0, 100).toDouble();
   double get _netAfterMaterial =>
@@ -179,7 +177,7 @@ class _NewRevenueFormState extends State<_NewRevenueForm> {
     final shop = context.read<ShopProvider>();
     final f = context.read<FinanceProvider>();
     if (_totalValue <= 0) {
-      _toast('أدخل المبلغ الإجمالي أولاً');
+      _toast('أدخل أجرة الخدمة أولاً');
       return;
     }
     final serviceName = _resolvedServiceName(shop.services);
@@ -210,6 +208,7 @@ class _NewRevenueFormState extends State<_NewRevenueForm> {
       paymentMethod: _payment,
       notes: _notes.text.trim(),
       manualBarberShare: true,
+      tipAmount: _tipValue,
     );
     await f.addDailyEntry(entry);
     if (!mounted) return;
@@ -218,6 +217,7 @@ class _NewRevenueFormState extends State<_NewRevenueForm> {
     _customer.clear();
     _customService.clear();
     _notes.clear();
+    _tip.text = '0';
     setState(() => _saving = false);
     _toast('تم تسجيل الوارد: $serviceName');
   }
@@ -228,7 +228,6 @@ class _NewRevenueFormState extends State<_NewRevenueForm> {
 
   @override
   Widget build(BuildContext context) {
-    // watch فقط للخدمات/الموظفين — لا يُربط بـ FinanceProvider هنا
     final shop = context.watch<ShopProvider>();
     final activeServices = shop.services.where((s) => s.active).toList();
 
@@ -244,7 +243,7 @@ class _NewRevenueFormState extends State<_NewRevenueForm> {
             ),
             const SizedBox(height: 4),
             Text(
-              'حدّد نوع الوارد بدقة (مثال: أجرة حلاقة شعر)، ثم المبلغ والحلاق وطريقة الدفع.',
+              'حدّد نوع الوارد بدقة، ثم الأجرة والحلاق وطريقة الدفع. البقشيش اختياري ومنفصل.',
               style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
             ),
             const SizedBox(height: 12),
@@ -257,7 +256,7 @@ class _NewRevenueFormState extends State<_NewRevenueForm> {
                     value: s.id,
                     child: Text(
                       s.price > 0
-                          ? '${s.name} — ${s.price.toStringAsFixed(0)} ل.س'
+                          ? '${s.name} — ${s.price.toStringAsFixed(0)}'
                           : s.name,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -271,7 +270,6 @@ class _NewRevenueFormState extends State<_NewRevenueForm> {
               onChanged: (v) => _onServicePicked(v, activeServices),
               decoration: const InputDecoration(
                 labelText: 'نوع الوارد (الخدمة) *',
-                hintText: 'مثال: أجرة حلاقة شعر',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.cut_rounded),
               ),
@@ -294,9 +292,20 @@ class _NewRevenueFormState extends State<_NewRevenueForm> {
               keyboardType: TextInputType.number,
               onChanged: (_) => setState(() {}),
               decoration: const InputDecoration(
-                labelText: 'المبلغ المحصّل (ل.س) *',
+                labelText: 'أجرة الخدمة *',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.payments_outlined),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _tip,
+              keyboardType: TextInputType.number,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'بقشيش (اختياري)',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.volunteer_activism_outlined),
               ),
             ),
             const SizedBox(height: 10),
@@ -305,13 +314,14 @@ class _NewRevenueFormState extends State<_NewRevenueForm> {
               keyboardType: TextInputType.number,
               onChanged: (_) => setState(() {}),
               decoration: const InputDecoration(
-                labelText: 'تكلفة المواد (صبغة/بروتين...) (ل.س)',
+                labelText: 'تكلفة المواد (اختياري)',
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
               value: _barberId,
+              isExpanded: true,
               items: shop.employees
                   .map(
                     (e) => DropdownMenuItem(
@@ -382,6 +392,7 @@ class _NewRevenueFormState extends State<_NewRevenueForm> {
               netAfterMaterial: _netAfterMaterial,
               barberShare: _barberShare,
               salonShare: _salonShare,
+              tip: _tipValue,
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -404,11 +415,13 @@ class _SharePreview extends StatelessWidget {
     required this.netAfterMaterial,
     required this.barberShare,
     required this.salonShare,
+    required this.tip,
   });
 
   final double netAfterMaterial;
   final double barberShare;
   final double salonShare;
+  final double tip;
 
   @override
   Widget build(BuildContext context) {
@@ -427,6 +440,7 @@ class _SharePreview extends StatelessWidget {
             value: salonShare,
             bold: true,
           ),
+          if (tip > 0) _CalcRow(label: 'بقشيش', value: tip),
         ],
       ),
     );
@@ -455,16 +469,13 @@ class _CalcRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: style),
-          Text('${value.toStringAsFixed(0)} ل.س', style: style),
+          Text(value.toStringAsFixed(0), style: style),
         ],
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────
-// رأس السجل + القائمة — watch Finance فقط
-// ─────────────────────────────────────────────
 class _EntriesHeader extends StatelessWidget {
   const _EntriesHeader();
 
@@ -487,8 +498,20 @@ class _EntriesHeader extends StatelessWidget {
   }
 }
 
-class _EntriesList extends StatelessWidget {
+enum _PeriodFilter { day, month, all }
+
+class _EntriesList extends StatefulWidget {
   const _EntriesList();
+
+  @override
+  State<_EntriesList> createState() => _EntriesListState();
+}
+
+class _EntriesListState extends State<_EntriesList> {
+  String? _barberId;
+  String? _service;
+  PaymentMethod? _payment;
+  _PeriodFilter _period = _PeriodFilter.day;
 
   String _paymentLabel(PaymentMethod m) {
     switch (m) {
@@ -503,27 +526,192 @@ class _EntriesList extends StatelessWidget {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final entries =
-        context.select<FinanceProvider, List<DailyFinanceEntry>>((f) => f.entries);
-    final f = context.read<FinanceProvider>();
+  (DateTime, DateTime) _range() {
+    final now = DateTime.now();
+    final startDay = DateTime(now.year, now.month, now.day);
+    switch (_period) {
+      case _PeriodFilter.day:
+        return (startDay, DateTime(now.year, now.month, now.day, 23, 59, 59));
+      case _PeriodFilter.month:
+        return (
+          DateTime(now.year, now.month, 1),
+          DateTime(now.year, now.month + 1, 0, 23, 59, 59),
+        );
+      case _PeriodFilter.all:
+        return (DateTime(2000), DateTime(2100));
+    }
+  }
 
-    if (entries.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Center(child: Text('لا توجد واردات مسجّلة بعد')),
+  List<DailyFinanceEntry> _filter(List<DailyFinanceEntry> all) {
+    final (from, to) = _range();
+    return all.where((e) {
+      if (e.date.isBefore(from) || e.date.isAfter(to)) return false;
+      if (_barberId != null && e.barberId != _barberId) return false;
+      if (_service != null && e.serviceName != _service) return false;
+      if (_payment != null && e.paymentMethod != _payment) return false;
+      return true;
+    }).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+  }
+
+  Future<void> _exportPdf(List<DailyFinanceEntry> all) async {
+    final shop = context.read<ShopProvider>();
+    final (from, to) = _range();
+    final currency = shop.settings?.currency ?? 'SAR';
+    final name = shop.settings?.shopName ?? '';
+    try {
+      await FinancePdfExport.instance.sharePeriodSummary(
+        entries: all,
+        from: from,
+        to: to,
+        currency: currency,
+        shopName: name,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر التصدير: $e')),
       );
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = context
+        .select<FinanceProvider, List<DailyFinanceEntry>>((f) => f.entries);
+    final f = context.read<FinanceProvider>();
+    final filtered = _filter(entries);
+
+    final services = {
+      for (final e in entries)
+        if (e.serviceName.trim().isNotEmpty) e.serviceName
+    }.toList()
+      ..sort();
+    final barbers = {
+      for (final e in entries)
+        if (e.barberId.isNotEmpty) e.barberId: e.barberName
+    };
+
+    final sumService = filtered.fold<double>(0, (s, e) => s + e.totalAmount);
+    final sumTips = filtered.fold<double>(0, (s, e) => s + e.tipAmount);
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final d in entries)
-          _EntryCard(
-            entry: d,
-            paymentLabel: _paymentLabel(d.paymentMethod),
-            onDelete: () => f.deleteDailyEntry(d.id),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: SegmentedButton<_PeriodFilter>(
+                        segments: const [
+                          ButtonSegment(
+                              value: _PeriodFilter.day, label: Text('اليوم')),
+                          ButtonSegment(
+                              value: _PeriodFilter.month, label: Text('الشهر')),
+                          ButtonSegment(
+                              value: _PeriodFilter.all, label: Text('الكل')),
+                        ],
+                        selected: {_period},
+                        onSelectionChanged: (s) =>
+                            setState(() => _period = s.first),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'تصدير PDF',
+                      onPressed:
+                          entries.isEmpty ? null : () => _exportPdf(entries),
+                      icon: const Icon(Icons.picture_as_pdf_outlined),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String?>(
+                  value: _barberId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'الحلاق',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                        value: null, child: Text('كل الحلاقين')),
+                    ...barbers.entries.map(
+                      (e) => DropdownMenuItem(
+                          value: e.key, child: Text(e.value)),
+                    ),
+                  ],
+                  onChanged: (v) => setState(() => _barberId = v),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String?>(
+                  value: _service,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'الخدمة',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                        value: null, child: Text('كل الخدمات')),
+                    ...services.map(
+                      (s) => DropdownMenuItem(value: s, child: Text(s)),
+                    ),
+                  ],
+                  onChanged: (v) => setState(() => _service = v),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<PaymentMethod?>(
+                  value: _payment,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'طريقة الدفع',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('كل الطرق')),
+                    DropdownMenuItem(
+                        value: PaymentMethod.cash, child: Text('نقداً')),
+                    DropdownMenuItem(
+                        value: PaymentMethod.card, child: Text('بطاقة')),
+                    DropdownMenuItem(
+                        value: PaymentMethod.transfer, child: Text('حوالة')),
+                    DropdownMenuItem(
+                        value: PaymentMethod.other, child: Text('أخرى')),
+                  ],
+                  onChanged: (v) => setState(() => _payment = v),
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    'أجور: ${sumService.toStringAsFixed(0)}  •  بقشيش: ${sumTips.toStringAsFixed(0)}  •  ${filtered.length} عملية',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
           ),
+        ),
+        if (filtered.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: Text('لا توجد واردات ضمن التصفية')),
+          )
+        else
+          for (final d in filtered)
+            _EntryCard(
+              entry: d,
+              paymentLabel: _paymentLabel(d.paymentMethod),
+              onDelete: () => f.deleteDailyEntry(d.id),
+            ),
       ],
     );
   }
@@ -548,6 +736,9 @@ class _EntryCard extends StatelessWidget {
     final customer =
         entry.customerName.trim().isEmpty ? 'زبون' : entry.customerName.trim();
     final dateStr = entry.date.toLocal().toString().split(' ').first;
+    final tipPart = entry.tipAmount <= 0
+        ? ''
+        : ' + بقشيش ${entry.tipAmount.toStringAsFixed(0)}';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -566,12 +757,12 @@ class _EntryCard extends StatelessWidget {
         subtitle: Text(
           '$customer • ${entry.barberName}\n'
           '$dateStr • $paymentLabel • '
-          'إجمالي ${entry.totalAmount.toStringAsFixed(0)} • '
-          'صالون ${entry.salonShare.toStringAsFixed(0)} ل.س',
+          'أجرة ${entry.totalAmount.toStringAsFixed(0)}$tipPart'
+          ' • صالون ${entry.salonShare.toStringAsFixed(0)}',
         ),
         isThreeLine: true,
         trailing: IconButton(
-          icon: const Icon(Icons.delete_outline_rounded),
+          icon: const Icon(Icons.delete_outline),
           onPressed: onDelete,
         ),
       ),
