@@ -147,6 +147,8 @@ class DailyFinanceEntry {
   final PaymentMethod paymentMethod;
   final String notes;
   final bool manualBarberShare;
+  /// بقشيش منفصل عن أجرة الخدمة (لا يدخل في تقسيم الصالون/الحلاق تلقائياً).
+  final double tipAmount;
 
   DailyFinanceEntry({
     required this.id,
@@ -164,7 +166,11 @@ class DailyFinanceEntry {
     this.paymentMethod = PaymentMethod.cash,
     this.notes = '',
     this.manualBarberShare = true,
+    this.tipAmount = 0,
   });
+
+  /// ما دفعه الزبون فعلياً = أجرة الخدمة + البقشيش.
+  double get collectedTotal => totalAmount + tipAmount;
 
   Map<String, dynamic> toMap() => {
         'date': Timestamp.fromDate(date),
@@ -181,6 +187,7 @@ class DailyFinanceEntry {
         'paymentMethod': paymentMethod.name,
         'notes': notes,
         'manualBarberShare': manualBarberShare,
+        'tipAmount': tipAmount,
       };
 
   factory DailyFinanceEntry.fromMap(String id, Map<String, dynamic> m) =>
@@ -202,6 +209,7 @@ class DailyFinanceEntry {
             orElse: () => PaymentMethod.cash),
         notes: m['notes'] ?? '',
         manualBarberShare: m['manualBarberShare'] ?? true,
+        tipAmount: (m['tipAmount'] as num?)?.toDouble() ?? 0,
       );
 }
 
