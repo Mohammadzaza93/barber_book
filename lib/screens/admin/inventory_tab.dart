@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../models/business_features.dart';
 import '../../providers/business_tools_provider.dart';
+import '../../widgets/confirm_dialogs.dart';
 import '../../providers/shop_provider.dart';
 
 const _categories = [
@@ -39,6 +40,12 @@ class InventoryTab extends StatelessWidget {
         text: item == null ? '0' : item.quantity.toString());
     final cost = TextEditingController(
         text: item == null ? '0' : item.unitCost.toString());
+    final consumeCtrl = TextEditingController(
+      text: (item?.consumePerUse ?? 0) == 0
+          ? '0'
+          : item!.consumePerUse.toString(),
+    );
+    var linked = List<String>.from(item?.linkedServiceIds ?? const []);
     final reorder = TextEditingController(
         text: item == null ? '0' : item.reorderLevel.toString());
     var category = item?.category ?? 'general';
@@ -195,6 +202,56 @@ class InventoryTab extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 12),
+                      TextFormField(
+                        controller: consumeCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'استهلاك لكل خدمة (اختياري)',
+                          helperText: 'يُخصم تلقائياً عند تحصيل خدمة مرتبطة',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Builder(builder: (ctx) {
+                        final services = ctx
+                            .watch<ShopProvider>()
+                            .services
+                            .where((s) => s.active)
+                            .toList();
+                        if (services.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('ربط بخدمات (للاستهلاك التلقائي)',
+                                style: TextStyle(fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: [
+                                for (final s in services)
+                                  FilterChip(
+                                    label: Text(s.name),
+                                    selected: linked.contains(s.id),
+                                    onSelected: (v) => setLocal(() {
+                                      if (v) {
+                                        linked = [...linked, s.id];
+                                      } else {
+                                        linked = linked
+                                            .where((x) => x != s.id)
+                                            .toList();
+                                      }
+                                    }),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        );
+                      }),
+                      const SizedBox(height: 12),
                       TextField(
                         controller: supplier,
                         decoration: const InputDecoration(
@@ -244,12 +301,15 @@ class InventoryTab extends StatelessWidget {
       quantity.dispose();
       cost.dispose();
       reorder.dispose();
+      consumeCtrl.dispose();
     });
 
     if (saved != true || !context.mounted || nameValue.isEmpty) return;
 
     final tools = context.read<BusinessToolsProvider>();
     final now = DateTime.now();
+    final consumeValue =
+        double.tryParse(consumeCtrl.text.replaceAll(',', '.')) ?? 0;
     await tools.saveInventoryItem(InventoryItem(
       id: item?.id ?? const Uuid().v4(),
       name: nameValue,
@@ -263,6 +323,8 @@ class InventoryTab extends StatelessWidget {
       createdAt: item?.createdAt ?? now,
       updatedAt: now,
       active: item?.active ?? true,
+      consumePerUse: consumeValue,
+      linkedServiceIds: linked,
     ));
   }
 
@@ -546,15 +608,22 @@ class InventoryTab extends StatelessWidget {
                   ),
                   isThreeLine: badgeText != null,
                   trailing: PopupMenuButton<String>(
-                    onSelected: (value) {
+                    onSelected: (value) async {
                       if (value == 'edit') {
-                        _showItemDialog(context, item: item);
+                        await _showItemDialog(context, item: item);
                       } else if (value == 'delete') {
-                        context
-                            .read<BusinessToolsProvider>()
-                            .deleteInventoryItem(item.id);
+                        final ok = await confirmDelete(
+                          context,
+                          title: 'حذف المادة؟',
+                          message: 'سيتم حذف «${item.name}» من المخزون.',
+                        );
+                        if (ok && context.mounted) {
+                          await context
+                              .read<BusinessToolsProvider>()
+                              .deleteInventoryItem(item.id);
+                        }
                       } else {
-                        _showMovementDialog(context, item, value);
+                        await _showMovementDialog(context, item, value);
                       }
                     },
                     itemBuilder: (_) => const [
