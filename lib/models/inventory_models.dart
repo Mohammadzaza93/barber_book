@@ -29,6 +29,10 @@ class InventoryItem {
   final DateTime updatedAt;
   final String? createdBy;
   final String? updatedBy;
+  /// خدمات تُستهلك منها هذه المادة تلقائياً عند التحصيل.
+  final List<String> linkedServiceIds;
+  /// الكمية المخصومة لكل عملية خدمة مرتبطة.
+  final double consumePerUse;
 
   const InventoryItem({
     required this.id,
@@ -52,6 +56,8 @@ class InventoryItem {
     required this.updatedAt,
     this.createdBy,
     this.updatedBy,
+    this.linkedServiceIds = const [],
+    this.consumePerUse = 0,
   });
 
   /// قيمة المخزون = الكمية × تكلفة آخر شراء.
@@ -103,6 +109,8 @@ class InventoryItem {
     DateTime? updatedAt,
     String? createdBy,
     String? updatedBy,
+    List<String>? linkedServiceIds,
+    double? consumePerUse,
   }) =>
       InventoryItem(
         id: id,
@@ -126,6 +134,8 @@ class InventoryItem {
         updatedAt: updatedAt ?? this.updatedAt,
         createdBy: createdBy ?? this.createdBy,
         updatedBy: updatedBy ?? this.updatedBy,
+        linkedServiceIds: linkedServiceIds ?? this.linkedServiceIds,
+        consumePerUse: consumePerUse ?? this.consumePerUse,
       );
 
   Map<String, dynamic> toMap() => {
@@ -150,6 +160,8 @@ class InventoryItem {
         'createdBy': createdBy,
         'updatedBy': updatedBy,
         'valuationMethod': 'last_purchase',
+        'linkedServiceIds': linkedServiceIds,
+        'consumePerUse': consumePerUse,
       };
 
   factory InventoryItem.fromMap(String id, Map<String, dynamic> m) =>
@@ -175,6 +187,10 @@ class InventoryItem {
         updatedAt: _readDate(m['updatedAt']),
         createdBy: m['createdBy'] as String?,
         updatedBy: m['updatedBy'] as String?,
+        linkedServiceIds: (m['linkedServiceIds'] as List<dynamic>? ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+        consumePerUse: ((m['consumePerUse'] as num?) ?? 0).toDouble(),
       );
 }
 
