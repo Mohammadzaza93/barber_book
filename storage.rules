@@ -1,5 +1,6 @@
 rules_version = '2';
 
+// Free-tier safe Storage rules: signed-in shop owner only, images only, size capped.
 service firebase.storage {
   match /b/{bucket}/o {
     function signedIn() {
@@ -12,13 +13,17 @@ service firebase.storage {
           == request.auth.uid;
     }
 
-    match /shops/{shopId}/logo {
-      allow read: if isShopOwner(shopId);
-      allow write: if isShopOwner(shopId)
-        && request.resource.size < 5 * 1024 * 1024
+    function isImageUnder5mb() {
+      return request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }
 
+    match /shops/{shopId}/logo {
+      allow read: if isShopOwner(shopId);
+      allow write: if isShopOwner(shopId) && isImageUnder5mb();
+    }
+
+    // Backups metadata only lives in Firestore; block arbitrary storage paths.
     match /{allPaths=**} {
       allow read, write: if false;
     }
