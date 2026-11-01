@@ -1,7 +1,7 @@
 rules_version = '2';
 
-// Free security baseline: deny-by-default, shop isolation, role checks.
-// Owner/admin has full access to all shop subcollections (restores app data).
+// Free security baseline.
+// Critical: collection query shops.where(ownerId==uid) needs list rule on resource.data.ownerId.
 // Deploy: firebase deploy --only firestore:rules
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -31,7 +31,6 @@ service cloud.firestore {
       return get(memberPath(shopId)).data.role;
     }
 
-    // Matches app AppRoleX: admin/owner/manager → admin
     function isAdmin(shopId) {
       return isShopOwner(shopId)
         || (isShopMember(shopId)
@@ -47,156 +46,91 @@ service cloud.firestore {
     }
 
     match /shops/{shopId} {
+      // Create shop: signed-in user becomes owner
       allow create: if signedIn()
         && request.resource.data.ownerId == request.auth.uid;
 
-      allow read: if isShopOwner(shopId) || isShopMember(shopId);
-      allow update: if isAdmin(shopId);
-      allow delete: if isShopOwner(shopId);
+      // GET one shop by id: owner or member
+      allow get: if isShopOwner(shopId) || isShopMember(shopId)
+        || (signedIn() && resource.data.ownerId == request.auth.uid);
 
-      // Safety net: owner/admin can access ANY subcollection under the shop.
+      // LIST / query shops.where(ownerId == uid) — must use resource.data
+      allow list: if signedIn()
+        && resource.data.ownerId == request.auth.uid;
+
+      allow update: if isAdmin(shopId)
+        || (signedIn() && resource.data.ownerId == request.auth.uid);
+      allow delete: if isShopOwner(shopId)
+        || (signedIn() && resource.data.ownerId == request.auth.uid);
+
+      // Owner/admin: full access to every subcollection under the shop
       match /{document=**} {
-        allow read, write: if isAdmin(shopId);
+        allow read, write: if isAdmin(shopId)
+          || (signedIn()
+              && get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId
+                 == request.auth.uid);
       }
 
       match /members/{memberId} {
         allow read: if isShopOwner(shopId) || isAdmin(shopId)
           || (signedIn() && request.auth.uid == memberId);
-        allow create: if isShopOwner(shopId);
-        allow update, delete: if isShopOwner(shopId);
+        allow create, update, delete: if isShopOwner(shopId)
+          || (signedIn()
+              && get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId
+                 == request.auth.uid);
       }
 
       match /appointments/{docId} {
-        allow read: if canReadShopData(shopId);
-        allow create, update: if isAdmin(shopId) || isStaff(shopId);
-        allow delete: if isAdmin(shopId);
-      }
-
-      match /expenses/{docId} {
-        allow read, write: if isAdmin(shopId);
-      }
-
-      match /payments/{docId} {
-        allow read, write: if isAdmin(shopId);
-      }
-
-      match /finance/{group}/items/{itemId} {
-        allow read, write: if isAdmin(shopId);
-      }
-
-      match /finance_daily/{entryId} {
-        allow read, write: if isAdmin(shopId);
-      }
-
-      match /requests/{docId} {
-        allow read, create, update: if isAdmin(shopId) || isStaff(shopId);
-        allow delete: if isAdmin(shopId);
-      }
-
-      match /feedback/{docId} {
-        allow read, write: if isAdmin(shopId);
-      }
-
-      match /customers/{docId} {
-        allow read, write: if isAdmin(shopId);
-      }
-
-      match /loyalty/{docId} {
-        allow read, write: if isAdmin(shopId);
+        allow read: if canReadShopData(shopId)
+          || (signedIn()
+              && get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId
+                 == request.auth.uid);
+        allow create, update: if isAdmin(shopId) || isStaff(shopId)
+          || (signedIn()
+              && get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId
+                 == request.auth.uid);
+        allow delete: if isAdmin(shopId)
+          || (signedIn()
+              && get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId
+                 == request.auth.uid);
       }
 
       match /queue/{docId} {
-        allow read, create, update: if isAdmin(shopId) || isStaff(shopId);
-        allow delete: if isAdmin(shopId);
-      }
-
-      match /inventory/{docId} {
-        allow read, write: if isAdmin(shopId);
-      }
-
-      match /inventoryMovements/{docId} {
-        allow read, create: if isAdmin(shopId);
-        allow update, delete: if false;
+        allow read, create, update: if isAdmin(shopId) || isStaff(shopId)
+          || (signedIn()
+              && get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId
+                 == request.auth.uid);
+        allow delete: if isAdmin(shopId)
+          || (signedIn()
+              && get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId
+                 == request.auth.uid);
       }
 
       match /services/{docId} {
-        allow read: if canReadShopData(shopId);
-        allow write: if isAdmin(shopId);
+        allow read: if canReadShopData(shopId)
+          || (signedIn()
+              && get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId
+                 == request.auth.uid);
+        allow write: if isAdmin(shopId)
+          || (signedIn()
+              && get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId
+                 == request.auth.uid);
       }
 
       match /employees/{docId} {
-        allow read: if canReadShopData(shopId);
-        allow write: if isAdmin(shopId);
-      }
-
-      match /discounts/{docId} {
-        allow read: if canReadShopData(shopId);
-        allow write: if isAdmin(shopId);
-      }
-
-      match /portfolio/{docId} {
-        allow read: if canReadShopData(shopId);
-        allow write: if isAdmin(shopId);
-      }
-
-      match /chairs/{docId} {
-        allow read: if canReadShopData(shopId);
-        allow write: if isAdmin(shopId);
-      }
-
-      match /chairSupplies/{docId} {
-        allow read, write: if isAdmin(shopId);
-      }
-
-      match /chairWeeklyProfits/{docId} {
-        allow read, write: if isAdmin(shopId);
-      }
-
-      match /loyaltyRules/{docId} {
-        allow read: if canReadShopData(shopId);
-        allow write: if isAdmin(shopId);
-      }
-
-      match /loyaltyGifts/{docId} {
-        allow read: if canReadShopData(shopId);
-        allow write: if isAdmin(shopId);
-      }
-
-      match /team_tasks/{docId} {
-        allow read: if canReadShopData(shopId);
-        allow create, update: if isAdmin(shopId) || isStaff(shopId);
-        allow delete: if isAdmin(shopId);
-      }
-
-      match /team_evaluations/{docId} {
-        allow read, write: if isAdmin(shopId);
-      }
-
-      match /team_attendance/{docId} {
-        allow read: if isAdmin(shopId) || isStaff(shopId);
-        allow write: if isAdmin(shopId);
-      }
-
-      match /team_time_off/{docId} {
-        allow read: if canReadShopData(shopId);
-        allow create: if isAdmin(shopId) || isStaff(shopId);
-        allow update, delete: if isAdmin(shopId);
-      }
-
-      match /activity_log/{docId} {
-        allow read: if isAdmin(shopId);
-        allow create: if isAdmin(shopId) || isStaff(shopId);
-        allow update, delete: if false;
-      }
-
-      match /backups/{docId} {
-        allow read, write: if isAdmin(shopId);
+        allow read: if canReadShopData(shopId)
+          || (signedIn()
+              && get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId
+                 == request.auth.uid);
+        allow write: if isAdmin(shopId)
+          || (signedIn()
+              && get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId
+                 == request.auth.uid);
       }
     }
 
     match /users/{uid} {
-      allow read: if signedIn() && request.auth.uid == uid;
-      allow write: if signedIn() && request.auth.uid == uid;
+      allow read, write: if signedIn() && request.auth.uid == uid;
     }
 
     match /{document=**} {
