@@ -1,6 +1,7 @@
 rules_version = '2';
 
 // Free security baseline: deny-by-default, shop isolation, role checks.
+// Owner/admin has full access to all shop subcollections (restores app data).
 // Deploy: firebase deploy --only firestore:rules
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -13,7 +14,9 @@ service cloud.firestore {
     }
 
     function isShopOwner(shopId) {
-      return signedIn() && shopDoc(shopId).ownerId == request.auth.uid;
+      return signedIn()
+        && exists(/databases/$(database)/documents/shops/$(shopId))
+        && shopDoc(shopId).ownerId == request.auth.uid;
     }
 
     function memberPath(shopId) {
@@ -28,11 +31,11 @@ service cloud.firestore {
       return get(memberPath(shopId)).data.role;
     }
 
+    // Matches app AppRoleX: admin/owner/manager → admin
     function isAdmin(shopId) {
       return isShopOwner(shopId)
-        || (isShopMember(shopId) && myRole(shopId) == 'admin')
-        || (isShopMember(shopId) && myRole(shopId) == 'manager')
-        || (isShopMember(shopId) && myRole(shopId) == 'owner');
+        || (isShopMember(shopId)
+            && myRole(shopId) in ['admin', 'manager', 'owner']);
     }
 
     function isStaff(shopId) {
@@ -51,6 +54,11 @@ service cloud.firestore {
       allow update: if isAdmin(shopId);
       allow delete: if isShopOwner(shopId);
 
+      // Safety net: owner/admin can access ANY subcollection under the shop.
+      match /{document=**} {
+        allow read, write: if isAdmin(shopId);
+      }
+
       match /members/{memberId} {
         allow read: if isShopOwner(shopId) || isAdmin(shopId)
           || (signedIn() && request.auth.uid == memberId);
@@ -60,21 +68,16 @@ service cloud.firestore {
 
       match /appointments/{docId} {
         allow read: if canReadShopData(shopId);
-        allow create: if isAdmin(shopId) || isStaff(shopId);
-        allow update: if isAdmin(shopId) || isStaff(shopId);
-        allow delete: if isAdmin(shopId);
-      }
-
-      match /expenses/{docId} {
-        allow read: if isAdmin(shopId);
         allow create, update: if isAdmin(shopId) || isStaff(shopId);
         allow delete: if isAdmin(shopId);
       }
 
+      match /expenses/{docId} {
+        allow read, write: if isAdmin(shopId);
+      }
+
       match /payments/{docId} {
-        allow read: if isAdmin(shopId);
-        allow create: if isAdmin(shopId) || isStaff(shopId);
-        allow update, delete: if isAdmin(shopId);
+        allow read, write: if isAdmin(shopId);
       }
 
       match /finance/{group}/items/{itemId} {
@@ -86,27 +89,20 @@ service cloud.firestore {
       }
 
       match /requests/{docId} {
-        allow read: if isAdmin(shopId) || isStaff(shopId);
-        allow create: if isAdmin(shopId) || isStaff(shopId);
-        allow update, delete: if isAdmin(shopId);
+        allow read, create, update: if isAdmin(shopId) || isStaff(shopId);
+        allow delete: if isAdmin(shopId);
       }
 
       match /feedback/{docId} {
-        allow read: if isAdmin(shopId);
-        allow create: if canReadShopData(shopId);
-        allow update, delete: if isAdmin(shopId);
+        allow read, write: if isAdmin(shopId);
       }
 
       match /customers/{docId} {
-        allow read: if isAdmin(shopId);
-        allow create, update: if isAdmin(shopId);
-        allow delete: if isAdmin(shopId);
+        allow read, write: if isAdmin(shopId);
       }
 
       match /loyalty/{docId} {
-        allow read: if isAdmin(shopId);
-        allow create, update: if isAdmin(shopId);
-        allow delete: if isAdmin(shopId);
+        allow read, write: if isAdmin(shopId);
       }
 
       match /queue/{docId} {
@@ -115,12 +111,11 @@ service cloud.firestore {
       }
 
       match /inventory/{docId} {
-        allow read, create, update, delete: if isAdmin(shopId);
+        allow read, write: if isAdmin(shopId);
       }
 
       match /inventoryMovements/{docId} {
-        allow read: if isAdmin(shopId);
-        allow create: if isAdmin(shopId);
+        allow read, create: if isAdmin(shopId);
         allow update, delete: if false;
       }
 
@@ -150,13 +145,11 @@ service cloud.firestore {
       }
 
       match /chairSupplies/{docId} {
-        allow read: if isAdmin(shopId);
-        allow write: if isAdmin(shopId);
+        allow read, write: if isAdmin(shopId);
       }
 
       match /chairWeeklyProfits/{docId} {
-        allow read: if isAdmin(shopId);
-        allow write: if isAdmin(shopId);
+        allow read, write: if isAdmin(shopId);
       }
 
       match /loyaltyRules/{docId} {
@@ -176,8 +169,7 @@ service cloud.firestore {
       }
 
       match /team_evaluations/{docId} {
-        allow read: if isAdmin(shopId);
-        allow write: if isAdmin(shopId);
+        allow read, write: if isAdmin(shopId);
       }
 
       match /team_attendance/{docId} {
@@ -198,15 +190,13 @@ service cloud.firestore {
       }
 
       match /backups/{docId} {
-        allow read: if isAdmin(shopId);
-        allow create: if isAdmin(shopId);
-        allow update, delete: if isAdmin(shopId);
+        allow read, write: if isAdmin(shopId);
       }
     }
 
     match /users/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
-      allow write: if false;
+      allow write: if signedIn() && request.auth.uid == uid;
     }
 
     match /{document=**} {
