@@ -67,6 +67,14 @@ android {
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.release
             }
+            // Free hardening: shrink + obfuscate release bytecode (no paid tools).
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            minifyEnabled false
+            shrinkResources false
         }
     }
 }

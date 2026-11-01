@@ -67,3 +67,8 @@ serviceaccount*.json
 .env
 .env.*
 !.env.example
+android/app/key.properties
+*.p12
+*-firebase-adminsdk*.json
+google-services.json.bak
+**/secrets/
