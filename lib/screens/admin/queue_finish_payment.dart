@@ -5,10 +5,10 @@ import 'package:uuid/uuid.dart';
 import '../../l10n/strings.dart';
 import '../../models/business_features.dart';
 import '../../models/finance/finance_models.dart';
-import '../../models/inventory_models.dart';
 import '../../providers/business_tools_provider.dart';
 import '../../providers/finance_provider.dart';
 import '../../providers/shop_provider.dart';
+import '../../services/app_error.dart';
 import '../../services/ops_helpers.dart';
 
 class QueueFinishPayment {
@@ -16,10 +16,28 @@ class QueueFinishPayment {
     final tools = context.read<BusinessToolsProvider>();
     final shop = context.read<ShopProvider>();
     final finance = context.read<FinanceProvider>();
+
+    /// Persists one step of the checkout. Firestore rejections (permission
+    /// denied, offline, missing index) must reach the user as a snackbar
+    /// instead of escaping as an unhandled async exception.
+    Future<bool> persist(Future<void> Function() action) async {
+      try {
+        await action();
+        return true;
+      } catch (error) {
+        if (context.mounted) {
+          final appError = AppError.from(error);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(appError.message)),
+          );
+        }
+        return false;
+      }
+    }
+
     final activeServices = shop.activeServices;
 
-    String? serviceId =
-        activeServices.isEmpty ? null : activeServices.first.id;
+    String? serviceId = activeServices.isEmpty ? null : activeServices.first.id;
     final tipCtrl = TextEditingController(text: '0');
     final amountCtrl = TextEditingController(
       text: activeServices.isEmpty
@@ -35,9 +53,8 @@ class QueueFinishPayment {
     String? barberId = entry.employeeId.isNotEmpty ? entry.employeeId : null;
     if (barberId == null ||
         !shop.activeEmployees.any((e) => e.id == barberId)) {
-      barberId = shop.activeEmployees.isEmpty
-          ? null
-          : shop.activeEmployees.first.id;
+      barberId =
+          shop.activeEmployees.isEmpty ? null : shop.activeEmployees.first.id;
     }
 
     double percent = 50;
@@ -47,8 +64,7 @@ class QueueFinishPayment {
         break;
       }
     }
-    final percentCtrl =
-        TextEditingController(text: percent.toStringAsFixed(0));
+    final percentCtrl = TextEditingController(text: percent.toStringAsFixed(0));
 
     final phone = entry.customerPhone.trim();
     final loyalty = phone.isEmpty
@@ -67,8 +83,7 @@ class QueueFinishPayment {
     final customerNote = tools.customers
         .where((c) =>
             c.phone.trim() == phone ||
-            (phone.isEmpty &&
-                c.name.trim() == entry.customerName.trim()))
+            (phone.isEmpty && c.name.trim() == entry.customerName.trim()))
         .map((c) => [
               if (c.notes.trim().isNotEmpty) c.notes.trim(),
               if (c.allergies.trim().isNotEmpty) 'حساسية: ${c.allergies}',
@@ -119,16 +134,16 @@ class QueueFinishPayment {
                     const SizedBox(height: 6),
                     Text(
                       'نقاط الولاء: ${loyalty.points} (${loyalty.tier})',
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.blue.shade800),
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.blue.shade800),
                     ),
                   ],
                   if (lowStock.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     Text(
                       'تنبيه مخزون: ${lowStock.take(3).map((i) => i.name).join('، ')}',
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.red.shade800),
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.red.shade800),
                     ),
                   ],
                   const SizedBox(height: 12),
@@ -153,9 +168,8 @@ class QueueFinishPayment {
                           .toList(),
                       onChanged: (v) => setLocal(() {
                         serviceId = v;
-                        final svc = activeServices
-                            .where((s) => s.id == v)
-                            .firstOrNull;
+                        final svc =
+                            activeServices.where((s) => s.id == v).firstOrNull;
                         if (svc != null && svc.price > 0) {
                           amountCtrl.text = svc.price.toStringAsFixed(0);
                         }
@@ -169,8 +183,8 @@ class QueueFinishPayment {
                   const SizedBox(height: 10),
                   TextField(
                     controller: amountCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(
                       labelText: 'أجرة الخدمة *',
                       border: OutlineInputBorder(),
@@ -180,8 +194,8 @@ class QueueFinishPayment {
                   const SizedBox(height: 10),
                   TextField(
                     controller: tipCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(
                       labelText: 'بقشيش (اختياري)',
                       border: OutlineInputBorder(),
@@ -191,8 +205,8 @@ class QueueFinishPayment {
                   const SizedBox(height: 10),
                   TextField(
                     controller: materialCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(
                       labelText: 'تكلفة مواد (اختياري)',
                       border: OutlineInputBorder(),
@@ -242,8 +256,7 @@ class QueueFinishPayment {
                         for (final s in finance.barberSettlements) {
                           if (s.barberId == v &&
                               s.payType == BarberPayType.percent) {
-                            percentCtrl.text =
-                                s.percent.toStringAsFixed(0);
+                            percentCtrl.text = s.percent.toStringAsFixed(0);
                             break;
                           }
                         }
@@ -273,8 +286,7 @@ class QueueFinishPayment {
                       DropdownMenuItem(
                           value: PaymentMethod.card, child: Text('بطاقة')),
                       DropdownMenuItem(
-                          value: PaymentMethod.transfer,
-                          child: Text('حوالة')),
+                          value: PaymentMethod.transfer, child: Text('حوالة')),
                       DropdownMenuItem(
                           value: PaymentMethod.other, child: Text('أخرى')),
                     ],
@@ -296,8 +308,7 @@ class QueueFinishPayment {
                     'حلاق: ${barberShare.toStringAsFixed(0)}  •  '
                     'صالون: ${salonShare.toStringAsFixed(0)}'
                     '${tip > 0 ? '  •  بقشيش: ${tip.toStringAsFixed(0)}' : ''}',
-                    style:
-                        TextStyle(fontSize: 12, color: Colors.grey.shade800),
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
                   ),
                 ],
               ),
@@ -340,12 +351,16 @@ class QueueFinishPayment {
 
     if (result == null || result == 'cancel' || !context.mounted) return;
 
-    await tools.saveQueue(
-      entry.copyWith(
-        status: QueueStatus.completed,
-        completedAt: DateTime.now(),
+    if (!await persist(
+      () => tools.saveQueue(
+        entry.copyWith(
+          status: QueueStatus.completed,
+          completedAt: DateTime.now(),
+        ),
       ),
-    );
+    )) {
+      return;
+    }
 
     if (result == 'skip') {
       if (!context.mounted) return;
@@ -374,31 +389,27 @@ class QueueFinishPayment {
     if (serviceName.trim().isEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('حدّد نوع الوارد (مثال: أجرة حلاقة شعر)')),
+        const SnackBar(content: Text('حدّد نوع الوارد (مثال: أجرة حلاقة شعر)')),
       );
       return;
     }
 
     final material =
         double.tryParse(materialText.replaceAll(',', '').trim()) ?? 0;
-    final pct =
-        (double.tryParse(percentText.replaceAll(',', '').trim()) ?? 50)
-            .clamp(0, 100)
-            .toDouble();
+    final pct = (double.tryParse(percentText.replaceAll(',', '').trim()) ?? 50)
+        .clamp(0, 100)
+        .toDouble();
     final net = (total - material).clamp(0, double.infinity).toDouble();
     final barberShare = net * pct / 100;
     final salonShare = net - barberShare;
 
-    final barber = shop.activeEmployees
-        .where((e) => e.id == selectedBarberId)
-        .firstOrNull;
+    final barber =
+        shop.activeEmployees.where((e) => e.id == selectedBarberId).firstOrNull;
     final barberName = barber?.name ?? '';
     final barberIdFinal = barber?.id ?? selectedBarberId ?? '';
 
     if (giftId != null && loyalty != null) {
-      final gift =
-          tools.loyaltyGifts.where((g) => g.id == giftId).firstOrNull;
+      final gift = tools.loyaltyGifts.where((g) => g.id == giftId).firstOrNull;
       if (gift != null) {
         try {
           await tools.redeemGift(loyalty.id, gift);
@@ -406,26 +417,29 @@ class QueueFinishPayment {
       }
     }
 
-    await finance.addDailyEntry(
-      DailyFinanceEntry(
-        id: const Uuid().v4(),
-        date: DateTime.now(),
-        customerName: entry.customerName,
-        serviceName: serviceName,
-        totalAmount: total,
-        barberId: barberIdFinal,
-        barberName: barberName,
-        barberPercent: pct,
-        materialCost: material,
-        netAfterMaterial: net,
-        barberShare: barberShare,
-        salonShare: salonShare,
-        paymentMethod: selectedPay,
-        notes: notesText.trim().isEmpty ? 'من الطابور' : notesText.trim(),
-        manualBarberShare: true,
-        tipAmount: tip < 0 ? 0 : tip,
+    final savedSale = await persist(
+      () => finance.addDailyEntry(
+        DailyFinanceEntry(
+          id: const Uuid().v4(),
+          date: DateTime.now(),
+          customerName: entry.customerName,
+          serviceName: serviceName,
+          totalAmount: total,
+          barberId: barberIdFinal,
+          barberName: barberName,
+          barberPercent: pct,
+          materialCost: material,
+          netAfterMaterial: net,
+          barberShare: barberShare,
+          salonShare: salonShare,
+          paymentMethod: selectedPay,
+          notes: notesText.trim().isEmpty ? 'من الطابور' : notesText.trim(),
+          manualBarberShare: true,
+          tipAmount: tip < 0 ? 0 : tip,
+        ),
       ),
     );
+    if (!savedSale) return;
 
     // استهلاك مخزون مرتبط بالخدمة
     if (selectedServiceId != null) {
@@ -448,33 +462,39 @@ class QueueFinishPayment {
       }
     }
 
-    await tools.addPayment(
-      Payment(
-        id: const Uuid().v4(),
-        appointmentId: '',
-        customerName: entry.customerName,
-        customerPhone: entry.customerPhone,
-        chairId: entry.chairId,
-        employeeId: barberIdFinal,
-        amount: total,
-        materialCost: material,
-        method: selectedPay.name,
-        paidAt: DateTime.now(),
-        notes: 'من الطابور — $serviceName',
+    final savedPayment = await persist(
+      () => tools.addPayment(
+        Payment(
+          id: const Uuid().v4(),
+          appointmentId: '',
+          customerName: entry.customerName,
+          customerPhone: entry.customerPhone,
+          chairId: entry.chairId,
+          employeeId: barberIdFinal,
+          amount: total,
+          materialCost: material,
+          method: selectedPay.name,
+          paidAt: DateTime.now(),
+          notes: 'من الطابور — $serviceName',
+        ),
       ),
     );
+    if (!savedPayment) return;
 
     final match = tools.customers.where((c) {
       if (phone.isNotEmpty) return c.phone.trim() == phone;
       return c.name.trim() == entry.customerName.trim();
     }).firstOrNull;
     if (match != null) {
-      await tools.saveCustomer(
-        match.copyWith(
-          visitCount: match.visitCount + 1,
-          lastVisitAt: DateTime.now(),
+      final savedCustomer = await persist(
+        () => tools.saveCustomer(
+          match.copyWith(
+            visitCount: match.visitCount + 1,
+            lastVisitAt: DateTime.now(),
+          ),
         ),
       );
+      if (!savedCustomer) return;
     }
 
     if (!context.mounted) return;

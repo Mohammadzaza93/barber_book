@@ -180,8 +180,7 @@ class ShopProvider extends ChangeNotifier {
     ));
   }
 
-  List<Service> get activeServices =>
-      services.where((s) => s.active).toList();
+  List<Service> get activeServices => services.where((s) => s.active).toList();
 
   List<Employee> get activeEmployees =>
       employees.where((e) => e.active).toList();
@@ -219,10 +218,35 @@ class ShopProvider extends ChangeNotifier {
 
   Future<void> updateEmployee(Employee e, String shopId) async {
     await FirestoreService.instance.updateEmployee(shopId, e);
+    // Server rules read the capability map from the membership document, so an
+    // owner editing the employee must keep both in sync. Best-effort: the
+    // employee record is still saved if the membership write is denied.
+    final uid = e.authUid;
+    if (uid != null && uid.isNotEmpty) {
+      try {
+        await FirestoreService.instance.updateMemberPermissions(
+          shopId,
+          uid,
+          permissions: e.permissions,
+          name: e.name,
+          email: e.email,
+          active: e.active,
+        );
+      } catch (_) {}
+    }
   }
 
-  Future<void> deleteEmployee(String id, String shopId) =>
-      FirestoreService.instance.deleteEmployee(shopId, id);
+  /// Removes the employee and — crucially — revokes their shop membership.
+  ///
+  /// Membership is deleted first: if that fails the employee is kept, so a
+  /// removed barber can never keep access to the shop.
+  Future<void> deleteEmployee(Employee e, String shopId) async {
+    final uid = e.authUid;
+    if (uid != null && uid.isNotEmpty) {
+      await FirestoreService.instance.removeMember(shopId, uid);
+    }
+    await FirestoreService.instance.deleteEmployee(shopId, e.id);
+  }
 
   /// Clears in-memory shop data on sign-out so the next session starts clean.
   void reset() {

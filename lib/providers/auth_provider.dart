@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../config/owner.dart';
 import '../models/app_role.dart';
 import '../models/staff_permissions.dart';
 import '../services/auth_service.dart';
@@ -22,11 +23,58 @@ typedef ShopResolver = Future<({String? shopId, AppRole role})> Function(
 /// [NotificationService.subscribeToShop]).
 typedef ShopTopicOp = Future<bool> Function(String shopId);
 
+/// Creates the Firebase Auth user for a staff member on a secondary app.
+typedef StaffAuthCreator = Future<String> Function(
+    String email, String password);
+
+/// Writes `shops/{shopId}/members/{uid}` (owner-only in the rules).
+typedef MembershipWriter = Future<void> Function(
+  String shopId,
+  String uid, {
+  required String email,
+  required String name,
+  required AppRole role,
+  required StaffPermissions permissions,
+});
+
+/// Verifies that the current account is the immutable shop owner.
+typedef ShopOwnerCheck = Future<bool> Function(String shopId);
+
+/// Reads the owner-controlled capability map for a staff member.
+typedef MemberPermissionsLoader = Future<StaffPermissions> Function(
+    String shopId, String uid);
+
+/// Thrown when the email already has a Firebase Auth account.
+class StaffAccountAlreadyExists implements Exception {
+  const StaffAccountAlreadyExists(this.email);
+  final String email;
+
+  @override
+  String toString() => 'email-already-in-use:$email';
+}
+
+/// Thrown when the Auth account was created but the membership write failed.
+///
+/// The message intentionally contains the uid so the owner can finish the
+/// linkage manually instead of creating a second account.
+class MembershipWriteException implements Exception {
+  const MembershipWriteException(this.uid, this.cause);
+  final String uid;
+  final Object cause;
+
+  @override
+  String toString() => 'membership-write-failed:$uid';
+}
+
 class AuthProvider extends ChangeNotifier {
   AuthProvider({
     ShopResolver? resolveShop,
     ShopTopicOp? subscribeShopNotifications,
     ShopTopicOp? unsubscribeShopNotifications,
+    StaffAuthCreator? createStaffAuth,
+    MembershipWriter? writeMembership,
+    ShopOwnerCheck? isShopOwner,
+    MemberPermissionsLoader? loadMemberPermissions,
     Duration topicRetryDelay = const Duration(seconds: 5),
     int maxTopicRetries = 3,
   })  : _resolveShop =
@@ -35,6 +83,13 @@ class AuthProvider extends ChangeNotifier {
             NotificationService.instance.subscribeToShop,
         _unsubscribeShopNotifications = unsubscribeShopNotifications ??
             NotificationService.instance.unsubscribeFromShop,
+        _createStaffAuth =
+            createStaffAuth ?? AuthService.instance.createStaffAccount,
+        _writeMembership =
+            writeMembership ?? FirestoreService.instance.saveMember,
+        _isShopOwner = isShopOwner ?? FirestoreService.instance.isShopOwner,
+        _loadMemberPermissions = loadMemberPermissions ??
+            FirestoreService.instance.getMemberPermissions,
         _topicRetryDelay = topicRetryDelay,
         _maxTopicRetries = maxTopicRetries {
     // When Firebase failed to initialize there is no auth stream to listen to,
@@ -66,6 +121,10 @@ class AuthProvider extends ChangeNotifier {
   final ShopResolver _resolveShop;
   final ShopTopicOp _subscribeShopNotifications;
   final ShopTopicOp _unsubscribeShopNotifications;
+  final StaffAuthCreator _createStaffAuth;
+  final MembershipWriter _writeMembership;
+  final ShopOwnerCheck _isShopOwner;
+  final MemberPermissionsLoader _loadMemberPermissions;
 
   /// Base delay before an in-session topic reconcile is retried. Injectable so
   /// tests can drive retries with real (short) timers instead of waiting 5s.
@@ -113,6 +172,9 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _topicQueue = Future<void>.value();
 
   bool get isOwner => role == AppRole.admin;
+
+  /// True only for the single account allowed to bootstrap/manage this salon.
+  bool get isOwnerAccount => isOwnerEmail(user?.email);
   bool get canManageRules => role.canManageRules;
   bool get canManageOperations => role.canManageOperations;
   bool get canViewReports => role.canViewReports;
@@ -145,9 +207,22 @@ class AuthProvider extends ChangeNotifier {
     try {
       final resolved = await _resolveShop(uid);
       if (generation != _sessionGeneration) return;
-      shopId = resolved.shopId;
+      final resolvedShopId = resolved.shopId;
+      shopId = resolvedShopId;
       role = resolved.role;
-      ShopManager.shopId = shopId;
+      ShopManager.shopId = resolvedShopId;
+      // The membership document is the same source `firestore.rules` uses, so
+      // a restored staff session must read its capability map, not default to
+      // the minimum. Owners and managers keep the full set. The read is fired
+      // off instead of awaited: a cold offline start must never hold the app on
+      // the splash screen, and least privilege is the safe initial state.
+      _staffPermissions =
+          role.isAdmin ? StaffPermissions.all : StaffPermissions.minimal;
+      if (!role.isAdmin &&
+          resolvedShopId != null &&
+          resolvedShopId.isNotEmpty) {
+        _refreshMemberPermissions(resolvedShopId, uid, generation);
+      }
       // Best-effort side effect: reconciling the shop's FCM topic must never
       // gate the session transition. Offline, FCM's topic subscribe never
       // completes, so awaiting it here stranded the app on the splash screen
@@ -162,6 +237,7 @@ class AuthProvider extends ChangeNotifier {
       error = e.toString();
       shopId = null;
       role = AppRole.staff;
+      _staffPermissions = StaffPermissions.minimal;
       ShopManager.reset();
     }
     initializing = false;
@@ -173,11 +249,29 @@ class AuthProvider extends ChangeNotifier {
   @visibleForTesting
   Future<void> applySessionForTest(String? uid) => _applySession(uid);
 
+  /// Loads the owner-controlled permission map without blocking the session.
+  ///
+  /// A result that arrives after a newer transition is dropped, so a stale
+  /// read can never grant capabilities to a different account.
+  void _refreshMemberPermissions(String shopId, String uid, int generation) {
+    unawaited(
+      _loadMemberPermissions(shopId, uid).then((perms) {
+        if (_disposed || generation != _sessionGeneration) return;
+        _staffPermissions = perms;
+        notifyListeners();
+      }).catchError((Object e) {
+        // Offline / no membership: keep the already-applied least privilege.
+        debugPrint('AuthProvider: permission load failed: $e');
+      }),
+    );
+  }
+
   /// Drops every trace of the signed-in session. Called on sign-out and when
   /// Firebase reports no user, so no shop-scoped state survives the transition.
   void _clearSession() {
     shopId = null;
     role = AppRole.staff;
+    _staffPermissions = StaffPermissions.minimal;
     ShopManager.reset();
     // Reconcile the device to "no shop topic". Enqueued *without* a generation
     // guard so it always runs — even after a newer session begins — and always
@@ -289,7 +383,8 @@ class AuthProvider extends ChangeNotifier {
   /// session generation at call time, so a stale reconnect cannot target a
   /// previous tenant, and no-ops while already subscribed.
   void reconcileShopTopic() {
-    _scheduleTopicReconcile(shopId, guarded: true, generation: _sessionGeneration);
+    _scheduleTopicReconcile(shopId,
+        guarded: true, generation: _sessionGeneration);
   }
 
   Future<bool> signIn(String email, String password) async {
@@ -304,18 +399,8 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> register(String email, String password) async {
-    error = null;
-    try {
-      await AuthService.instance.register(email, password);
-      return true;
-    } catch (e) {
-      error = e.toString();
-      notifyListeners();
-      return false;
-    }
-  }
-
+  /// Open self-registration is intentionally gone: this is an internal app.
+  /// Accounts are provisioned by the owner from the staff screen.
   Future<String> createShop({
     required String shopName,
     required String phone,
@@ -325,6 +410,12 @@ class AuthProvider extends ChangeNotifier {
     String? accentColorHex,
   }) async {
     error = null;
+    if (!isOwnerAccount) {
+      // The rules enforce this too; failing fast keeps the wizard honest.
+      error = 'owner-only';
+      notifyListeners();
+      throw StateError('owner-only');
+    }
     try {
       final uid = user!.uid;
       final id = await FirestoreService.instance.createShop(
@@ -343,13 +434,115 @@ class AuthProvider extends ChangeNotifier {
       final resolved = await _resolveShop(uid);
       role = resolved.role;
       await _loadStaffPermissions(id, uid, user?.email);
-      _scheduleTopicReconcile(id, guarded: true, generation: _sessionGeneration);
+      _scheduleTopicReconcile(id,
+          guarded: true, generation: _sessionGeneration);
       notifyListeners();
       return id;
     } catch (e) {
       error = e.toString();
       notifyListeners();
       rethrow;
+    }
+  }
+
+  /// Creates a staff login (owner only) and links it to this shop.
+  ///
+  /// The owner check runs *before* the Auth account is created. If creating
+  /// the membership fails afterwards, [MembershipWriteException] carries the
+  /// new uid so the caller can retry the linkage instead of making a duplicate
+  /// account.
+  Future<String> addStaffAccount({
+    required String email,
+    required String name,
+    required AppRole role,
+    required StaffPermissions permissions,
+    required String password,
+  }) async {
+    error = null;
+    final shop = shopId ?? ShopManager.shopId;
+    if (shop == null || shop.isEmpty) {
+      error = 'no-shop';
+      notifyListeners();
+      throw StateError('no-shop');
+    }
+    if (!await _isShopOwner(shop)) {
+      error = 'not-shop-owner';
+      notifyListeners();
+      throw StateError('not-shop-owner');
+    }
+    final normalized = email.trim().toLowerCase();
+    late final String uid;
+    try {
+      uid = await _createStaffAuth(normalized, password);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        error = 'email-already-in-use';
+        notifyListeners();
+        throw StaffAccountAlreadyExists(normalized);
+      }
+      error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+    try {
+      await _writeMembership(
+        shop,
+        uid,
+        email: normalized,
+        name: name,
+        role: role,
+        permissions: permissions,
+      );
+    } catch (e) {
+      error = 'membership-write-failed';
+      notifyListeners();
+      throw MembershipWriteException(uid, e);
+    }
+    return uid;
+  }
+
+  /// Links an already-existing Firebase Auth account to this shop.
+  ///
+  /// Used after `email-already-in-use`. Only the membership document is
+  /// written — no Auth account is created and no password is touched.
+  Future<void> linkStaffAccount({
+    required String uid,
+    required String email,
+    required String name,
+    required AppRole role,
+    required StaffPermissions permissions,
+  }) async {
+    error = null;
+    final normalizedUid = uid.trim();
+    if (!RegExp(r'^[A-Za-z0-9]{28}$').hasMatch(normalizedUid)) {
+      error = 'invalid-uid';
+      notifyListeners();
+      throw ArgumentError('invalid-uid');
+    }
+    final shop = shopId ?? ShopManager.shopId;
+    if (shop == null || shop.isEmpty) {
+      error = 'no-shop';
+      notifyListeners();
+      throw StateError('no-shop');
+    }
+    if (!await _isShopOwner(shop)) {
+      error = 'not-shop-owner';
+      notifyListeners();
+      throw StateError('not-shop-owner');
+    }
+    try {
+      await _writeMembership(
+        shop,
+        normalizedUid,
+        email: email.trim().toLowerCase(),
+        name: name,
+        role: role,
+        permissions: permissions,
+      );
+    } catch (e) {
+      error = 'membership-write-failed';
+      notifyListeners();
+      throw MembershipWriteException(normalizedUid, e);
     }
   }
 

@@ -30,7 +30,8 @@ AuthProvider _auth(AppRole role) {
   return provider;
 }
 
-Widget _app({required List<SingleChildWidget> providers, required Widget home}) {
+Widget _app(
+    {required List<SingleChildWidget> providers, required Widget home}) {
   return MultiProvider(
     providers: providers,
     child: MaterialApp(
@@ -98,7 +99,8 @@ void main() {
         (tester) async {
       await tester.pumpWidget(_app(
         providers: [
-          ChangeNotifierProvider<AuthProvider>.value(value: _auth(AppRole.admin)),
+          ChangeNotifierProvider<AuthProvider>.value(
+              value: _auth(AppRole.admin)),
           ChangeNotifierProvider<ShopProvider>.value(value: ShopProvider()),
         ],
         home: const StaffScreen(),
@@ -107,7 +109,8 @@ void main() {
 
       await tester.pumpWidget(_app(
         providers: [
-          ChangeNotifierProvider<AuthProvider>.value(value: _auth(AppRole.staff)),
+          ChangeNotifierProvider<AuthProvider>.value(
+              value: _auth(AppRole.staff)),
           ChangeNotifierProvider<ShopProvider>.value(value: ShopProvider()),
         ],
         home: const StaffScreen(),
@@ -120,7 +123,8 @@ void main() {
         (tester) async {
       await tester.pumpWidget(_app(
         providers: [
-          ChangeNotifierProvider<AuthProvider>.value(value: _auth(AppRole.admin)),
+          ChangeNotifierProvider<AuthProvider>.value(
+              value: _auth(AppRole.admin)),
           ChangeNotifierProvider<DiscountProvider>.value(
               value: DiscountProvider()..loading = false),
           ChangeNotifierProvider<ShopProvider>.value(value: ShopProvider()),
@@ -151,7 +155,8 @@ void main() {
 
       await tester.pumpWidget(_app(
         providers: [
-          ChangeNotifierProvider<AuthProvider>.value(value: _auth(AppRole.admin)),
+          ChangeNotifierProvider<AuthProvider>.value(
+              value: _auth(AppRole.admin)),
           ChangeNotifierProvider<ShopProvider>.value(
               value: ShopProvider()..settings = const BookingSettings()),
         ],
@@ -198,7 +203,8 @@ void main() {
 
       await tester.pumpWidget(_app(
         providers: [
-          ChangeNotifierProvider<AuthProvider>.value(value: _auth(AppRole.staff)),
+          ChangeNotifierProvider<AuthProvider>.value(
+              value: _auth(AppRole.staff)),
           ChangeNotifierProvider<AppointmentProvider>.value(
               value: AppointmentProvider()
                 ..loading = false
@@ -246,30 +252,30 @@ void main() {
   });
 
   group('O-2 owner-only business tools are gated', () {
-    testWidgets('portfolio add affordance admin-only', (tester) async {
-      await tester.pumpWidget(_app(
-        providers: [
-          ChangeNotifierProvider<AuthProvider>.value(value: _auth(AppRole.admin)),
-          ChangeNotifierProvider<BusinessToolsProvider>.value(
-              value: BusinessToolsProvider()),
-          ChangeNotifierProvider<ShopProvider>.value(value: ShopProvider()),
-        ],
-        home: const BusinessToolsScreen(),
-      ));
-      expect(find.byType(FloatingActionButton), findsOneWidget);
+    testWidgets('loyalty rule affordance admin-only', (tester) async {
+      _useLargeSurface(tester);
+      final en = await AppLocalizations.delegate.load(const Locale('en'));
 
+      Future<void> pumpFor(AuthProvider auth) async {
       await tester.pumpWidget(_app(
         providers: [
-          ChangeNotifierProvider<AuthProvider>.value(
-              value: _auth(AppRole.staff)),
+            ChangeNotifierProvider<AuthProvider>.value(value: auth),
           ChangeNotifierProvider<BusinessToolsProvider>.value(
               value: BusinessToolsProvider()),
           ChangeNotifierProvider<ShopProvider>.value(value: ShopProvider()),
         ],
         home: const BusinessToolsScreen(),
       ));
-      await tester.pump();
-      expect(find.byType(FloatingActionButton), findsNothing);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(en.tabLoyalty));
+        await tester.pumpAndSettle();
+      }
+
+      await pumpFor(_auth(AppRole.admin));
+      expect(find.text(en.addRuleAction), findsOneWidget);
+
+      await pumpFor(_auth(AppRole.staff));
+      expect(find.text(en.addRuleAction), findsNothing);
     });
   });
 

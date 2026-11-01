@@ -12,6 +12,7 @@ import '../services/backup_service.dart';
 import '../services/firebase_status.dart';
 import 'admin/admin_home_screen.dart';
 import 'auth/login_screen.dart';
+import 'auth/no_access_screen.dart';
 import 'auth/setup_wizard_screen.dart';
 import 'config_error_screen.dart';
 import 'splash_screen.dart';
@@ -100,7 +101,10 @@ class _RootGateState extends State<RootGate> {
     }
 
     if (auth.shopId == null) {
-      return const SetupWizardScreen();
+      // Only the single owner account may bootstrap the salon.
+      return auth.isOwnerAccount
+          ? const SetupWizardScreen()
+          : const NoAccessScreen();
     }
 
     final shopId = auth.shopId!;

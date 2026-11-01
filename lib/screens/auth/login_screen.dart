@@ -19,8 +19,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
-  final _confirm = TextEditingController();
-  bool _isRegister = false;
   bool _obscure = true;
   bool _busy = false;
 
@@ -28,7 +26,6 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _email.dispose();
     _password.dispose();
-    _confirm.dispose();
     super.dispose();
   }
 
@@ -36,9 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthProvider>();
     setState(() => _busy = true);
-    final ok = _isRegister
-        ? await auth.register(_email.text, _password.text)
-        : await auth.signIn(_email.text, _password.text);
+    final ok = await auth.signIn(_email.text, _password.text);
     if (!mounted) return;
     setState(() => _busy = false);
     if (!ok) {
@@ -68,8 +63,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           'assets/brand/logo.svg',
                           width: 32,
                           height: 32,
-                          colorFilter: const ColorFilter.mode(
-                              kInk, BlendMode.srcIn),
+                          colorFilter:
+                              const ColorFilter.mode(kInk, BlendMode.srcIn),
                         ),
                         SegmentedButton<Locale>(
                           segments: const [
@@ -83,8 +78,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ],
                           selected: {lang.locale},
-                          onSelectionChanged: (s) =>
-                              lang.setLocale(s.first),
+                          onSelectionChanged: (s) => lang.setLocale(s.first),
                         ),
                       ],
                     ),
@@ -98,9 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      _isRegister
-                          ? t(context).registerTitle
-                          : t(context).welcome,
+                      t(context).welcome,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         fontSize: 26,
@@ -112,8 +104,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     Text(
                       t(context).welcomeSubtitle,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                          color: Colors.grey.shade600, fontSize: 13),
+                      style:
+                          TextStyle(color: Colors.grey.shade600, fontSize: 13),
                     ),
                     const SizedBox(height: 32),
                     TextFormField(
@@ -134,53 +126,32 @@ class _LoginScreenState extends State<LoginScreen> {
                       obscureText: _obscure,
                       decoration: InputDecoration(
                         labelText: t(context).password,
-                        prefixIcon:
-                            const Icon(Icons.lock_outline_rounded),
+                        prefixIcon: const Icon(Icons.lock_outline_rounded),
                         suffixIcon: IconButton(
                           icon: Icon(_obscure
                               ? Icons.visibility_off_rounded
                               : Icons.visibility_rounded),
-                          onPressed: () =>
-                              setState(() => _obscure = !_obscure),
+                          onPressed: () => setState(() => _obscure = !_obscure),
                         ),
                       ),
                       validator: (v) => (v == null || v.isEmpty)
                           ? t(context).required
-                          : (v.length < 6
-                              ? t(context).passwordTooShort
-                              : null),
+                          : (v.length < 6 ? t(context).passwordTooShort : null),
                     ),
-                    if (_isRegister) ...[
-                      const SizedBox(height: 14),
-                      TextFormField(
-                        controller: _confirm,
-                        obscureText: _obscure,
-                        decoration: InputDecoration(
-                          labelText: t(context).confirmPassword,
-                          prefixIcon:
-                              const Icon(Icons.lock_outline_rounded),
-                        ),
-                        validator: (v) => v != _password.text
-                            ? t(context).passwordsDontMatch
-                            : null,
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: TextButton(
+                        onPressed: () async {
+                          await context
+                              .read<AuthProvider>()
+                              .sendPasswordReset(_email.text);
+                          if (!context.mounted) return;
+                          showSnack(context, t(context).settingsSaved);
+                        },
+                        child: Text(t(context).forgotPassword),
                       ),
-                    ],
-                    if (!_isRegister) ...[
-                      const SizedBox(height: 6),
-                      Align(
-                        alignment: AlignmentDirectional.centerEnd,
-                        child: TextButton(
-                          onPressed: () async {
-                            await context
-                                .read<AuthProvider>()
-                                .sendPasswordReset(_email.text);
-                            if (!context.mounted) return;
-                            showSnack(context, t(context).settingsSaved);
-                          },
-                          child: Text(t(context).forgotPassword),
-                        ),
-                      ),
-                    ],
+                    ),
                     const SizedBox(height: 12),
                     FilledButton(
                       onPressed: _busy ? null : _submit,
@@ -188,22 +159,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           ? const SizedBox(
                               width: 20,
                               height: 20,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 2),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(_isRegister
-                              ? t(context).createAccount
-                              : t(context).signIn),
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: () =>
-                          setState(() => _isRegister = !_isRegister),
-                      child: Text(
-                        _isRegister
-                            ? t(context).alreadyHaveAccount
-                            : t(context).needAccount,
-                      ),
+                          : Text(t(context).signIn),
                     ),
                   ],
                 ),

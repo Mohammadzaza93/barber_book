@@ -1,4 +1,4 @@
-/// نماذج إدارة الفريق — مهام، تقييم، حضور، إجازات.
+// نماذج إدارة الفريق — مهام، تقييم، حضور، إجازات.
 
 enum TeamTaskStatus { pending, inProgress, done, cancelled }
 

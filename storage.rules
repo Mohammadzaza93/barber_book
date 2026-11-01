@@ -1,6 +1,8 @@
 rules_version = '2';
 
-// Free-tier safe Storage rules: signed-in shop owner only, images only, size capped.
+// BarberBook Storage — internal, single-salon app.
+// Logos are readable by the shop's members and writable by the owner only.
+// Backup exports are sensitive full-shop dumps: owner-only, size capped.
 service firebase.storage {
   match /b/{bucket}/o {
     function signedIn() {
@@ -13,17 +15,29 @@ service firebase.storage {
           == request.auth.uid;
     }
 
+    function isShopMember(shopId) {
+      return signedIn()
+        && firestore.exists(
+          /databases/(default)/documents/shops/$(shopId)/members/$(request.auth.uid));
+    }
+
     function isImageUnder5mb() {
       return request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }
 
     match /shops/{shopId}/logo {
-      allow read: if isShopOwner(shopId);
+      allow read: if isShopOwner(shopId) || isShopMember(shopId);
       allow write: if isShopOwner(shopId) && isImageUnder5mb();
     }
 
-    // Backups metadata only lives in Firestore; block arbitrary storage paths.
+    match /shops/{shopId}/backups/{fileName} {
+      allow read: if isShopOwner(shopId);
+      allow write: if isShopOwner(shopId)
+        && request.resource.size < 20 * 1024 * 1024;
+    }
+
+    // Block arbitrary storage paths.
     match /{allPaths=**} {
       allow read, write: if false;
     }

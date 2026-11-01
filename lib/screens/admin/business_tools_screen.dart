@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/strings.dart';
 import 'business_management_tabs.dart';
-import 'chair_operations_tab.dart';
 
 class BusinessToolsScreen extends StatelessWidget {
   const BusinessToolsScreen({super.key});

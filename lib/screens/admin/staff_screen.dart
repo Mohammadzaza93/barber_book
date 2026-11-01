@@ -1,8 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../l10n/strings.dart';
+import '../../models/app_role.dart';
 import '../../models/employee.dart';
 import '../../models/staff_permissions.dart';
 import '../../models/team/team_models.dart';
@@ -20,7 +22,12 @@ class StaffScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shop = context.watch<ShopProvider>();
-    final canManage = context.watch<AuthProvider>().canManageRules;
+    final auth = context.watch<AuthProvider>();
+    final canManage = auth.canManageRules;
+    // Only the immutable owner may write `members`, and deleting an employee
+    // revokes the membership first — so deletion is owner-only even though a
+    // manager can still edit the employee record.
+    final canDelete = canManage && auth.isOwnerAccount;
     return Scaffold(
       body: Column(
         children: [
@@ -57,8 +64,7 @@ class StaffScreen extends StatelessWidget {
                     itemCount: shop.employees.length,
                     itemBuilder: (context, i) {
                       final e = shop.employees[i];
-                      final role =
-                          TeamRolePreset.fromId(e.role).labelAr;
+                      final role = TeamRolePreset.fromId(e.role).labelAr;
                       return Card(
                         margin: const EdgeInsets.only(bottom: 10),
                         child: ListTile(
@@ -111,7 +117,7 @@ class StaffScreen extends StatelessWidget {
                                 color: Theme.of(context).hintColor,
                                 fontSize: 12),
                           ),
-                          trailing: canManage
+                          trailing: canDelete
                               ? IconButton(
                                   onPressed: () async {
                                     final ok = await confirmDialog(context,
@@ -119,10 +125,16 @@ class StaffScreen extends StatelessWidget {
                                         confirmText: t(context).delete,
                                         destructive: true);
                                     if (ok && context.mounted) {
-                                      await context
-                                          .read<ShopProvider>()
-                                          .deleteEmployee(
-                                              e.id, ShopManager.shopId!);
+                                      try {
+                                        await context
+                                            .read<ShopProvider>()
+                                            .deleteEmployee(
+                                                e, ShopManager.shopId!);
+                                      } catch (_) {
+                                        if (context.mounted) {
+                                          showSnack(context, t(context).error);
+                                        }
+                                      }
                                     }
                                   },
                                   icon:
@@ -202,6 +214,236 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     });
   }
 
+  /// Team role -> membership role. Managers get admin capabilities; every
+  /// other preset is a staff account.
+  AppRole get _accountRole => (_roleId == 'owner' || _roleId == 'manager')
+      ? AppRole.admin
+      : AppRole.staff;
+
+  Future<String?> _askTemporaryPassword() async {
+    final pass = TextEditingController();
+    final confirm = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('كلمة مرور مؤقتة'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'يستخدمها الموظف للدخول أول مرة، ثم يمكنه تغييرها من التطبيق.',
+                style: TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: pass,
+                obscureText: true,
+                decoration:
+                    const InputDecoration(labelText: 'كلمة المرور المؤقتة'),
+                validator: (v) => (v == null || v.length < 6)
+                    ? t(ctx).passwordTooShort
+                    : null,
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: confirm,
+                obscureText: true,
+                decoration:
+                    const InputDecoration(labelText: 'تأكيد كلمة المرور'),
+                validator: (v) =>
+                    v != pass.text ? t(ctx).passwordsDontMatch : null,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(t(ctx).cancel),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(ctx, pass.text);
+              }
+            },
+            child: const Text('إنشاء الحساب'),
+          ),
+        ],
+      ),
+    );
+    pass.dispose();
+    confirm.dispose();
+    return result;
+  }
+
+  Future<void> _createLogin() async {
+    if (widget.employee == null) {
+      showSnack(context, 'احفظ بيانات الموظف أولاً ثم أنشئ له حساب دخول');
+      return;
+    }
+    final email = _email.text.trim().toLowerCase();
+    if (email.isEmpty || !email.contains('@')) {
+      showSnack(context, 'أدخل بريد الموظف أولاً');
+      return;
+    }
+    final password = await _askTemporaryPassword();
+    if (password == null || !mounted) return;
+    setState(() => _busy = true);
+    final auth = context.read<AuthProvider>();
+    try {
+      final uid = await auth.addStaffAccount(
+        email: email,
+        name: _name.text.trim(),
+        role: _accountRole,
+        permissions: _perms,
+        password: password,
+      );
+      await _attachUid(uid);
+    } on StaffAccountAlreadyExists {
+      if (mounted) await _linkExisting(email);
+    } on MembershipWriteException catch (e) {
+      if (mounted) {
+        showSnack(
+          context,
+          'تم إنشاء حساب الدخول لكن فشل ربطه بالمحل. '
+          'أعد المحاولة باستخدام UID: ${e.uid}',
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        showSnack(context, 'تعذّر إنشاء الحساب: ${e.message ?? e.code}');
+      }
+    } catch (e) {
+      if (mounted) showSnack(context, 'تعذّر إنشاء الحساب: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Handles `email-already-in-use`: the owner must supply the existing
+  /// 28-character uid and confirm before only `members/{uid}` is written.
+  Future<void> _linkExisting(String email) async {
+    if (!mounted) return;
+    final uidCtrl = TextEditingController();
+    final uid = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        var confirmed = false;
+        return StatefulBuilder(
+          builder: (ctx, setLocal) => AlertDialog(
+            title: const Text('ربط بحساب موجود'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'البريد $email يملك حساب دخول بالفعل. '
+                  'أدخل UID الحساب (28 حرفاً) ثم أكّد الربط.',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: uidCtrl,
+                  decoration: const InputDecoration(labelText: 'UID الحساب'),
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: confirmed,
+                  onChanged: (v) => setLocal(() => confirmed = v ?? false),
+                  title: const Text(
+                    'أؤكد ربط هذا الحساب بهذا المحل',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(t(ctx).cancel),
+              ),
+              FilledButton(
+                onPressed: confirmed
+                    ? () {
+                        final value = uidCtrl.text.trim();
+                        if (!RegExp(r'^[A-Za-z0-9]{28}$').hasMatch(value)) {
+                          showSnack(ctx, 'UID يجب أن يكون 28 حرفاً');
+                          return;
+                        }
+                        Navigator.pop(ctx, value);
+                      }
+                    : null,
+                child: const Text('ربط الحساب'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    uidCtrl.dispose();
+    if (uid == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await context.read<AuthProvider>().linkStaffAccount(
+            uid: uid,
+            email: email,
+            name: _name.text.trim(),
+            role: _accountRole,
+            permissions: _perms,
+          );
+      await _attachUid(uid);
+    } on MembershipWriteException catch (e) {
+      if (mounted) {
+        showSnack(
+          context,
+          'فشل ربط الحساب بالمحل. أعد المحاولة باستخدام UID: ${e.uid}',
+        );
+      }
+    } catch (e) {
+      if (mounted) showSnack(context, 'تعذّر ربط الحساب: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _attachUid(String uid) async {
+    final employee = widget.employee;
+    if (employee == null) return;
+    await context.read<ShopProvider>().updateEmployee(
+          employee.copyWith(
+            authUid: uid,
+            email: _email.text.trim(),
+            permissions: _perms,
+          ),
+          ShopManager.shopId!,
+        );
+    if (!mounted) return;
+    setState(() => _authUid.text = uid);
+    showSnack(context, 'تم ربط حساب الدخول بالموظف');
+  }
+
+  Future<void> _resendPasswordReset() async {
+    final email = _email.text.trim();
+    if (email.isEmpty) {
+      showSnack(context, 'لا يوجد بريد للموظف');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await context.read<AuthProvider>().sendPasswordReset(email);
+      if (mounted) {
+        showSnack(context, 'تم إرسال رابط إعادة تعيين كلمة المرور');
+      }
+    } catch (e) {
+      if (mounted) showSnack(context, 'تعذّر إرسال الرابط: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _save() async {
     if (_busy) return;
     if (!context.read<AuthProvider>().canManageRules) return;
@@ -243,7 +485,10 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
   @override
   Widget build(BuildContext context) {
     final shop = context.watch<ShopProvider>();
-    final canManage = context.watch<AuthProvider>().canManageRules;
+    final auth = context.watch<AuthProvider>();
+    final canManage = auth.canManageRules;
+    // Provisioning/linking a login writes `members/{uid}`, which is owner-only.
+    final canProvisionLogin = auth.isOwnerAccount;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.employee == null
@@ -278,7 +523,8 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                 : null,
             decoration: InputDecoration(
               labelText: t(context).role,
-              helperText: 'تطبيق قالب صلاحيات جاهز (يمكن تعديله يدوياً بالأسفل)',
+              helperText:
+                  'تطبيق قالب صلاحيات جاهز (يمكن تعديله يدوياً بالأسفل)',
             ),
           ),
           const SizedBox(height: 12),
@@ -297,13 +543,51 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          TextFormField(
-            controller: _authUid,
-            decoration: const InputDecoration(
-              labelText: 'UID الحساب (اختياري)',
-              prefixIcon: Icon(Icons.key_rounded),
+          if (canProvisionLogin)
+            Card(
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.key_rounded),
+                    title: Text(
+                      _authUid.text.isEmpty
+                          ? 'لا يوجد حساب دخول مرتبط'
+                          : 'حساب الدخول مرتبط',
+                    ),
+                    subtitle: _authUid.text.isEmpty
+                        ? const Text(
+                            'أنشئ حساباً للدخول أو اربط حساباً موجوداً',
+                            style: TextStyle(fontSize: 12),
+                          )
+                        : Text(
+                            _authUid.text,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                    child: widget.employee == null
+                        ? const Text(
+                            'احفظ بيانات الموظف أولاً، ثم افتحه مرة أخرى لإنشاء حساب الدخول.',
+                            style: TextStyle(fontSize: 12),
+                          )
+                        : _authUid.text.isEmpty
+                            ? FilledButton.tonalIcon(
+                                onPressed: _busy ? null : _createLogin,
+                                icon:
+                                    const Icon(Icons.person_add_alt_1_rounded),
+                                label: const Text('إنشاء حساب دخول للموظف'),
+                              )
+                            : OutlinedButton.icon(
+                                onPressed: _busy ? null : _resendPasswordReset,
+                                icon: const Icon(Icons.mail_outline_rounded),
+                                label:
+                                    const Text('إعادة إرسال رابط كلمة المرور'),
+                              ),
+                  ),
+                ],
+              ),
             ),
-          ),
           const SizedBox(height: 16),
           Text(
             t(context).workingHours,
@@ -373,13 +657,13 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                   SwitchListTile(
                       title: const Text('المدفوعات'),
                       value: _perms.payments,
-                      onChanged: (v) =>
-                          setState(() => _perms = _perms.copyWith(payments: v))),
+                      onChanged: (v) => setState(
+                          () => _perms = _perms.copyWith(payments: v))),
                   SwitchListTile(
                       title: const Text('الخدمات'),
                       value: _perms.services,
-                      onChanged: (v) =>
-                          setState(() => _perms = _perms.copyWith(services: v))),
+                      onChanged: (v) => setState(
+                          () => _perms = _perms.copyWith(services: v))),
                   SwitchListTile(
                       title: const Text('الموظفين'),
                       value: _perms.staff,
@@ -393,13 +677,13 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                   SwitchListTile(
                       title: const Text('المصروفات'),
                       value: _perms.expenses,
-                      onChanged: (v) =>
-                          setState(() => _perms = _perms.copyWith(expenses: v))),
+                      onChanged: (v) => setState(
+                          () => _perms = _perms.copyWith(expenses: v))),
                   SwitchListTile(
                       title: const Text('آراء العملاء'),
                       value: _perms.feedback,
-                      onChanged: (v) =>
-                          setState(() => _perms = _perms.copyWith(feedback: v))),
+                      onChanged: (v) => setState(
+                          () => _perms = _perms.copyWith(feedback: v))),
                   SwitchListTile(
                       title: const Text('طلبات خارج الدوام'),
                       value: _perms.outOfHours,
@@ -423,8 +707,8 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                   SwitchListTile(
                       title: const Text('إعدادات المحل'),
                       value: _perms.settings,
-                      onChanged: (v) =>
-                          setState(() => _perms = _perms.copyWith(settings: v))),
+                      onChanged: (v) => setState(
+                          () => _perms = _perms.copyWith(settings: v))),
                 ],
               ),
             ),

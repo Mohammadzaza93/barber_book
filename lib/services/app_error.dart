@@ -40,7 +40,7 @@ class AppError {
         raw.contains('network') ||
         raw.contains('failed host') ||
         raw.contains('connection')) {
-      return AppError(
+      return const AppError(
         message: 'لا يوجد اتصال بالإنترنت',
         suggestion:
             'تحقق من الواي فاي أو بيانات الجوال ثم أعد المحاولة. '
@@ -49,7 +49,7 @@ class AppError {
       );
     }
     if (raw.contains('permission-denied') || raw.contains('permission_denied')) {
-      return AppError(
+      return const AppError(
         message: 'ليس لديك صلاحية لهذا الإجراء',
         suggestion:
             'اطلب من مالك الصالون منحك الدور المناسب (مدير / موظف).',
@@ -75,7 +75,7 @@ class AppError {
       case 'wrong-password':
       case 'invalid-credential':
       case 'user-not-found':
-        return AppError(
+        return const AppError(
           message: 'بيانات الدخول غير صحيحة',
           suggestion: 'تحقق من البريد وكلمة المرور، أو استخدم «نسيت كلمة المرور».',
           code: 'auth',

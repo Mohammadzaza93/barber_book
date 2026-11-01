@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
+import '../config/owner.dart';
 import '../models/appointment.dart';
 import '../models/app_role.dart';
 import '../models/business_features.dart';
@@ -10,6 +12,7 @@ import '../models/enums.dart';
 import '../models/feedback.dart';
 import '../models/member.dart';
 import '../models/service.dart';
+import '../models/staff_permissions.dart';
 import '../models/unavailability_request.dart';
 
 class FirestoreService {
@@ -31,11 +34,9 @@ class FirestoreService {
     _offlineConfigured = true;
   }
 
-  CollectionReference<Map<String, dynamic>> _shops() =>
-      _db.collection('shops');
+  CollectionReference<Map<String, dynamic>> _shops() => _db.collection('shops');
 
-  CollectionReference<Map<String, dynamic>> _coll(
-          String shopId, String name) =>
+  CollectionReference<Map<String, dynamic>> _coll(String shopId, String name) =>
       _shops().doc(shopId).collection(name);
 
   // ---------- Shop ----------
@@ -50,6 +51,10 @@ class FirestoreService {
     String? accentColorHex,
     String? slug,
   }) async {
+    // Defence in depth: `firestore.rules` also pins this to the owner email.
+    if (!isOwnerEmail(FirebaseAuth.instance.currentUser?.email)) {
+      throw StateError('owner-only');
+    }
     final doc = _shops().doc();
     final settings = BookingSettings(
       shopName: shopName,
@@ -70,17 +75,16 @@ class FirestoreService {
   }
 
   Future<String?> findShopByOwner(String ownerId) async {
-    final snap = await _shops()
-        .where('ownerId', isEqualTo: ownerId)
-        .limit(1)
-        .get();
+    final snap =
+        await _shops().where('ownerId', isEqualTo: ownerId).limit(1).get();
     if (snap.docs.isEmpty) return null;
     return snap.docs.first.id;
   }
 
-  Stream<BookingSettings> watchSettings(String shopId) =>
-      _shops().doc(shopId).snapshots().map(
-          (d) => BookingSettings.fromMap(d.data() ?? const {}));
+  Stream<BookingSettings> watchSettings(String shopId) => _shops()
+      .doc(shopId)
+      .snapshots()
+      .map((d) => BookingSettings.fromMap(d.data() ?? const {}));
 
   Future<void> updateSettings(String shopId, Map<String, dynamic> data) async {
     await _shops().doc(shopId).set(
@@ -91,12 +95,8 @@ class FirestoreService {
   // ---------- Services ----------
 
   Stream<List<Service>> watchServices(String shopId) =>
-      _coll(shopId, 'services')
-          .orderBy('sortOrder')
-          .snapshots()
-          .map((snap) => snap.docs
-              .map((d) => Service.fromMap(d.id, d.data()))
-              .toList());
+      _coll(shopId, 'services').orderBy('sortOrder').snapshots().map((snap) =>
+          snap.docs.map((d) => Service.fromMap(d.id, d.data())).toList());
 
   Future<void> addService(String shopId, Service s) async {
     await _coll(shopId, 'services').doc(s.id).set(s.toMap());
@@ -142,13 +142,11 @@ class FirestoreService {
         .where('startTime', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
         .orderBy('startTime')
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => Appointment.fromMap(d.id, d.data()))
-            .toList());
+        .map((snap) =>
+            snap.docs.map((d) => Appointment.fromMap(d.id, d.data())).toList());
   }
 
-  Future<Appointment?> findAppointment(
-      String shopId, String reference) async {
+  Future<Appointment?> findAppointment(String shopId, String reference) async {
     final snap = await _coll(shopId, 'appointments')
         .where('reference', isEqualTo: reference)
         .limit(1)
@@ -163,9 +161,7 @@ class FirestoreService {
     final snap = await _coll(shopId, 'appointments')
         .where('customerPhone', isEqualTo: phone)
         .get();
-    return snap.docs
-        .map((d) => Appointment.fromMap(d.id, d.data()))
-        .toList();
+    return snap.docs.map((d) => Appointment.fromMap(d.id, d.data())).toList();
   }
 
   // ---------- Discounts ----------
@@ -192,9 +188,8 @@ class FirestoreService {
       _coll(shopId, 'feedback')
           .orderBy('createdAt', descending: true)
           .snapshots()
-          .map((snap) => snap.docs
-              .map((d) => Feedback.fromMap(d.id, d.data()))
-              .toList());
+          .map((snap) =>
+              snap.docs.map((d) => Feedback.fromMap(d.id, d.data())).toList());
 
   Future<void> addFeedback(String shopId, Feedback f) async {
     await _coll(shopId, 'feedback').doc(f.id).set(f.toMap());
@@ -381,12 +376,8 @@ class FirestoreService {
   // ---------- Queue ----------
 
   Stream<List<QueueEntry>> watchQueue(String shopId) =>
-      _coll(shopId, 'queue')
-          .orderBy('joinedAt')
-          .snapshots()
-          .map((snap) => snap.docs
-              .map((d) => QueueEntry.fromMap(d.id, d.data()))
-              .toList());
+      _coll(shopId, 'queue').orderBy('joinedAt').snapshots().map((snap) =>
+          snap.docs.map((d) => QueueEntry.fromMap(d.id, d.data())).toList());
 
   Future<void> saveQueueEntry(String shopId, QueueEntry entry) =>
       _coll(shopId, 'queue').doc(entry.id).set(entry.toMap());
@@ -399,9 +390,8 @@ class FirestoreService {
       _coll(shopId, 'payments')
           .orderBy('paidAt', descending: true)
           .snapshots()
-          .map((snap) => snap.docs
-              .map((d) => Payment.fromMap(d.id, d.data()))
-              .toList());
+          .map((snap) =>
+              snap.docs.map((d) => Payment.fromMap(d.id, d.data())).toList());
 
   Future<PaymentStatus> recordPayment(String shopId, Payment payment) async {
     final payments = _coll(shopId, 'payments');
@@ -421,9 +411,8 @@ class FirestoreService {
       final collected = ((data['collectedAmount'] as num?) ?? 0).toDouble();
       final next = collected + payment.amount;
       if (next > total + 0.01) throw Exception('invalid-pricing');
-      status = next >= total - 0.01
-          ? PaymentStatus.paid
-          : PaymentStatus.depositPaid;
+      status =
+          next >= total - 0.01 ? PaymentStatus.paid : PaymentStatus.depositPaid;
       tx.update(ref, {
         'collectedAmount': next,
         'paymentStatus': status.name,
@@ -441,9 +430,6 @@ class FirestoreService {
   CollectionReference<Map<String, dynamic>> _members(String shopId) =>
       _coll(shopId, 'members');
 
-  CollectionReference<Map<String, dynamic>> _users() =>
-      _db.collection('users');
-
   Stream<List<Member>> watchMembers(String shopId) => _members(shopId)
       .orderBy('createdAt', descending: false)
       .snapshots()
@@ -456,49 +442,97 @@ class FirestoreService {
     return Member.fromMap(snap.id, snap.data() ?? {});
   }
 
+  /// The owner-controlled capability map for [uid].
+  ///
+  /// This is the same document `firestore.rules` reads, so the UI and the
+  /// server enforcement always agree. A missing membership means no capability.
+  Future<StaffPermissions> getMemberPermissions(
+      String shopId, String uid) async {
+    final snap = await _members(shopId).doc(uid).get();
+    final data = snap.data();
+    if (data == null) return StaffPermissions.minimal;
+    return StaffPermissions.fromMap(
+        data['permissions'] as Map<String, dynamic>?);
+  }
+
+  /// Resolves the shop + role for an authenticated uid.
+  ///
+  /// Ownership is a direct `shops.ownerId` lookup. Everyone else is resolved
+  /// through the collection-group query on `members.uid`; there is no writable
+  /// `/users` profile any more. An unknown account is a *staff* account with no
+  /// shop, never an admin fallback.
   Future<({String? shopId, AppRole role})> resolveShopForUser(
       String uid) async {
     final ownedShopId = await findShopByOwner(uid);
     if (ownedShopId != null) {
       return (shopId: ownedShopId, role: AppRole.admin);
     }
-    final profile = await getUserProfile(uid);
-    final joinedShopId = profile?['joinedShopId'] as String?;
-    if (joinedShopId == null || joinedShopId.isEmpty) {
-      return (shopId: null, role: AppRole.admin);
+    final snap = await _db
+        .collectionGroup('members')
+        .where('uid', isEqualTo: uid)
+        .limit(1)
+        .get();
+    if (snap.docs.isEmpty) {
+      return (shopId: null, role: AppRole.staff);
     }
-    final membership = await getMember(joinedShopId, uid);
-    if (membership == null) {
-      return (shopId: null, role: AppRole.admin);
+    final doc = snap.docs.first;
+    final shopId = doc.reference.parent.parent?.id;
+    if (shopId == null || shopId.isEmpty) {
+      return (shopId: null, role: AppRole.staff);
     }
-    return (shopId: joinedShopId, role: membership.role);
+    final member = Member.fromMap(doc.id, doc.data());
+    return (shopId: shopId, role: member.role);
   }
 
-  Future<Map<String, dynamic>?> getUserProfile(String uid) async {
-    final snap = await _users().doc(uid).get();
-    return snap.data();
+  /// True only for the immutable `shops.ownerId` holder.
+  Future<bool> isShopOwner(String shopId) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return false;
+    final snap = await _shops().doc(shopId).get();
+    final data = snap.data();
+    return data != null && data['ownerId'] == uid;
   }
 
-  Future<void> upsertUserProfile(String uid, Map<String, dynamic> data) async {
-    await _users().doc(uid).set(
-        {...data, 'updatedAt': FieldValue.serverTimestamp()},
-        SetOptions(merge: true));
-  }
-
-  Future<void> addMemberByEmail(
-      String shopId, String email, AppRole role, String name) async {
-    await _members(shopId).doc(email).set({
-      'email': email,
+  /// Creates (or links) the membership document for [uid].
+  ///
+  /// Written by the owner only. `permissions` is the server-enforced copy of
+  /// the employee's capability set.
+  Future<void> saveMember(
+    String shopId,
+    String uid, {
+    required String email,
+    required String name,
+    required AppRole role,
+    required StaffPermissions permissions,
+    bool active = true,
+  }) async {
+    await _members(shopId).doc(uid).set({
+      'uid': uid,
+      'email': email.trim().toLowerCase(),
       'name': name,
       'role': role.name,
+      'permissions': permissions.toMap(),
+      'active': active,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
-  Future<void> updateMemberRole(
-      String shopId, String uid, AppRole role) async {
-    await _members(shopId).doc(uid).set(
-        {'role': role.name}, SetOptions(merge: true));
+  /// Keeps the server-enforced permissions in sync when the owner edits the
+  /// employee record. Never touches identity fields.
+  Future<void> updateMemberPermissions(
+    String shopId,
+    String uid, {
+    required StaffPermissions permissions,
+    String? name,
+    String? email,
+    bool? active,
+  }) async {
+    await _members(shopId).doc(uid).set({
+      'permissions': permissions.toMap(),
+      if (name != null) 'name': name,
+      if (email != null) 'email': email.trim().toLowerCase(),
+      if (active != null) 'active': active,
+    }, SetOptions(merge: true));
   }
 
   Future<void> removeMember(String shopId, String uid) async {

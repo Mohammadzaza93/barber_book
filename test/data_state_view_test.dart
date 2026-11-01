@@ -5,6 +5,7 @@ import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 import 'package:barber_app/widgets/data_state_view.dart';
 import 'package:barber_app/widgets/empty_state.dart';
+import 'package:barber_app/widgets/skeleton_loader.dart';
 
 /// PHASE 3.2 coverage for the shared provider-state renderer.
 ///
@@ -41,7 +42,7 @@ void main() {
     expect(find.byType(EmptyState), findsNothing);
   });
 
-  testWidgets('shows a spinner while loading', (tester) async {
+  testWidgets('shows a skeleton while loading', (tester) async {
     await tester.pumpWidget(_host(const DataStateView(
       loading: true,
       permissionDenied: false,
@@ -50,12 +51,11 @@ void main() {
     )));
     await tester.pump();
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(SkeletonList), findsOneWidget);
     expect(find.text('CONTENT'), findsNothing);
   });
 
-  testWidgets('denial wins over loading/error and hides retry',
-      (tester) async {
+  testWidgets('denial wins over loading/error and hides retry', (tester) async {
     await tester.pumpWidget(_host(DataStateView(
       loading: true,
       permissionDenied: true,
