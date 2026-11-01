@@ -1,5 +1,7 @@
 rules_version = '2';
 
+// Free security baseline: deny-by-default, shop isolation, role checks.
+// Deploy: firebase deploy --only firestore:rules
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() {
@@ -108,7 +110,7 @@ service cloud.firestore {
       }
 
       match /queue/{docId} {
-        allow read, create, update: if isAdmin(shopId);
+        allow read, create, update: if isAdmin(shopId) || isStaff(shopId);
         allow delete: if isAdmin(shopId);
       }
 
