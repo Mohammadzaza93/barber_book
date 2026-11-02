@@ -1,1 +1,272 @@
-FILE_FROM_DISK
+rules_version = '2';
+
+// BarberBook — internal app for ONE salon (owner + staff).
+//
+// Security model
+// --------------
+// * The shop owner is identified by the immutable `ownerId` field on
+//   `shops/{shopId}`. Only OWNER_EMAIL may create a shop, and `ownerId` can
+//   never be changed after creation.
+// * Roles live ONLY in `shops/{shopId}/members/{uid}`.
+// * Direct index `shop_memberships/{uid}` lets staff resolve their shop without
+//   relying only on collection-group queries.
+//
+// OWNER_EMAIL must match `kOwnerEmail` in lib/config/owner.dart.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function shopRef(shopId) {
+      return /databases/$(database)/documents/shops/$(shopId);
+    }
+
+    function memberRef(shopId) {
+      return /databases/$(database)/documents/shops/$(shopId)/members/$(request.auth.uid);
+    }
+
+    function isOwner(shopId) {
+      return signedIn()
+        && exists(shopRef(shopId))
+        && get(shopRef(shopId)).data.ownerId == request.auth.uid;
+    }
+
+    function isMember(shopId) {
+      return signedIn() && exists(memberRef(shopId));
+    }
+
+    function memberRole(shopId) {
+      return get(memberRef(shopId)).data.role;
+    }
+
+    function isAdminMember(shopId) {
+      return isMember(shopId)
+        && memberRole(shopId) in ['admin', 'owner', 'manager'];
+    }
+
+    function isAdmin(shopId) {
+      return isOwner(shopId) || isAdminMember(shopId);
+    }
+
+    function perm(shopId, key) {
+      return isMember(shopId)
+        && get(memberRef(shopId)).data.permissions[key] == true;
+    }
+
+    function can(shopId, key) {
+      return isAdmin(shopId) || perm(shopId, key);
+    }
+
+    match /shops/{shopId} {
+      allow create: if signedIn()
+        && request.auth.token.email == 'mohammad93zza@gmail.com'
+        && request.auth.token.email_verified == true
+        && request.resource.data.ownerId == request.auth.uid;
+
+      allow get: if isOwner(shopId) || isMember(shopId);
+      allow list: if signedIn() && resource.data.ownerId == request.auth.uid;
+
+      allow update: if (isOwner(shopId) || perm(shopId, 'settings'))
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if isOwner(shopId);
+
+      match /members/{memberId} {
+        allow get: if isAdmin(shopId)
+          || (signedIn() && request.auth.uid == memberId);
+        allow list: if isAdmin(shopId);
+        allow create, update: if isOwner(shopId)
+          && request.resource.data.uid == memberId
+          && request.resource.data.role in ['admin', 'staff']
+          && request.resource.data.permissions is map;
+        allow delete: if isOwner(shopId);
+      }
+
+      match /services/{docId} {
+        allow read: if isMember(shopId) || isOwner(shopId);
+        allow write: if can(shopId, 'services');
+      }
+
+      match /employees/{docId} {
+        allow read: if isMember(shopId) || isOwner(shopId);
+        allow create, update: if can(shopId, 'staff');
+        allow delete: if isAdmin(shopId);
+      }
+
+      function appointmentUpdateAllowed() {
+        return isAdmin(shopId)
+          || (perm(shopId, 'appointments')
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'status', 'notes', 'customerName', 'customerPhone',
+                'customerEmail', 'reminderSent', 'rating', 'startTime',
+                'endTime', 'serviceIds', 'employeeId', 'chairId',
+                'outOfHours', 'recurring', 'seriesId', 'updatedAt'
+              ]))
+          || (perm(shopId, 'payments')
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'paymentStatus', 'collectedAmount'
+              ]));
+      }
+
+      match /appointments/{docId} {
+        allow read: if isMember(shopId) || isOwner(shopId);
+        allow create: if can(shopId, 'appointments')
+          && request.resource.data.createdById == request.auth.uid;
+        allow update: if appointmentUpdateAllowed();
+        allow delete: if isAdmin(shopId);
+      }
+
+      match /queue/{docId} {
+        allow read: if isMember(shopId) || isOwner(shopId);
+        allow create, update: if isMember(shopId);
+        allow delete: if isAdmin(shopId);
+      }
+
+      match /payments/{docId} {
+        allow read: if can(shopId, 'payments');
+        allow create, update: if can(shopId, 'payments');
+        allow delete: if isAdmin(shopId);
+      }
+
+      match /discounts/{docId} {
+        allow read: if isMember(shopId) || isOwner(shopId);
+        allow write: if can(shopId, 'discounts');
+      }
+
+      match /feedback/{docId} {
+        allow read, write: if can(shopId, 'feedback');
+      }
+
+      match /requests/{docId} {
+        allow read, write: if can(shopId, 'outOfHours');
+      }
+
+      match /portfolio/{docId} {
+        allow read: if isMember(shopId) || isOwner(shopId);
+        allow write: if can(shopId, 'businessTools');
+      }
+
+      match /customers/{docId} {
+        allow read, write: if can(shopId, 'appointments')
+          || can(shopId, 'payments')
+          || can(shopId, 'businessTools');
+      }
+
+      match /loyalty/{docId} {
+        allow read, write: if can(shopId, 'businessTools')
+          || can(shopId, 'discounts');
+      }
+
+      match /loyaltyRules/{docId} {
+        allow read, write: if can(shopId, 'businessTools')
+          || can(shopId, 'discounts');
+      }
+
+      match /loyaltyGifts/{docId} {
+        allow read, write: if can(shopId, 'businessTools');
+      }
+
+      match /chairs/{docId} {
+        allow read: if isMember(shopId) || isOwner(shopId);
+        allow write: if can(shopId, 'businessTools') || can(shopId, 'finance');
+      }
+
+      match /chairSupplies/{docId} {
+        allow read: if isMember(shopId) || isOwner(shopId);
+        allow write: if can(shopId, 'businessTools') || can(shopId, 'finance');
+      }
+
+      match /chairWeeklyProfits/{docId} {
+        allow read, write: if can(shopId, 'businessTools') || can(shopId, 'finance');
+      }
+
+      match /inventory/{docId} {
+        allow read, write: if can(shopId, 'businessTools')
+          || can(shopId, 'finance')
+          || can(shopId, 'payments');
+      }
+
+      match /inventoryMovements/{docId} {
+        allow read, write: if can(shopId, 'businessTools')
+          || can(shopId, 'finance')
+          || can(shopId, 'payments');
+      }
+
+      match /team_tasks/{docId} {
+        allow read: if isMember(shopId) || isOwner(shopId);
+        allow write: if can(shopId, 'staff');
+      }
+
+      match /team_evaluations/{docId} {
+        allow read: if isMember(shopId) || isOwner(shopId);
+        allow write: if can(shopId, 'staff');
+      }
+
+      match /team_attendance/{docId} {
+        allow read: if isMember(shopId) || isOwner(shopId);
+        allow write: if can(shopId, 'staff');
+      }
+
+      match /team_time_off/{docId} {
+        allow read: if isMember(shopId) || isOwner(shopId);
+        allow write: if can(shopId, 'staff');
+      }
+
+      match /finance/{bucket}/{docId} {
+        allow read, write: if can(shopId, 'finance');
+      }
+
+      match /finance/{bucket}/items/{itemId} {
+        allow read, write: if can(shopId, 'finance');
+      }
+
+      match /finance_daily/{docId} {
+        allow read, write: if can(shopId, 'finance') || can(shopId, 'payments');
+      }
+
+      match /day_closes/{docId} {
+        allow read, write: if can(shopId, 'finance') || can(shopId, 'payments');
+      }
+
+      match /activity_log/{docId} {
+        allow read: if isAdmin(shopId) || perm(shopId, 'reports');
+        allow create: if isMember(shopId)
+          && request.resource.data.actorUid == request.auth.uid;
+        allow update, delete: if false;
+      }
+
+      match /backups/{docId} {
+        allow read, write: if isAdmin(shopId);
+      }
+    }
+
+    match /{path=**}/members/{memberId} {
+      allow list, get: if signedIn() && (
+        resource.data.uid == request.auth.uid
+        || memberId == request.auth.uid
+      );
+    }
+
+    match /shop_memberships/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn()
+        && request.resource.data.uid == uid
+        && request.resource.data.shopId is string
+        && exists(/databases/$(database)/documents/shops/$(request.resource.data.shopId))
+        && get(/databases/$(database)/documents/shops/$(request.resource.data.shopId)).data.ownerId
+           == request.auth.uid;
+      allow delete: if signedIn()
+        && resource.data.shopId is string
+        && exists(/databases/$(database)/documents/shops/$(resource.data.shopId))
+        && get(/databases/$(database)/documents/shops/$(resource.data.shopId)).data.ownerId
+           == request.auth.uid;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
