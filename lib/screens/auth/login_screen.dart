@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../l10n/strings.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/auth_signup_extension.dart';
 import '../../providers/language_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/confirm.dart';
@@ -22,7 +23,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _confirm = TextEditingController();
   bool _obscure = true;
   bool _busy = false;
-  /// false = sign in, true = create account
   bool _registerMode = false;
 
   @override
