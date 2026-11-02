@@ -1,0 +1,596 @@
+diff --git a/docs/SECURITY_FREE.md b/docs/SECURITY_FREE.md
+index 10ab860..5df3d4d 100644
+--- a/docs/SECURITY_FREE.md
++++ b/docs/SECURITY_FREE.md
+@@ -6,10 +6,22 @@
+ 
+ ```bash
+ firebase login
+-firebase deploy --only firestore:rules,storage
++firebase deploy --only firestore:rules,firestore:indexes
+ ```
+ 
+-في Console: Firestore → Rules و Storage → Rules يجب أن تطابق الملفات في المشروع.
++> **مهم:** انشر الفهارس مع القواعد (`firestore:indexes`). بدونها يفشل ربط حسابات
++> الموظفين (شاشة «الحساب غير مرتبط بأي محل»). ولا تنشر `storage` إلا إذا كان
++> مشروعك يدعمه فعلاً على الخطة المجانية.
++
++في Console: Firestore → Rules يجب أن تطابق الملف في المشروع.
++
++### اختبار القواعد مجاناً قبل النشر
++
++```bash
++cd rules-test
++npm install
++npm test        # يحتاج Java؛ يعمل على محاكي محلي بلا أي تكلفة
++```
+ 
+ ## 2) المصادقة
+ 
+diff --git a/firestore.indexes.json b/firestore.indexes.json
+index 9aac4fc..3c26b01 100644
+--- a/firestore.indexes.json
++++ b/firestore.indexes.json
+@@ -4,53 +4,53 @@
+       "collectionGroup": "appointments",
+       "queryScope": "COLLECTION",
+       "fields": [
+-        { "fieldPath": "employeeId", "order": "ASCENDING" },
+-        { "fieldPath": "startTime", "order": "ASCENDING" }
++        {
++          "fieldPath": "employeeId",
++          "order": "ASCENDING"
++        },
++        {
++          "fieldPath": "startTime",
++          "order": "ASCENDING"
++        }
+       ]
+     },
+     {
+       "collectionGroup": "appointments",
+       "queryScope": "COLLECTION",
+       "fields": [
+-        { "fieldPath": "chairId", "order": "ASCENDING" },
+-        { "fieldPath": "startTime", "order": "ASCENDING" }
++        {
++          "fieldPath": "chairId",
++          "order": "ASCENDING"
++        },
++        {
++          "fieldPath": "startTime",
++          "order": "ASCENDING"
++        }
+       ]
+-    },
+-    {
+-      "collectionGroup": "appointments",
+-      "queryScope": "COLLECTION",
+-      "fields": [
+-        { "fieldPath": "reference", "order": "ASCENDING" }
+-      ]
+-    },
+-    {
+-      "collectionGroup": "appointments",
+-      "queryScope": "COLLECTION",
+-      "fields": [
+-        { "fieldPath": "requestId", "order": "ASCENDING" }
+-      ]
+-    },
+-    {
+-      "collectionGroup": "discounts",
+-      "queryScope": "COLLECTION",
+-      "fields": [
+-        { "fieldPath": "code", "order": "ASCENDING" }
+-      ]
+-    },
+-    {
+-      "collectionGroup": "payments",
+-      "queryScope": "COLLECTION",
+-      "fields": [
+-        { "fieldPath": "appointmentId", "order": "ASCENDING" }
+-      ]
+-    },
++    }
++  ],
++  "fieldOverrides": [
+     {
+       "collectionGroup": "members",
+-      "queryScope": "COLLECTION_GROUP",
+-      "fields": [
+-        { "fieldPath": "uid", "order": "ASCENDING" }
++      "fieldPath": "uid",
++      "indexes": [
++        {
++          "order": "ASCENDING",
++          "queryScope": "COLLECTION"
++        },
++        {
++          "order": "DESCENDING",
++          "queryScope": "COLLECTION"
++        },
++        {
++          "arrayConfig": "CONTAINS",
++          "queryScope": "COLLECTION"
++        },
++        {
++          "order": "ASCENDING",
++          "queryScope": "COLLECTION_GROUP"
++        }
+       ]
+     }
+-  ],
+-  "fieldOverrides": []
++  ]
+ }
+diff --git a/firestore.rules b/firestore.rules
+index 635cf1c..50cf8d4 100644
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -40,8 +40,12 @@ service cloud.firestore {
+         && get(shopRef(shopId)).data.ownerId == request.auth.uid;
+     }
+ 
++    // A member document with `active: false` is a deactivated account: it keeps
++    // its identity but loses every grant below. A missing field means active.
+     function isMember(shopId) {
+-      return signedIn() && exists(memberRef(shopId));
++      return signedIn()
++        && exists(memberRef(shopId))
++        && get(memberRef(shopId)).data.get('active', true) != false;
+     }
+ 
+     function memberRole(shopId) {
+@@ -61,7 +65,7 @@ service cloud.firestore {
+     // Granular, owner-controlled capability from the member document.
+     function perm(shopId, key) {
+       return isMember(shopId)
+-        && get(memberRef(shopId)).data.permissions[key] == true;
++        && get(memberRef(shopId)).data.get('permissions', {}).get(key, false) == true;
+     }
+ 
+     function can(shopId, key) {
+@@ -98,10 +102,26 @@ service cloud.firestore {
+ 
+         // Only the true owner manages membership. Admins cannot promote
+         // themselves or anyone else.
+-        allow create, update: if isOwner(shopId)
++        allow create: if isOwner(shopId)
+           && request.resource.data.uid == memberId
+           && request.resource.data.role in ['admin', 'staff']
+           && request.resource.data.permissions is map;
++
++        // The owner can change anything. An admin member may only adjust a
++        // *staff* member's capabilities / active flag / contact details: never
++        // a role, never another admin, never themselves.
++        allow update: if (isOwner(shopId)
++            && request.resource.data.uid == memberId
++            && request.resource.data.role in ['admin', 'staff']
++            && request.resource.data.permissions is map)
++          || (isAdminMember(shopId)
++            && memberId != request.auth.uid
++            && resource.data.role == 'staff'
++            && request.resource.data.role == 'staff'
++            && request.resource.data.uid == memberId
++            && request.resource.data.permissions is map
++            && request.resource.data.diff(resource.data).affectedKeys()
++                 .hasOnly(['permissions', 'active', 'name', 'email']));
+         allow delete: if isOwner(shopId);
+       }
+ 
+@@ -123,23 +143,47 @@ service cloud.firestore {
+       // discounts or the creating identity of an existing booking.
+       function appointmentUpdateAllowed() {
+         return isAdmin(shopId)
++          // Data entry: status + contact fields only. Times, services, barber,
++          // prices and payment fields can never be rewritten from here.
+           || (perm(shopId, 'appointments')
+               && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                 'status', 'notes', 'customerName', 'customerPhone',
+-                'customerEmail', 'reminderSent', 'rating', 'startTime',
+-                'endTime', 'serviceIds', 'employeeId', 'chairId',
+-                'outOfHours', 'recurring', 'seriesId', 'updatedAt'
+-              ]))
++                'customerEmail', 'reminderSent', 'rating', 'updatedAt'
++              ])
++              && request.resource.data.status in
++                   ['requested', 'confirmed', 'completed', 'cancelled', 'noShow'])
++          // Payment capability: only the collected total and its status, and
++          // never above what the appointment costs.
+           || (perm(shopId, 'payments')
+               && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                 'paymentStatus', 'collectedAmount'
+-              ]));
++              ])
++              && request.resource.data.paymentStatus in
++                   ['unpaid', 'depositPaid', 'paid']
++              && request.resource.data.collectedAmount is number
++              && request.resource.data.collectedAmount >= 0
++              && request.resource.data.collectedAmount
++                   <= resource.data.totalAmount + 0.01);
+       }
+ 
+       match /appointments/{docId} {
+         allow read: if isMember(shopId) || isOwner(shopId);
++        // A new booking always starts unpaid with nothing collected, so a
++        // data-entry account cannot book something as already completed/paid.
+         allow create: if can(shopId, 'appointments')
+-          && request.resource.data.createdById == request.auth.uid;
++          && request.resource.data.createdById == request.auth.uid
++          && request.resource.data.shopId == shopId
++          && request.resource.data.status in ['requested', 'confirmed']
++          && request.resource.data.paymentStatus == 'unpaid'
++          && request.resource.data.collectedAmount == 0
++          && request.resource.data.totalAmount is number
++          && request.resource.data.totalAmount >= 0
++          && request.resource.data.startTime is timestamp
++          && request.resource.data.endTime is timestamp
++          && request.resource.data.startTime < request.resource.data.endTime
++          && request.resource.data.customerName is string
++          && request.resource.data.customerName.size() > 0
++          && request.resource.data.customerName.size() <= 120;
+         allow update: if appointmentUpdateAllowed();
+         allow delete: if isAdmin(shopId);
+       }
+@@ -154,9 +198,14 @@ service cloud.firestore {
+       }
+ 
+       // --------------------------------------------------------------- payments
++      // A payment is a ledger entry: it can be added, never edited. Removing
++      // one (a mistake) is an admin action.
+       match /payments/{docId} {
+         allow read: if can(shopId, 'payments');
+-        allow create, update: if can(shopId, 'payments');
++        allow create: if can(shopId, 'payments')
++          && request.resource.data.amount is number
++          && request.resource.data.amount > 0;
++        allow update: if false;
+         allow delete: if isAdmin(shopId);
+       }
+ 
+@@ -228,10 +277,12 @@ service cloud.firestore {
+           || can(shopId, 'payments');
+       }
+ 
++      // Stock movements are an append-only history.
+       match /inventoryMovements/{docId} {
+-        allow read, write: if can(shopId, 'businessTools')
++        allow read, create: if can(shopId, 'businessTools')
+           || can(shopId, 'finance')
+           || can(shopId, 'payments');
++        allow update, delete: if false;
+       }
+ 
+       // ------------------------------------------------------------- team hub
+@@ -267,11 +318,13 @@ service cloud.firestore {
+       // Daily revenue is written by the queue checkout, which staff are
+       // allowed to run when they hold the `payments` capability.
+       match /finance_daily/{docId} {
+-        allow read, write: if can(shopId, 'finance') || can(shopId, 'payments');
++        allow read, create, update: if can(shopId, 'finance') || can(shopId, 'payments');
++        allow delete: if isAdmin(shopId);
+       }
+ 
+       match /day_closes/{docId} {
+-        allow read, write: if can(shopId, 'finance') || can(shopId, 'payments');
++        allow read, create, update: if can(shopId, 'finance') || can(shopId, 'payments');
++        allow delete: if isAdmin(shopId);
+       }
+ 
+       // ----------------------------------------------------------- audit trail
+@@ -290,6 +343,19 @@ service cloud.firestore {
+       }
+     }
+ 
++    // Pointer to the salon, read by any signed-in account so a staff login can
++    // reach its own members/{uid} document without a collection-group index.
++    // Only the shop owner may write it, and only for a shop they own.
++    match /appConfig/{docId} {
++      allow get: if signedIn();
++      allow list: if false;
++      allow create, update: if docId == 'primaryShop'
++        && request.resource.data.keys().hasOnly(['shopId', 'updatedAt'])
++        && request.resource.data.shopId is string
++        && isOwner(request.resource.data.shopId);
++      allow delete: if false;
++    }
++
+     // Membership lookup used by resolveShopForUser (collection-group query).
+     // The rule mirrors the query constraint, so Firestore can prove it.
+     match /{path=**}/members/{memberId} {
+diff --git a/lib/providers/auth_provider.dart b/lib/providers/auth_provider.dart
+index d4b3c9c..0459d64 100644
+--- a/lib/providers/auth_provider.dart
++++ b/lib/providers/auth_provider.dart
+@@ -244,6 +244,18 @@ class AuthProvider extends ChangeNotifier {
+     notifyListeners();
+   }
+ 
++  /// Re-resolves the shop and role for the signed-in user without signing out.
++  ///
++  /// Used by the "no access" screen's retry button: after the owner links an
++  /// account, the staff member can retry instead of signing out and in again.
++  Future<void> refreshSession() async {
++    final uid = user?.uid;
++    if (uid == null) return;
++    error = null;
++    initializing = false;
++    await _applySession(uid);
++  }
++
+   /// Test-only entry point that drives the same session-transition logic as the
+   /// auth stream, without requiring a Firebase [User]. Never used in production.
+   @visibleForTesting
+diff --git a/lib/services/firestore_service.dart b/lib/services/firestore_service.dart
+index a442002..19ca815 100644
+--- a/lib/services/firestore_service.dart
++++ b/lib/services/firestore_service.dart
+@@ -71,9 +71,25 @@ class FirestoreService {
+       'createdAt': FieldValue.serverTimestamp(),
+       'updatedAt': FieldValue.serverTimestamp(),
+     });
++    await publishPrimaryShop(doc.id);
+     return doc.id;
+   }
+ 
++  /// Publishes `appConfig/primaryShop` = {shopId} so a staff account can find
++  /// the salon with two direct document reads. This avoids depending on the
++  /// collection-group index that resolving membership by `members.uid` needs.
++  /// Owner-only in `firestore.rules`; best-effort and idempotent.
++  Future<void> publishPrimaryShop(String shopId) async {
++    try {
++      await _db.collection('appConfig').doc('primaryShop').set({
++        'shopId': shopId,
++        'updatedAt': FieldValue.serverTimestamp(),
++      });
++    } catch (_) {
++      // Never block the session on this pointer.
++    }
++  }
++
+   Future<String?> findShopByOwner(String ownerId) async {
+     final snap =
+         await _shops().where('ownerId', isEqualTo: ownerId).limit(1).get();
+@@ -465,8 +481,39 @@ class FirestoreService {
+       String uid) async {
+     final ownedShopId = await findShopByOwner(uid);
+     if (ownedShopId != null) {
++      // Keep the staff lookup pointer fresh whenever the owner signs in. Not
++      // awaited on purpose: offline, a Firestore write only completes once the
++      // server acknowledges it, and the session must never wait on that.
++      // ignore: unawaited_futures
++      publishPrimaryShop(ownedShopId);
+       return (shopId: ownedShopId, role: AppRole.admin);
+     }
++
++    // 1) Direct path, no index needed: appConfig/primaryShop -> members/{uid}.
++    try {
++      final cfg = await _db.collection('appConfig').doc('primaryShop').get();
++      final pointed = cfg.data()?['shopId'];
++      if (pointed is String && pointed.isNotEmpty) {
++        final memberSnap = await _members(pointed).doc(uid).get();
++        if (memberSnap.exists) {
++          final data = memberSnap.data() ?? <String, dynamic>{};
++          // A deactivated account keeps its document but has no access.
++          if (data['active'] == false) {
++            return (shopId: null, role: AppRole.staff);
++          }
++          return (
++            shopId: pointed,
++            role: Member.fromMap(memberSnap.id, data).role,
++          );
++        }
++      }
++    } on FirebaseException {
++      // Pointer missing / not deployed yet: fall through to the group query.
++    }
++
++    // 2) Collection-group lookup. Needs the single-field COLLECTION_GROUP index
++    // on members.uid (see firestore.indexes.json). A failure here is rethrown
++    // so the caller can show the real reason instead of "no shop".
+     final snap = await _db
+         .collectionGroup('members')
+         .where('uid', isEqualTo: uid)
+@@ -476,6 +523,9 @@ class FirestoreService {
+       return (shopId: null, role: AppRole.staff);
+     }
+     final doc = snap.docs.first;
++    if (doc.data()['active'] == false) {
++      return (shopId: null, role: AppRole.staff);
++    }
+     final shopId = doc.reference.parent.parent?.id;
+     if (shopId == null || shopId.isEmpty) {
+       return (shopId: null, role: AppRole.staff);
+diff --git a/rules-test/.gitignore b/rules-test/.gitignore
+new file mode 100644
+index 0000000..c7b5e93
+--- /dev/null
++++ b/rules-test/.gitignore
+@@ -0,0 +1,2 @@
++node_modules/
++firestore-debug.log
+diff --git a/rules-test/package.json b/rules-test/package.json
+new file mode 100644
+index 0000000..d154081
+--- /dev/null
++++ b/rules-test/package.json
+@@ -0,0 +1,14 @@
++{
++  "name": "barberbook-rules-test",
++  "private": true,
++  "description": "Firestore security rules tests (free: runs on the local emulator, no Firebase billing).",
++  "scripts": {
++    "test": "firebase emulators:exec --config ../firebase.json --only firestore --project demo-barberbook \"mocha --timeout 30000 rules.test.js\""
++  },
++  "devDependencies": {
++    "@firebase/rules-unit-testing": "^3.0.4",
++    "firebase": "^10.14.1",
++    "firebase-tools": "^13.35.1",
++    "mocha": "^10.8.0"
++  }
++}
+diff --git a/rules-test/rules.test.js b/rules-test/rules.test.js
+new file mode 100644
+index 0000000..86459f9
+--- /dev/null
++++ b/rules-test/rules.test.js
+@@ -0,0 +1,159 @@
++'use strict';
++// Run from this folder:  npm install && npm test
++// Needs Java (for the Firestore emulator). Everything runs locally and is free.
++
++const fs = require('fs');
++const path = require('path');
++const {
++  initializeTestEnvironment,
++  assertSucceeds,
++  assertFails,
++} = require('@firebase/rules-unit-testing');
++const { Timestamp, serverTimestamp, setDoc, getDoc, updateDoc, deleteDoc, doc } =
++  require('firebase/firestore');
++
++const SHOP = 'shop1';
++const ALL = {
++  appointments: true, services: true, staff: true, discounts: true,
++  expenses: true, feedback: true, reports: true, settings: true,
++  businessTools: true, outOfHours: true, payments: true, finance: true,
++};
++const MINIMAL = { appointments: true, payments: true, finance: false };
++
++let env;
++
++function db(uid) {
++  return env.authenticatedContext(uid, { email: `${uid}@example.com` }).firestore();
++}
++
++function newAppointment(over = {}) {
++  const start = Timestamp.fromDate(new Date(Date.now() + 3600e3));
++  const end = Timestamp.fromDate(new Date(Date.now() + 5400e3));
++  return {
++    shopId: SHOP, customerName: 'Ali', customerPhone: '1', employeeId: 'b1',
++    serviceIds: ['s1'], startTime: start, endTime: end, status: 'confirmed',
++    paymentStatus: 'unpaid', totalAmount: 50, collectedAmount: 0,
++    createdById: 'staff1', createdAt: serverTimestamp(), ...over,
++  };
++}
++
++before(async () => {
++  env = await initializeTestEnvironment({
++    projectId: 'demo-barberbook',
++    firestore: { rules: fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8') },
++  });
++});
++after(async () => { await env.cleanup(); });
++
++beforeEach(async () => {
++  await env.clearFirestore();
++  await env.withSecurityRulesDisabled(async (ctx) => {
++    const d = ctx.firestore();
++    await setDoc(doc(d, `shops/${SHOP}`), { ownerId: 'owner1', createdAt: Timestamp.now() });
++    const member = (uid, role, permissions, extra = {}) =>
++      setDoc(doc(d, `shops/${SHOP}/members/${uid}`), { uid, role, permissions, ...extra });
++    await member('admin1', 'admin', ALL);
++    await member('admin2', 'admin', ALL);
++    await member('staff1', 'staff', MINIMAL);
++    await member('staff2', 'staff', MINIMAL);
++    await member('off1', 'staff', MINIMAL, { active: false });
++    await setDoc(doc(d, `shops/${SHOP}/appointments/a1`), {
++      ...newAppointment({ createdAt: Timestamp.now() }), createdById: 'staff1',
++    });
++    await setDoc(doc(d, `shops/${SHOP}/payments/p1`), { appointmentId: 'a1', amount: 10 });
++    await setDoc(doc(d, `shops/${SHOP}/day_closes/2026-01-01`), { net: 1 });
++    await setDoc(doc(d, `shops/${SHOP}/inventoryMovements/m1`), { itemId: 'i1', quantity: 1 });
++  });
++});
++
++describe('deactivated members', () => {
++  it('lose access to shop data', async () => {
++    await assertFails(getDoc(doc(db('off1'), `shops/${SHOP}/appointments/a1`)));
++    await assertSucceeds(getDoc(doc(db('staff1'), `shops/${SHOP}/appointments/a1`)));
++  });
++  it('can still read their own membership doc (needed to show "no access")', async () => {
++    await assertSucceeds(getDoc(doc(db('off1'), `shops/${SHOP}/members/off1`)));
++  });
++});
++
++describe('appointments', () => {
++  it('staff can create a normal booking', async () => {
++    await assertSucceeds(setDoc(doc(db('staff1'), `shops/${SHOP}/appointments/n1`), newAppointment()));
++  });
++  it('staff cannot create a booking that is already completed or paid', async () => {
++    const col = (id) => doc(db('staff1'), `shops/${SHOP}/appointments/${id}`);
++    await assertFails(setDoc(col('n2'), newAppointment({ status: 'completed' })));
++    await assertFails(setDoc(col('n3'), newAppointment({ paymentStatus: 'paid' })));
++    await assertFails(setDoc(col('n4'), newAppointment({ collectedAmount: 50 })));
++    await assertFails(setDoc(col('n5'), newAppointment({ totalAmount: -5 })));
++    await assertFails(setDoc(col('n6'), newAppointment({ createdById: 'someone-else' })));
++  });
++  it('staff can change status and contact notes but not time or price', async () => {
++    const ref = doc(db('staff1'), `shops/${SHOP}/appointments/a1`);
++    await assertSucceeds(updateDoc(ref, { status: 'completed' }));
++    await assertSucceeds(updateDoc(ref, { notes: 'hi' }));
++    await assertFails(updateDoc(ref, { totalAmount: 1 }));
++    await assertFails(updateDoc(ref, { startTime: Timestamp.now() }));
++    await assertFails(updateDoc(ref, { status: 'bogus' }));
++  });
++  it('payment capability cannot collect more than the total', async () => {
++    const ref = doc(db('staff1'), `shops/${SHOP}/appointments/a1`);
++    await assertSucceeds(updateDoc(ref, { collectedAmount: 50, paymentStatus: 'paid' }));
++    await assertFails(updateDoc(ref, { collectedAmount: 500, paymentStatus: 'paid' }));
++  });
++  it('only admins delete appointments', async () => {
++    await assertFails(deleteDoc(doc(db('staff1'), `shops/${SHOP}/appointments/a1`)));
++    await assertSucceeds(deleteDoc(doc(db('admin1'), `shops/${SHOP}/appointments/a1`)));
++  });
++});
++
++describe('ledgers', () => {
++  it('payments are append-only; only admins delete', async () => {
++    await assertSucceeds(setDoc(doc(db('staff1'), `shops/${SHOP}/payments/p2`), { amount: 5 }));
++    await assertFails(setDoc(doc(db('staff1'), `shops/${SHOP}/payments/p3`), { amount: -5 }));
++    await assertFails(updateDoc(doc(db('staff1'), `shops/${SHOP}/payments/p1`), { amount: 1 }));
++    await assertFails(updateDoc(doc(db('admin1'), `shops/${SHOP}/payments/p1`), { amount: 1 }));
++    await assertFails(deleteDoc(doc(db('staff1'), `shops/${SHOP}/payments/p1`)));
++    await assertSucceeds(deleteDoc(doc(db('admin1'), `shops/${SHOP}/payments/p1`)));
++  });
++  it('day closes cannot be deleted by staff', async () => {
++    await assertFails(deleteDoc(doc(db('staff1'), `shops/${SHOP}/day_closes/2026-01-01`)));
++    await assertSucceeds(deleteDoc(doc(db('admin1'), `shops/${SHOP}/day_closes/2026-01-01`)));
++  });
++  it('inventory movements are append-only for everyone', async () => {
++    await assertSucceeds(setDoc(doc(db('staff1'), `shops/${SHOP}/inventoryMovements/m2`), { itemId: 'i1', quantity: 2 }));
++    await assertFails(updateDoc(doc(db('admin1'), `shops/${SHOP}/inventoryMovements/m1`), { quantity: 9 }));
++    await assertFails(deleteDoc(doc(db('admin1'), `shops/${SHOP}/inventoryMovements/m1`)));
++  });
++});
++
++describe('members', () => {
++  it('an admin can adjust a staff member but not roles or other admins', async () => {
++    const staff = doc(db('admin1'), `shops/${SHOP}/members/staff2`);
++    await assertSucceeds(updateDoc(staff, { active: false }));
++    await assertSucceeds(updateDoc(staff, { permissions: { appointments: true, payments: false } }));
++    await assertFails(updateDoc(staff, { role: 'admin' }));
++    await assertFails(updateDoc(doc(db('admin1'), `shops/${SHOP}/members/admin2`), { active: false }));
++    await assertFails(updateDoc(doc(db('admin1'), `shops/${SHOP}/members/admin1`), { active: false }));
++  });
++  it('staff cannot edit memberships or create their own', async () => {
++    await assertFails(updateDoc(doc(db('staff1'), `shops/${SHOP}/members/staff1`), { role: 'admin' }));
++    await assertFails(setDoc(doc(db('stranger'), `shops/${SHOP}/members/stranger`),
++      { uid: 'stranger', role: 'admin', permissions: ALL }));
++  });
++  it('only the owner creates members', async () => {
++    await assertSucceeds(setDoc(doc(db('owner1'), `shops/${SHOP}/members/new1`),
++      { uid: 'new1', role: 'staff', permissions: MINIMAL }));
++    await assertFails(setDoc(doc(db('admin1'), `shops/${SHOP}/members/new2`),
++      { uid: 'new2', role: 'staff', permissions: MINIMAL }));
++  });
++});
++
++describe('appConfig pointer', () => {
++  it('any signed-in user can read it, only the owner can write it', async () => {
++    await assertSucceeds(setDoc(doc(db('owner1'), 'appConfig/primaryShop'), { shopId: SHOP, updatedAt: serverTimestamp() }));
++    await assertSucceeds(getDoc(doc(db('stranger'), 'appConfig/primaryShop')));
++    await assertFails(setDoc(doc(db('admin1'), 'appConfig/primaryShop'), { shopId: SHOP, updatedAt: serverTimestamp() }));
++    await assertFails(setDoc(doc(db('stranger'), 'appConfig/primaryShop'), { shopId: SHOP, updatedAt: serverTimestamp() }));
++  });
++});

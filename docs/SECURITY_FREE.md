@@ -6,10 +6,22 @@
 
 ```bash
 firebase login
-firebase deploy --only firestore:rules,storage
+firebase deploy --only firestore:rules,firestore:indexes
 ```
 
-في Console: Firestore → Rules و Storage → Rules يجب أن تطابق الملفات في المشروع.
+> **مهم:** انشر الفهارس مع القواعد (`firestore:indexes`). بدونها يفشل ربط حسابات
+> الموظفين (شاشة «الحساب غير مرتبط بأي محل»). ولا تنشر `storage` إلا إذا كان
+> مشروعك يدعمه فعلاً على الخطة المجانية.
+
+في Console: Firestore → Rules يجب أن تطابق الملف في المشروع.
+
+### اختبار القواعد مجاناً قبل النشر
+
+```bash
+cd rules-test
+npm install
+npm test        # يحتاج Java؛ يعمل على محاكي محلي بلا أي تكلفة
+```
 
 ## 2) المصادقة
 

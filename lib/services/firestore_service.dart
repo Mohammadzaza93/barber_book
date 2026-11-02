@@ -71,7 +71,23 @@ class FirestoreService {
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+    await publishPrimaryShop(doc.id);
     return doc.id;
+  }
+
+  /// Publishes `appConfig/primaryShop` = {shopId} so a staff account can find
+  /// the salon with two direct document reads. This avoids depending on the
+  /// collection-group index that resolving membership by `members.uid` needs.
+  /// Owner-only in `firestore.rules`; best-effort and idempotent.
+  Future<void> publishPrimaryShop(String shopId) async {
+    try {
+      await _db.collection('appConfig').doc('primaryShop').set({
+        'shopId': shopId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {
+      // Never block the session on this pointer.
+    }
   }
 
   Future<String?> findShopByOwner(String ownerId) async {
@@ -465,8 +481,39 @@ class FirestoreService {
       String uid) async {
     final ownedShopId = await findShopByOwner(uid);
     if (ownedShopId != null) {
+      // Keep the staff lookup pointer fresh whenever the owner signs in. Not
+      // awaited on purpose: offline, a Firestore write only completes once the
+      // server acknowledges it, and the session must never wait on that.
+      // ignore: unawaited_futures
+      publishPrimaryShop(ownedShopId);
       return (shopId: ownedShopId, role: AppRole.admin);
     }
+
+    // 1) Direct path, no index needed: appConfig/primaryShop -> members/{uid}.
+    try {
+      final cfg = await _db.collection('appConfig').doc('primaryShop').get();
+      final pointed = cfg.data()?['shopId'];
+      if (pointed is String && pointed.isNotEmpty) {
+        final memberSnap = await _members(pointed).doc(uid).get();
+        if (memberSnap.exists) {
+          final data = memberSnap.data() ?? <String, dynamic>{};
+          // A deactivated account keeps its document but has no access.
+          if (data['active'] == false) {
+            return (shopId: null, role: AppRole.staff);
+          }
+          return (
+            shopId: pointed,
+            role: Member.fromMap(memberSnap.id, data).role,
+          );
+        }
+      }
+    } on FirebaseException {
+      // Pointer missing / not deployed yet: fall through to the group query.
+    }
+
+    // 2) Collection-group lookup. Needs the single-field COLLECTION_GROUP index
+    // on members.uid (see firestore.indexes.json). A failure here is rethrown
+    // so the caller can show the real reason instead of "no shop".
     final snap = await _db
         .collectionGroup('members')
         .where('uid', isEqualTo: uid)
@@ -476,6 +523,9 @@ class FirestoreService {
       return (shopId: null, role: AppRole.staff);
     }
     final doc = snap.docs.first;
+    if (doc.data()['active'] == false) {
+      return (shopId: null, role: AppRole.staff);
+    }
     final shopId = doc.reference.parent.parent?.id;
     if (shopId == null || shopId.isEmpty) {
       return (shopId: null, role: AppRole.staff);

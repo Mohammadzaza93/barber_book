@@ -40,8 +40,12 @@ service cloud.firestore {
         && get(shopRef(shopId)).data.ownerId == request.auth.uid;
     }
 
+    // A member document with `active: false` is a deactivated account: it keeps
+    // its identity but loses every grant below. A missing field means active.
     function isMember(shopId) {
-      return signedIn() && exists(memberRef(shopId));
+      return signedIn()
+        && exists(memberRef(shopId))
+        && get(memberRef(shopId)).data.get('active', true) != false;
     }
 
     function memberRole(shopId) {
@@ -61,7 +65,7 @@ service cloud.firestore {
     // Granular, owner-controlled capability from the member document.
     function perm(shopId, key) {
       return isMember(shopId)
-        && get(memberRef(shopId)).data.permissions[key] == true;
+        && get(memberRef(shopId)).data.get('permissions', {}).get(key, false) == true;
     }
 
     function can(shopId, key) {
@@ -98,10 +102,26 @@ service cloud.firestore {
 
         // Only the true owner manages membership. Admins cannot promote
         // themselves or anyone else.
-        allow create, update: if isOwner(shopId)
+        allow create: if isOwner(shopId)
           && request.resource.data.uid == memberId
           && request.resource.data.role in ['admin', 'staff']
           && request.resource.data.permissions is map;
+
+        // The owner can change anything. An admin member may only adjust a
+        // *staff* member's capabilities / active flag / contact details: never
+        // a role, never another admin, never themselves.
+        allow update: if (isOwner(shopId)
+            && request.resource.data.uid == memberId
+            && request.resource.data.role in ['admin', 'staff']
+            && request.resource.data.permissions is map)
+          || (isAdminMember(shopId)
+            && memberId != request.auth.uid
+            && resource.data.role == 'staff'
+            && request.resource.data.role == 'staff'
+            && request.resource.data.uid == memberId
+            && request.resource.data.permissions is map
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['permissions', 'active', 'name', 'email']));
         allow delete: if isOwner(shopId);
       }
 
@@ -123,23 +143,47 @@ service cloud.firestore {
       // discounts or the creating identity of an existing booking.
       function appointmentUpdateAllowed() {
         return isAdmin(shopId)
+          // Data entry: status + contact fields only. Times, services, barber,
+          // prices and payment fields can never be rewritten from here.
           || (perm(shopId, 'appointments')
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                 'status', 'notes', 'customerName', 'customerPhone',
-                'customerEmail', 'reminderSent', 'rating', 'startTime',
-                'endTime', 'serviceIds', 'employeeId', 'chairId',
-                'outOfHours', 'recurring', 'seriesId', 'updatedAt'
-              ]))
+                'customerEmail', 'reminderSent', 'rating', 'updatedAt'
+              ])
+              && request.resource.data.status in
+                   ['requested', 'confirmed', 'completed', 'cancelled', 'noShow'])
+          // Payment capability: only the collected total and its status, and
+          // never above what the appointment costs.
           || (perm(shopId, 'payments')
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                 'paymentStatus', 'collectedAmount'
-              ]));
+              ])
+              && request.resource.data.paymentStatus in
+                   ['unpaid', 'depositPaid', 'paid']
+              && request.resource.data.collectedAmount is number
+              && request.resource.data.collectedAmount >= 0
+              && request.resource.data.collectedAmount
+                   <= resource.data.totalAmount + 0.01);
       }
 
       match /appointments/{docId} {
         allow read: if isMember(shopId) || isOwner(shopId);
+        // A new booking always starts unpaid with nothing collected, so a
+        // data-entry account cannot book something as already completed/paid.
         allow create: if can(shopId, 'appointments')
-          && request.resource.data.createdById == request.auth.uid;
+          && request.resource.data.createdById == request.auth.uid
+          && request.resource.data.shopId == shopId
+          && request.resource.data.status in ['requested', 'confirmed']
+          && request.resource.data.paymentStatus == 'unpaid'
+          && request.resource.data.collectedAmount == 0
+          && request.resource.data.totalAmount is number
+          && request.resource.data.totalAmount >= 0
+          && request.resource.data.startTime is timestamp
+          && request.resource.data.endTime is timestamp
+          && request.resource.data.startTime < request.resource.data.endTime
+          && request.resource.data.customerName is string
+          && request.resource.data.customerName.size() > 0
+          && request.resource.data.customerName.size() <= 120;
         allow update: if appointmentUpdateAllowed();
         allow delete: if isAdmin(shopId);
       }
@@ -154,9 +198,14 @@ service cloud.firestore {
       }
 
       // --------------------------------------------------------------- payments
+      // A payment is a ledger entry: it can be added, never edited. Removing
+      // one (a mistake) is an admin action.
       match /payments/{docId} {
         allow read: if can(shopId, 'payments');
-        allow create, update: if can(shopId, 'payments');
+        allow create: if can(shopId, 'payments')
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0;
+        allow update: if false;
         allow delete: if isAdmin(shopId);
       }
 
@@ -228,10 +277,12 @@ service cloud.firestore {
           || can(shopId, 'payments');
       }
 
+      // Stock movements are an append-only history.
       match /inventoryMovements/{docId} {
-        allow read, write: if can(shopId, 'businessTools')
+        allow read, create: if can(shopId, 'businessTools')
           || can(shopId, 'finance')
           || can(shopId, 'payments');
+        allow update, delete: if false;
       }
 
       // ------------------------------------------------------------- team hub
@@ -267,11 +318,13 @@ service cloud.firestore {
       // Daily revenue is written by the queue checkout, which staff are
       // allowed to run when they hold the `payments` capability.
       match /finance_daily/{docId} {
-        allow read, write: if can(shopId, 'finance') || can(shopId, 'payments');
+        allow read, create, update: if can(shopId, 'finance') || can(shopId, 'payments');
+        allow delete: if isAdmin(shopId);
       }
 
       match /day_closes/{docId} {
-        allow read, write: if can(shopId, 'finance') || can(shopId, 'payments');
+        allow read, create, update: if can(shopId, 'finance') || can(shopId, 'payments');
+        allow delete: if isAdmin(shopId);
       }
 
       // ----------------------------------------------------------- audit trail
@@ -288,6 +341,19 @@ service cloud.firestore {
       match /backups/{docId} {
         allow read, write: if isAdmin(shopId);
       }
+    }
+
+    // Pointer to the salon, read by any signed-in account so a staff login can
+    // reach its own members/{uid} document without a collection-group index.
+    // Only the shop owner may write it, and only for a shop they own.
+    match /appConfig/{docId} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create, update: if docId == 'primaryShop'
+        && request.resource.data.keys().hasOnly(['shopId', 'updatedAt'])
+        && request.resource.data.shopId is string
+        && isOwner(request.resource.data.shopId);
+      allow delete: if false;
     }
 
     // Membership lookup used by resolveShopForUser (collection-group query).

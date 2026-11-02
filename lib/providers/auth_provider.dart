@@ -244,6 +244,18 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Re-resolves the shop and role for the signed-in user without signing out.
+  ///
+  /// Used by the "no access" screen's retry button: after the owner links an
+  /// account, the staff member can retry instead of signing out and in again.
+  Future<void> refreshSession() async {
+    final uid = user?.uid;
+    if (uid == null) return;
+    error = null;
+    initializing = false;
+    await _applySession(uid);
+  }
+
   /// Test-only entry point that drives the same session-transition logic as the
   /// auth stream, without requiring a Firebase [User]. Never used in production.
   @visibleForTesting
