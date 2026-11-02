@@ -36,7 +36,7 @@ class Employee {
   Employee({
     required this.id,
     required this.name,
-    this.role = 'barber',
+    this.role = 'accountant',
     this.phone = '',
     this.email,
     this.avatarUrl,
@@ -111,7 +111,7 @@ class Employee {
     return Employee(
       id: id,
       name: (m['name'] as String?) ?? '',
-      role: (m['role'] as String?) ?? 'barber',
+      role: (m['role'] as String?) ?? 'accountant',
       phone: (m['phone'] as String?) ?? '',
       email: m['email'] as String?,
       avatarUrl: m['avatarUrl'] as String?,

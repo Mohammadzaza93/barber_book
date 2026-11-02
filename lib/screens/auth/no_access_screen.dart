@@ -39,12 +39,39 @@ class NoAccessScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'اطلب من صاحب المحل ربط هذا البريد من شاشة الموظفين. '
-                    'لا يمكن إنشاء محل جديد إلا من حساب المالك.',
+                    'اطلب من الأدمن ربط هذا البريد من شاشة الموظفين، '
+                    'ثم اضغط «إعادة المحاولة».',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
                   ),
+                  if (auth.error != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Text(
+                        auth.error!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.red.shade800,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 24),
+                  FilledButton.tonalIcon(
+                    onPressed: () =>
+                        context.read<AuthProvider>().refreshSession(),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('إعادة المحاولة'),
+                  ),
+                  const SizedBox(height: 8),
                   OutlinedButton.icon(
                     onPressed: () => context.read<AuthProvider>().signOut(),
                     icon: const Icon(Icons.logout_rounded),

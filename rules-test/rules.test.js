@@ -157,3 +157,26 @@ describe('appConfig pointer', () => {
     await assertFails(setDoc(doc(db('stranger'), 'appConfig/primaryShop'), { shopId: SHOP, updatedAt: serverTimestamp() }));
   });
 });
+
+describe('memberships pointer', () => {
+  const pointer = (uid) => ({
+    uid, shopId: SHOP, role: 'staff', active: true,
+    email: `${uid}@example.com`, name: uid,
+    permissions: MINIMAL,
+  });
+
+  it('the owner writes it and the member reads only their own pointer', async () => {
+    await assertSucceeds(setDoc(doc(db('owner1'), 'memberships/staff1'), pointer('staff1')));
+    await assertSucceeds(getDoc(doc(db('staff1'), 'memberships/staff1')));
+    await assertFails(getDoc(doc(db('staff2'), 'memberships/staff1')));
+    await assertFails(getDoc(doc(db('stranger'), 'memberships/staff1')));
+  });
+
+  it('non-owners cannot create or change a pointer', async () => {
+    await assertFails(setDoc(doc(db('staff1'), 'memberships/staff1'), pointer('staff1')));
+    await assertFails(setDoc(doc(db('admin1'), 'memberships/staff1'), pointer('staff1')));
+    await assertSucceeds(setDoc(doc(db('owner1'), 'memberships/staff1'), pointer('staff1')));
+    await assertFails(setDoc(doc(db('admin1'), 'memberships/staff1'), { active: false }));
+    await assertSucceeds(setDoc(doc(db('owner1'), 'memberships/staff1'), { active: false }));
+  });
+});

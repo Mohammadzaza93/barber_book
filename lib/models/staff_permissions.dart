@@ -48,29 +48,42 @@ class StaffPermissions {
     finance: false,
   );
 
-  /// قوالب حسب دور الفريق (مالك / مدير / حلاق / موظف إداري).
+  /// الدور الثاني في التطبيق: محاسب بصلاحيات محدودة يستطيع الأدمن تعديلها.
+  ///
+  /// القيم الافتراضية تغطي العمل المالي والمواعيد فقط؛ ولا تمنح إدارة الموظفين
+  /// أو الإعدادات أو النسخ الاحتياطي.
+  static const StaffPermissions accountant = StaffPermissions(
+    appointments: true,
+    services: false,
+    staff: false,
+    discounts: true,
+    expenses: true,
+    feedback: false,
+    reports: true,
+    settings: false,
+    businessTools: false,
+    outOfHours: false,
+    payments: true,
+    finance: true,
+  );
+
+  /// القالب الوحيدان في التطبيق: أدمن (كامل) ومحاسب (محدود).
+  ///
+  /// المعرّفات القديمة (`owner` / `manager` / `barber` / `admin_staff`) تُربط
+  /// بأمان حتى لا تفقد الحسابات القائمة صلاحياتها بعد التحديث.
   static StaffPermissions forRole(String roleId) {
     switch (roleId) {
+      case 'admin':
       case 'owner':
       case 'manager':
         return all;
+      case 'accountant':
+        return accountant;
       case 'admin_staff':
-        return const StaffPermissions(
-          appointments: true,
-          payments: true,
-          services: false,
-          staff: false,
-          discounts: true,
-          expenses: true,
-          feedback: true,
-          reports: false,
-          settings: false,
-          businessTools: false,
-          outOfHours: true,
-          finance: false,
-        );
       case 'barber':
       default:
+        // Legacy limited accounts keep the least-privilege map instead of
+        // silently gaining finance/report access during the upgrade.
         return minimal;
     }
   }

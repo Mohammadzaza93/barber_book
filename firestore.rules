@@ -356,6 +356,25 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Direct self-readable membership pointer: `memberships/{uid}`.
+    // Session restore reads this one document, so a staff login does not depend
+    // on the collection-group index for a `members.uid` query. The canonical
+    // role/permissions still live in `shops/{shopId}/members/{uid}`; the owner
+    // keeps this mirror in sync. Nobody else may read another account's pointer.
+    match /memberships/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list: if false;
+      allow create: if isOwner(request.resource.data.shopId)
+        && request.resource.data.uid == uid
+        && request.resource.data.shopId is string
+        && request.resource.data.permissions is map;
+      // Merge-safe: an update may send only the changed capability fields.
+      allow update: if isOwner(request.resource.data.get('shopId', resource.data.shopId))
+        && request.resource.data.get('uid', resource.data.uid) == uid
+        && request.resource.data.get('permissions', resource.data.permissions) is map;
+      allow delete: if signedIn() && isOwner(resource.data.shopId);
+    }
+
     // Membership lookup used by resolveShopForUser (collection-group query).
     // The rule mirrors the query constraint, so Firestore can prove it.
     match /{path=**}/members/{memberId} {

@@ -224,7 +224,11 @@ class TeamTimeOff {
       );
 }
 
-/// قوالب أدوار جاهزة تطبق صلاحيات StaffPermissions.
+/// الدوران الوحيدان في التطبيق: أدمن كامل الصلاحيات، ومحاسب محدود الصلاحيات.
+///
+/// الأدمن هو صاحب المحل/الحساب الإداري، ويستطيع تحديد صلاحيات المحاسب واحدة
+/// واحدة من شاشة الموظفين. المعرّفات القديمة تُترجم تلقائياً عند القراءة فقط،
+/// ولا تُكتب مرة أخرى.
 class TeamRolePreset {
   final String id;
   final String labelAr;
@@ -232,15 +236,23 @@ class TeamRolePreset {
 
   const TeamRolePreset(this.id, this.labelAr, this.labelEn);
 
-  static const owner = TeamRolePreset('owner', 'مالك', 'Owner');
-  static const manager = TeamRolePreset('manager', 'مدير', 'Manager');
-  static const barber = TeamRolePreset('barber', 'حلاق', 'Barber');
-  static const adminStaff =
-      TeamRolePreset('admin_staff', 'موظف إداري', 'Admin staff');
+  static const admin = TeamRolePreset('admin', 'أدمن', 'Admin');
+  static const accountant = TeamRolePreset('accountant', 'محاسب', 'Accountant');
 
-  static const all = [owner, manager, barber, adminStaff];
+  static const all = [admin, accountant];
 
+  /// يحوّل أي معرّف دور قديم أو جديد إلى أحد الدورين.
   static TeamRolePreset fromId(String? id) {
-    return all.firstWhere((e) => e.id == id, orElse: () => barber);
+    switch (id) {
+      case 'admin':
+      case 'owner':
+      case 'manager':
+        return admin;
+      case 'accountant':
+      case 'admin_staff':
+      case 'barber':
+      default:
+        return accountant;
+    }
   }
 }

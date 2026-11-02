@@ -1,7 +1,12 @@
-/// أدوار المستخدمين داخل التطبيق.
+/// أدوار المستخدمين داخل التطبيق — دوران فقط:
 ///
-/// - [admin]   أدمن: كل الصلاحيات (خدمات، حلاقون، تقارير، نفقات، مخزون، إعدادات، إدارة الموظفين)
-/// - [staff]   موظف إدخال: إدخال المواعيد والمدفوعات وتعديل ما أدخله فقط، بلا تقارير مالية ولا إعدادات
+/// - [admin]   أدمن: كل الصلاحيات (خدمات، موظفون، تقارير، نفقات، مخزون،
+///             إعدادات، إدارة الموظفين والنسخ الاحتياطي).
+/// - [staff]   محاسب: صلاحيات محدودة يحددها الأدمن من شاشة الموظفين.
+///
+/// كلمة `staff` هنا اسم تقني للدور المحدود فقط؛ واجهة المستخدم تعرضه دائماً
+/// باسم «محاسب». المعرّفات القديمة (owner/manager/barber/admin_staff) تُترجم
+/// بأمان حتى لا تفقد الحسابات القائمة وصولها.
 enum AppRole { admin, staff }
 
 extension AppRoleX on AppRole {
@@ -13,12 +18,18 @@ extension AppRoleX on AppRole {
       case 'owner':
       case 'manager':
         return AppRole.admin;
+      case 'accountant':
       case 'staff':
+      case 'barber':
+      case 'admin_staff':
         return AppRole.staff;
       default:
         return AppRole.staff;
     }
   }
+
+  /// يحوّل معرّف دور الفريق (أدمن/محاسب أو أي معرّف قديم) إلى دور الحساب.
+  static AppRole fromTeamRole(String? roleId) => fromName(roleId);
 
   /// هل يمكن لهذا الدور إدارة كل شيء؟
   bool get isAdmin => this == AppRole.admin;

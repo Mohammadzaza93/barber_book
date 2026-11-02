@@ -214,11 +214,8 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     });
   }
 
-  /// Team role -> membership role. Managers get admin capabilities; every
-  /// other preset is a staff account.
-  AppRole get _accountRole => (_roleId == 'owner' || _roleId == 'manager')
-      ? AppRole.admin
-      : AppRole.staff;
+  /// الدوران في التطبيق: أدمن -> admin، ومحاسب -> staff (بصلاحيات محدودة).
+  AppRole get _accountRole => AppRoleX.fromTeamRole(_roleId);
 
   Future<String?> _askTemporaryPassword() async {
     final pass = TextEditingController();
@@ -487,6 +484,9 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     final shop = context.watch<ShopProvider>();
     final auth = context.watch<AuthProvider>();
     final canManage = auth.canManageRules;
+    // Changing a role writes `members/{uid}.role`, which only the true owner may
+    // do (an admin must not be able to promote themselves or anyone else).
+    final canChangeRole = auth.isOwnerAccount;
     // Provisioning/linking a login writes `members/{uid}`, which is owner-only.
     final canProvisionLogin = auth.isOwnerAccount;
     return Scaffold(
@@ -516,15 +516,16 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                   ),
                 )
                 .toList(),
-            onChanged: canManage
+            onChanged: canManage && canChangeRole
                 ? (v) {
                     if (v != null) _applyRolePreset(v);
                   }
                 : null,
             decoration: InputDecoration(
               labelText: t(context).role,
-              helperText:
-                  'تطبيق قالب صلاحيات جاهز (يمكن تعديله يدوياً بالأسفل)',
+              helperText: _roleId == TeamRolePreset.admin.id
+                  ? 'أدمن: يملك كل الصلاحيات تلقائياً'
+                  : 'محاسب: صلاحيات محدودة — حدّدها بالأسفل',
             ),
           ),
           const SizedBox(height: 12),
@@ -647,70 +648,78 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
             ),
             const SizedBox(height: 10),
             Card(
-              child: Column(
-                children: [
-                  SwitchListTile(
-                      title: const Text('المواعيد'),
-                      value: _perms.appointments,
-                      onChanged: (v) => setState(
-                          () => _perms = _perms.copyWith(appointments: v))),
-                  SwitchListTile(
-                      title: const Text('المدفوعات'),
-                      value: _perms.payments,
-                      onChanged: (v) => setState(
-                          () => _perms = _perms.copyWith(payments: v))),
-                  SwitchListTile(
-                      title: const Text('الخدمات'),
-                      value: _perms.services,
-                      onChanged: (v) => setState(
-                          () => _perms = _perms.copyWith(services: v))),
-                  SwitchListTile(
-                      title: const Text('الموظفين'),
-                      value: _perms.staff,
-                      onChanged: (v) =>
-                          setState(() => _perms = _perms.copyWith(staff: v))),
-                  SwitchListTile(
-                      title: const Text('الخصومات'),
-                      value: _perms.discounts,
-                      onChanged: (v) => setState(
-                          () => _perms = _perms.copyWith(discounts: v))),
-                  SwitchListTile(
-                      title: const Text('المصروفات'),
-                      value: _perms.expenses,
-                      onChanged: (v) => setState(
-                          () => _perms = _perms.copyWith(expenses: v))),
-                  SwitchListTile(
-                      title: const Text('آراء العملاء'),
-                      value: _perms.feedback,
-                      onChanged: (v) => setState(
-                          () => _perms = _perms.copyWith(feedback: v))),
-                  SwitchListTile(
-                      title: const Text('طلبات خارج الدوام'),
-                      value: _perms.outOfHours,
-                      onChanged: (v) => setState(
-                          () => _perms = _perms.copyWith(outOfHours: v))),
-                  SwitchListTile(
-                      title: const Text('التقارير'),
-                      value: _perms.reports,
-                      onChanged: (v) =>
-                          setState(() => _perms = _perms.copyWith(reports: v))),
-                  SwitchListTile(
-                      title: const Text('أدوات الأعمال'),
-                      value: _perms.businessTools,
-                      onChanged: (v) => setState(
-                          () => _perms = _perms.copyWith(businessTools: v))),
-                  SwitchListTile(
-                      title: const Text('المالية والمحاسبة'),
-                      value: _perms.finance,
-                      onChanged: (v) =>
-                          setState(() => _perms = _perms.copyWith(finance: v))),
-                  SwitchListTile(
-                      title: const Text('إعدادات المحل'),
-                      value: _perms.settings,
-                      onChanged: (v) => setState(
-                          () => _perms = _perms.copyWith(settings: v))),
-                ],
-              ),
+              child: _roleId == TeamRolePreset.admin.id
+                  ? const ListTile(
+                      leading: Icon(Icons.verified_user_outlined),
+                      title: Text('الأدمن يملك كل الصلاحيات تلقائياً'),
+                      subtitle: Text(
+                        'لا حاجة لتحديدها يدوياً. اختر «محاسب» لتحديد صلاحيات محدودة.',
+                      ),
+                    )
+                  : Column(
+                      children: [
+                        SwitchListTile(
+                            title: const Text('المواعيد'),
+                            value: _perms.appointments,
+                            onChanged: (v) => setState(() =>
+                                _perms = _perms.copyWith(appointments: v))),
+                        SwitchListTile(
+                            title: const Text('المدفوعات'),
+                            value: _perms.payments,
+                            onChanged: (v) => setState(
+                                () => _perms = _perms.copyWith(payments: v))),
+                        SwitchListTile(
+                            title: const Text('الخدمات'),
+                            value: _perms.services,
+                            onChanged: (v) => setState(
+                                () => _perms = _perms.copyWith(services: v))),
+                        SwitchListTile(
+                            title: const Text('الموظفين'),
+                            value: _perms.staff,
+                            onChanged: (v) => setState(
+                                () => _perms = _perms.copyWith(staff: v))),
+                        SwitchListTile(
+                            title: const Text('الخصومات'),
+                            value: _perms.discounts,
+                            onChanged: (v) => setState(
+                                () => _perms = _perms.copyWith(discounts: v))),
+                        SwitchListTile(
+                            title: const Text('المصروفات'),
+                            value: _perms.expenses,
+                            onChanged: (v) => setState(
+                                () => _perms = _perms.copyWith(expenses: v))),
+                        SwitchListTile(
+                            title: const Text('آراء العملاء'),
+                            value: _perms.feedback,
+                            onChanged: (v) => setState(
+                                () => _perms = _perms.copyWith(feedback: v))),
+                        SwitchListTile(
+                            title: const Text('طلبات خارج الدوام'),
+                            value: _perms.outOfHours,
+                            onChanged: (v) => setState(
+                                () => _perms = _perms.copyWith(outOfHours: v))),
+                        SwitchListTile(
+                            title: const Text('التقارير'),
+                            value: _perms.reports,
+                            onChanged: (v) => setState(
+                                () => _perms = _perms.copyWith(reports: v))),
+                        SwitchListTile(
+                            title: const Text('أدوات الأعمال'),
+                            value: _perms.businessTools,
+                            onChanged: (v) => setState(() =>
+                                _perms = _perms.copyWith(businessTools: v))),
+                        SwitchListTile(
+                            title: const Text('المالية والمحاسبة'),
+                            value: _perms.finance,
+                            onChanged: (v) => setState(
+                                () => _perms = _perms.copyWith(finance: v))),
+                        SwitchListTile(
+                            title: const Text('إعدادات المحل'),
+                            value: _perms.settings,
+                            onChanged: (v) => setState(
+                                () => _perms = _perms.copyWith(settings: v))),
+                      ],
+                    ),
             ),
           ],
           const SizedBox(height: 16),

@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseException;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/app_role.dart';
 import '../models/booking_settings.dart';
 import '../models/employee.dart';
 import '../models/service.dart';
@@ -228,6 +229,11 @@ class ShopProvider extends ChangeNotifier {
           shopId,
           uid,
           permissions: e.permissions,
+          // Keep the membership role in step with the two-role model. Without
+          // this, changing an existing employee from محاسب to أدمن left the
+          // membership as `staff`, so the account kept getting permission
+          // denied on admin screens after signing in again.
+          role: AppRoleX.fromTeamRole(e.role),
           name: e.name,
           email: e.email,
           active: e.active,

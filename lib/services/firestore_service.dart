@@ -446,6 +446,14 @@ class FirestoreService {
   CollectionReference<Map<String, dynamic>> _members(String shopId) =>
       _coll(shopId, 'members');
 
+  /// Direct self-readable mirror of a membership: `memberships/{uid}`.
+  ///
+  /// Session restore reads this single document, so a staff login never depends
+  /// on the collection-group index that a `members.uid` query needs. The
+  /// canonical role/permission source remains `shops/{shopId}/members/{uid}`.
+  CollectionReference<Map<String, dynamic>> _membershipPointers() =>
+      _db.collection('memberships');
+
   Stream<List<Member>> watchMembers(String shopId) => _members(shopId)
       .orderBy('createdAt', descending: false)
       .snapshots()
@@ -489,7 +497,33 @@ class FirestoreService {
       return (shopId: ownedShopId, role: AppRole.admin);
     }
 
-    // 1) Direct path, no index needed: appConfig/primaryShop -> members/{uid}.
+    // 1) Direct self-readable mirror: memberships/{uid}. This is the primary
+    // staff path and needs no composite/collection-group index.
+    try {
+      final pointer = await _membershipPointers().doc(uid).get();
+      final data = pointer.data();
+      final pointed = data?['shopId'];
+      if (data != null && pointed is String && pointed.isNotEmpty) {
+        if (data['active'] == false) {
+          return (shopId: null, role: AppRole.staff);
+        }
+        // The canonical membership stays authoritative: a stale pointer after a
+        // failed delete must never keep a removed employee inside the shop.
+        final memberSnap = await _members(pointed).doc(uid).get();
+        final memberData = memberSnap.data();
+        if (memberData == null || memberData['active'] == false) {
+          return (shopId: null, role: AppRole.staff);
+        }
+        return (
+          shopId: pointed,
+          role: Member.fromMap(uid, memberData).role,
+        );
+      }
+    } on FirebaseException {
+      // Rules not deployed yet / offline: fall through to the shop pointer.
+    }
+
+    // 2) Direct path, no index needed: appConfig/primaryShop -> members/{uid}.
     try {
       final cfg = await _db.collection('appConfig').doc('primaryShop').get();
       final pointed = cfg.data()?['shopId'];
@@ -511,7 +545,7 @@ class FirestoreService {
       // Pointer missing / not deployed yet: fall through to the group query.
     }
 
-    // 2) Collection-group lookup. Needs the single-field COLLECTION_GROUP index
+    // 3) Collection-group lookup. Needs the single-field COLLECTION_GROUP index
     // on members.uid (see firestore.indexes.json). A failure here is rethrown
     // so the caller can show the real reason instead of "no shop".
     final snap = await _db
@@ -556,36 +590,103 @@ class FirestoreService {
     required StaffPermissions permissions,
     bool active = true,
   }) async {
+    final normalizedEmail = email.trim().toLowerCase();
     await _members(shopId).doc(uid).set({
       'uid': uid,
-      'email': email.trim().toLowerCase(),
+      'email': normalizedEmail,
       'name': name,
       'role': role.name,
       'permissions': permissions.toMap(),
       'active': active,
       'createdAt': FieldValue.serverTimestamp(),
     });
+    await _writeMembershipPointer(
+      shopId,
+      uid,
+      email: normalizedEmail,
+      name: name,
+      role: role,
+      permissions: permissions,
+      active: active,
+    );
   }
 
-  /// Keeps the server-enforced permissions in sync when the owner edits the
-  /// employee record. Never touches identity fields.
+  /// Best-effort mirror read by session restore through `memberships/{uid}`.
+  ///
+  /// A failure here must never fail the canonical membership write: the account
+  /// is already linked, and the older appConfig/collection-group paths remain.
+  Future<void> _writeMembershipPointer(
+    String shopId,
+    String uid, {
+    required String email,
+    required String name,
+    required AppRole role,
+    required StaffPermissions permissions,
+    required bool active,
+  }) async {
+    try {
+      await _membershipPointers().doc(uid).set({
+        'uid': uid,
+        'shopId': shopId,
+        'email': email.trim().toLowerCase(),
+        'name': name,
+        'role': role.name,
+        'permissions': permissions.toMap(),
+        'active': active,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (_) {
+      // Pointer rules may not be deployed yet. Keep the canonical membership.
+    }
+  }
+
+  /// Keeps the server-enforced permissions/role in sync when an employee is
+  /// edited. Never touches identity fields (`uid` / `createdAt`).
   Future<void> updateMemberPermissions(
     String shopId,
     String uid, {
     required StaffPermissions permissions,
+    AppRole? role,
     String? name,
     String? email,
     bool? active,
   }) async {
+    final normalizedEmail = email?.trim().toLowerCase();
     await _members(shopId).doc(uid).set({
+      // Included so a merge-write can also CREATE a missing membership (the
+      // owner re-saving an employee repairs an older unlinked account).
+      'uid': uid,
       'permissions': permissions.toMap(),
+      if (role != null) 'role': role.name,
       if (name != null) 'name': name,
-      if (email != null) 'email': email.trim().toLowerCase(),
+      if (normalizedEmail != null) 'email': normalizedEmail,
       if (active != null) 'active': active,
     }, SetOptions(merge: true));
+    try {
+      await _membershipPointers().doc(uid).set({
+        'uid': uid,
+        'shopId': shopId,
+        'permissions': permissions.toMap(),
+        if (role != null) 'role': role.name,
+        if (name != null) 'name': name,
+        if (normalizedEmail != null) 'email': normalizedEmail,
+        if (active != null) 'active': active,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (_) {
+      // Non-fatal: the canonical membership is authoritative.
+    }
   }
 
   Future<void> removeMember(String shopId, String uid) async {
+    // Revoke the fast lookup path first. Even if the canonical delete then
+    // fails, the account cannot resolve the shop from a leftover pointer.
+    try {
+      await _membershipPointers().doc(uid).delete();
+    } catch (_) {
+      // Older rules may not know this collection yet; the canonical membership
+      // is still deleted below and resolution verifies it before granting access.
+    }
     await _members(shopId).doc(uid).delete();
   }
 
