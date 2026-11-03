@@ -1,0 +1,153 @@
+--- a/lib/screens/admin/staff_screen.dart
++++ b/lib/screens/admin/staff_screen.dart
+@@ -287,15 +287,16 @@
+       showSnack(context, 'أدخل بريد الموظف أولاً');
+       return;
+     }
+-    final password = await _askTemporaryPassword();
+-    if (password == null || !mounted) return;
++    // Temp password only for Firebase createUser — never shown/stored.
++    // Accountant sets password via reset email after membership succeeds.
++    final password = 'Tmp!' + Uuid().v4().replaceAll('-', '').substring(0, 16);
+     setState(() => _busy = true);
+     final auth = context.read<AuthProvider>();
+     try {
+       final uid = await auth.addStaffAccount(
+         email: email,
+         name: _name.text.trim(),
+-        role: _accountRole,
++        role: AppRole.staff,
+         permissions: _perms,
+         password: password,
+       );
+@@ -306,8 +307,8 @@
+       if (mounted) {
+         showSnack(
+           context,
+-          'تم إنشاء حساب الدخول لكن فشل ربطه بالمحل. '
+-          'أعد المحاولة باستخدام UID: ${e.uid}',
++          'تم إنشاء حساب الدخول لكن فشل ربط العضوية. '
++          'أعد الضغط على إنشاء حساب الدخول لاحقاً.',
+         );
+       }
+     } on FirebaseAuthException catch (e) {
+@@ -321,89 +322,41 @@
+     }
+   }
+
+-  /// Handles `email-already-in-use`: the owner must supply the existing
+-  /// 28-character uid and confirm before only `members/{uid}` is written.
++  /// Handles email-already-in-use without accepting a client-supplied UID.
+   Future<void> _linkExisting(String email) async {
+     if (!mounted) return;
+-    final uidCtrl = TextEditingController();
+-    final uid = await showDialog<String>(
++    await showDialog<void>(
+       context: context,
+-      builder: (ctx) {
+-        var confirmed = false;
+-        return StatefulBuilder(
+-          builder: (ctx, setLocal) => AlertDialog(
+-            title: const Text('ربط بحساب موجود'),
+-            content: Column(
+-              mainAxisSize: MainAxisSize.min,
+-              children: [
+-                Text(
+-                  'البريد $email يملك حساب دخول بالفعل. '
+-                  'أدخل UID الحساب (28 حرفاً) ثم أكّد الربط.',
+-                  style: const TextStyle(fontSize: 12),
+-                ),
+-                const SizedBox(height: 12),
+-                TextField(
+-                  controller: uidCtrl,
+-                  decoration: const InputDecoration(labelText: 'UID الحساب'),
+-                ),
+-                CheckboxListTile(
+-                  contentPadding: EdgeInsets.zero,
+-                  value: confirmed,
+-                  onChanged: (v) => setLocal(() => confirmed = v ?? false),
+-                  title: const Text(
+-                    'أؤكد ربط هذا الحساب بهذا المحل',
+-                    style: TextStyle(fontSize: 12),
+-                  ),
+-                ),
+-              ],
+-            ),
+-            actions: [
+-              TextButton(
+-                onPressed: () => Navigator.pop(ctx),
+-                child: Text(t(ctx).cancel),
+-              ),
+-              FilledButton(
+-                onPressed: confirmed
+-                    ? () {
+-                        final value = uidCtrl.text.trim();
+-                        if (!RegExp(r'^[A-Za-z0-9]{28}$').hasMatch(value)) {
+-                          showSnack(ctx, 'UID يجب أن يكون 28 حرفاً');
+-                          return;
+-                        }
+-                        Navigator.pop(ctx, value);
+-                      }
+-                    : null,
+-                child: const Text('ربط الحساب'),
+-              ),
+-            ],
+-          ),
+-        );
+-      },
+-    );
+-    uidCtrl.dispose();
+-    if (uid == null || !mounted) return;
+-    setState(() => _busy = true);
+-    try {
+-      await context.read<AuthProvider>().linkStaffAccount(
+-            uid: uid,
+-            email: email,
+-            name: _name.text.trim(),
+-            role: _accountRole,
+-            permissions: _perms,
+-          );
+-      await _attachUid(uid);
+-    } on MembershipWriteException catch (e) {
+-      if (mounted) {
+-        showSnack(
+-          context,
+-          'فشل ربط الحساب بالمحل. أعد المحاولة باستخدام UID: ${e.uid}',
+-        );
+-      }
+-    } catch (e) {
+-      if (mounted) showSnack(context, 'تعذّر ربط الحساب: $e');
+-    } finally {
+-      if (mounted) setState(() => _busy = false);
+-    }
++      builder: (ctx) => AlertDialog(
++        title: const Text('الحساب موجود مسبقاً'),
++        content: Text(
++          'البريد $email يملك حساب دخول بالفعل.\n\n'
++          'لا يمكن إدخال UID يدوياً لأسباب أمنية.\n'
++          'اطلب من المحاسب استخدام «نسيت كلمة المرور»، '
++          'أو أعد محاولة إنشاء حساب الدخول إن فشلت العضوية سابقاً.',
++        ),
++        actions: [
++          TextButton(
++            onPressed: () => Navigator.pop(ctx),
++            child: Text(t(ctx).cancel),
++          ),
++          FilledButton(
++            onPressed: () async {
++              Navigator.pop(ctx);
++              try {
++                await context.read<AuthProvider>().sendPasswordReset(email);
++                if (mounted) {
++                  showSnack(context, 'تم إرسال رابط إعادة تعيين كلمة المرور');
++                }
++              } catch (e) {
++                if (mounted) showSnack(context, 'تعذّر إرسال الإيميل: $e');
++              }
++            },
++            child: const Text('إرسال رابط كلمة المرور'),
++          ),
++        ],
++      ),
++    );
+   }
