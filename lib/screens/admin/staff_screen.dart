@@ -217,44 +217,17 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
   /// الدوران في التطبيق: أدمن -> admin، ومحاسب -> staff (بصلاحيات محدودة).
   AppRole get _accountRole => AppRoleX.fromTeamRole(_roleId);
 
-  Future<String?> _askTemporaryPassword() async {
-    final pass = TextEditingController();
-    final confirm = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    final result = await showDialog<String>(
+  Future<void> _linkExisting(String email) async {
+    if (!mounted) return;
+    await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('كلمة مرور مؤقتة'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'يستخدمها الموظف للدخول أول مرة، ثم يمكنه تغييرها من التطبيق.',
-                style: TextStyle(fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: pass,
-                obscureText: true,
-                decoration:
-                    const InputDecoration(labelText: 'كلمة المرور المؤقتة'),
-                validator: (v) => (v == null || v.length < 6)
-                    ? t(ctx).passwordTooShort
-                    : null,
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: confirm,
-                obscureText: true,
-                decoration:
-                    const InputDecoration(labelText: 'تأكيد كلمة المرور'),
-                validator: (v) =>
-                    v != pass.text ? t(ctx).passwordsDontMatch : null,
-              ),
-            ],
-          ),
+        title: const Text('الحساب موجود مسبقاً'),
+        content: Text(
+          'البريد $email يملك حساب دخول بالفعل.\n\n'
+              'لا يمكن إدخال UID يدوياً لأسباب أمنية.\n'
+              'اطلب من المحاسب استخدام «نسيت كلمة المرور»، '
+              'أو أعد محاولة إنشاء حساب الدخول إن فشلت العضوية سابقاً.',
         ),
         actions: [
           TextButton(
@@ -262,19 +235,22 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
             child: Text(t(ctx).cancel),
           ),
           FilledButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.pop(ctx, pass.text);
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await context.read<AuthProvider>().sendPasswordReset(email);
+                if (mounted) {
+                  showSnack(context, 'تم إرسال رابط إعادة تعيين كلمة المرور');
+                }
+              } catch (e) {
+                if (mounted) showSnack(context, 'تعذّر إرسال الإيميل: $e');
               }
             },
-            child: const Text('إنشاء الحساب'),
+            child: const Text('إرسال رابط كلمة المرور'),
           ),
         ],
       ),
     );
-    pass.dispose();
-    confirm.dispose();
-    return result;
   }
 
   Future<void> _createLogin() async {
@@ -287,27 +263,33 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
       showSnack(context, 'أدخل بريد الموظف أولاً');
       return;
     }
-    final password = await _askTemporaryPassword();
-    if (password == null || !mounted) return;
+    // كلمة مرور مؤقتة فقط لإنشاء حساب Firebase — لا تُعرض ولا تُحفظ
+    final password = 'Tmp!' + Uuid().v4().replaceAll('-', '').substring(0, 16);
     setState(() => _busy = true);
     final auth = context.read<AuthProvider>();
     try {
       final uid = await auth.addStaffAccount(
         email: email,
         name: _name.text.trim(),
-        role: _accountRole,
+        role: AppRole.staff,
         permissions: _perms,
         password: password,
       );
       await _attachUid(uid);
-    } on StaffAccountAlreadyExists {
-      if (mounted) await _linkExisting(email);
-    } on MembershipWriteException catch (e) {
       if (mounted) {
         showSnack(
           context,
-          'تم إنشاء حساب الدخول لكن فشل ربطه بالمحل. '
-          'أعد المحاولة باستخدام UID: ${e.uid}',
+          'تم إنشاء الحساب. أُرسل رابط تعيين كلمة المرور إلى البريد.',
+        );
+      }
+    } on StaffAccountAlreadyExists {
+      if (mounted) await _linkExisting(email);
+    } on MembershipWriteException {
+      if (mounted) {
+        showSnack(
+          context,
+          'تم إنشاء حساب الدخول لكن فشل ربط العضوية. '
+              'أعد الضغط على إنشاء حساب الدخول لاحقاً.',
         );
       }
     } on FirebaseAuthException catch (e) {
@@ -321,105 +303,19 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     }
   }
 
-  /// Handles `email-already-in-use`: the owner must supply the existing
-  /// 28-character uid and confirm before only `members/{uid}` is written.
-  Future<void> _linkExisting(String email) async {
-    if (!mounted) return;
-    final uidCtrl = TextEditingController();
-    final uid = await showDialog<String>(
-      context: context,
-      builder: (ctx) {
-        var confirmed = false;
-        return StatefulBuilder(
-          builder: (ctx, setLocal) => AlertDialog(
-            title: const Text('ربط بحساب موجود'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'البريد $email يملك حساب دخول بالفعل. '
-                  'أدخل UID الحساب (28 حرفاً) ثم أكّد الربط.',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: uidCtrl,
-                  decoration: const InputDecoration(labelText: 'UID الحساب'),
-                ),
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: confirmed,
-                  onChanged: (v) => setLocal(() => confirmed = v ?? false),
-                  title: const Text(
-                    'أؤكد ربط هذا الحساب بهذا المحل',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text(t(ctx).cancel),
-              ),
-              FilledButton(
-                onPressed: confirmed
-                    ? () {
-                        final value = uidCtrl.text.trim();
-                        if (!RegExp(r'^[A-Za-z0-9]{28}$').hasMatch(value)) {
-                          showSnack(ctx, 'UID يجب أن يكون 28 حرفاً');
-                          return;
-                        }
-                        Navigator.pop(ctx, value);
-                      }
-                    : null,
-                child: const Text('ربط الحساب'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    uidCtrl.dispose();
-    if (uid == null || !mounted) return;
-    setState(() => _busy = true);
-    try {
-      await context.read<AuthProvider>().linkStaffAccount(
-            uid: uid,
-            email: email,
-            name: _name.text.trim(),
-            role: _accountRole,
-            permissions: _perms,
-          );
-      await _attachUid(uid);
-    } on MembershipWriteException catch (e) {
-      if (mounted) {
-        showSnack(
-          context,
-          'فشل ربط الحساب بالمحل. أعد المحاولة باستخدام UID: ${e.uid}',
-        );
-      }
-    } catch (e) {
-      if (mounted) showSnack(context, 'تعذّر ربط الحساب: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   Future<void> _attachUid(String uid) async {
     final employee = widget.employee;
     if (employee == null) return;
     await context.read<ShopProvider>().updateEmployee(
-          employee.copyWith(
-            authUid: uid,
-            email: _email.text.trim(),
-            permissions: _perms,
-          ),
-          ShopManager.shopId!,
-        );
+      employee.copyWith(
+        authUid: uid,
+        email: _email.text.trim(),
+        permissions: _perms,
+      ),
+      ShopManager.shopId!,
+    );
     if (!mounted) return;
     setState(() => _authUid.text = uid);
-    showSnack(context, 'تم ربط حساب الدخول بالموظف');
   }
 
   Future<void> _resendPasswordReset() async {
