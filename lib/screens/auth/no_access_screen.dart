@@ -11,6 +11,63 @@ import '../../providers/auth_provider.dart';
 class NoAccessScreen extends StatelessWidget {
   const NoAccessScreen({super.key});
 
+  Future<void> _claimWithCode(BuildContext context) async {
+    final controller = TextEditingController();
+    final auth = context.read<AuthProvider>();
+    final code = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ربط الحساب برمز'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'اطلب من الأدمن رمز الربط من شاشة الموظفين، ثم أدخله هنا.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(
+                labelText: 'رمز الربط',
+                prefixIcon: Icon(Icons.key_rounded),
+              ),
+              onSubmitted: (value) => Navigator.pop(ctx, value),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('ربط'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (code == null || code.trim().isEmpty) return;
+    try {
+      await auth.claimInvite(code);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم ربط الحساب بالمحل')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذّر الربط: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
@@ -39,8 +96,8 @@ class NoAccessScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'اطلب من الأدمن ربط هذا البريد من شاشة الموظفين، '
-                    'ثم اضغط «إعادة المحاولة».',
+                    'اطلب من الأدمن رمز ربط من شاشة الموظفين، ثم أدخله هنا. '
+                    'أو اطلب منه ربط البريد ثم اضغط «إعادة المحاولة».',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
                   ),
@@ -65,6 +122,12 @@ class NoAccessScreen extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 24),
+                  FilledButton.icon(
+                    onPressed: () => _claimWithCode(context),
+                    icon: const Icon(Icons.key_rounded),
+                    label: const Text('ربط برمز من الأدمن'),
+                  ),
+                  const SizedBox(height: 8),
                   FilledButton.tonalIcon(
                     onPressed: () =>
                         context.read<AuthProvider>().refreshSession(),

@@ -14,10 +14,52 @@ import '../services/firestore_inventory.dart';
 bool canSyncCustomerProfiles(AppRole? role) =>
     role == null || role == AppRole.admin;
 
+typedef StocktakeSaver = Future<void> Function(
+    String shopId, Stocktake stocktake);
+typedef StocktakeCountSaver = Future<Stocktake> Function({
+  required String shopId,
+  required String stocktakeId,
+  required Map<String, double?> counts,
+});
+typedef StocktakePoster = Future<StocktakePostResult> Function({
+  required String shopId,
+  required String stocktakeId,
+  String? actorId,
+});
+typedef StocktakeRefresher = Future<Stocktake> Function({
+  required String shopId,
+  required String stocktakeId,
+});
+typedef StocktakeDeleter = Future<void> Function(
+    String shopId, String stocktakeId);
+
 class BusinessToolsProvider extends ChangeNotifier {
+  BusinessToolsProvider({
+    StocktakeSaver? saveStocktake,
+    StocktakeCountSaver? saveStocktakeCounts,
+    StocktakePoster? postStocktake,
+    StocktakeRefresher? refreshStocktakeExpected,
+    StocktakeDeleter? deleteStocktake,
+  })  : _saveStocktake =
+            saveStocktake ?? FirestoreInventory.instance.saveStocktake,
+        _saveStocktakeCounts = saveStocktakeCounts ??
+            FirestoreInventory.instance.saveStocktakeCounts,
+        _postStocktake =
+            postStocktake ?? FirestoreInventory.instance.postStocktake,
+        _refreshStocktakeExpected = refreshStocktakeExpected ??
+            FirestoreInventory.instance.refreshStocktakeExpected,
+        _deleteStocktake =
+            deleteStocktake ?? FirestoreInventory.instance.deleteStocktake;
+
   String? _shopId;
   AppRole? _role;
   final List<StreamSubscription> _subs = [];
+
+  final StocktakeSaver _saveStocktake;
+  final StocktakeCountSaver _saveStocktakeCounts;
+  final StocktakePoster _postStocktake;
+  final StocktakeRefresher _refreshStocktakeExpected;
+  final StocktakeDeleter _deleteStocktake;
 
   List<CustomerProfile> customers = [];
   List<LoyaltyAccount> loyalty = [];
@@ -30,6 +72,7 @@ class BusinessToolsProvider extends ChangeNotifier {
   List<Payment> payments = [];
   List<InventoryItem> inventory = [];
   List<InventoryMovement> inventoryMovements = [];
+  List<Stocktake> stocktakes = [];
   bool loading = true;
   String? error;
   bool permissionDenied = false;
@@ -63,6 +106,7 @@ class BusinessToolsProvider extends ChangeNotifier {
     _listen(db.watchQueue(shopId), (v) => queue = v);
     _listen(inv.watchInventory(shopId), (v) => inventory = v);
     _listen(inv.watchInventoryMovements(shopId), (v) => inventoryMovements = v);
+    _listen(inv.watchStocktakes(shopId), (v) => stocktakes = v);
     _listen(db.watchPayments(shopId), (v) => payments = v);
 
     _listen(
@@ -141,8 +185,9 @@ class BusinessToolsProvider extends ChangeNotifier {
       FirestoreService.instance.saveQueueEntry(shopId, entry);
 
   Future<void> addPayment(Payment payment) async {
-    final appointmentId =
-        payment.appointmentId.trim().isEmpty ? null : payment.appointmentId.trim();
+    final appointmentId = payment.appointmentId.trim().isEmpty
+        ? null
+        : payment.appointmentId.trim();
     await FirestoreService.instance.recordPayment(
         shopId,
         Payment(
@@ -216,6 +261,159 @@ class BusinessToolsProvider extends ChangeNotifier {
     );
   }
 
+  // ---------- Stocktaking (جرد) ----------
+
+  /// يبدأ جلسة جرد من الأرصدة الحالية للمواد النشطة.
+  ///
+  /// اللقطة تُحفظ في مستند واحد، ثم تُملأ الكميات المعدودة وتُرحّل لاحقاً.
+  Future<Stocktake> startStocktake({String? note, String? actorId}) async {
+    final shop = _shopId;
+    if (shop == null || shop.isEmpty) {
+      throw StateError('لا يوجد محل مرتبط');
+    }
+    final active = inventory.where((item) => item.active).toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    if (active.isEmpty) {
+      throw StateError('لا توجد مواد نشطة للجرد');
+    }
+    if (active.length > Stocktake.maxLines) {
+      throw StateError(
+          'عدد المواد أكبر من الحد المسموح (${Stocktake.maxLines}). '
+          'قسّم الجرد على أكثر من جلسة.');
+    }
+    final now = DateTime.now().toUtc();
+    final session = Stocktake(
+      id: newId(),
+      status: StocktakeStatus.draft,
+      note: note?.trim() ?? '',
+      lines: [
+        for (final item in active)
+          StocktakeLine(
+            itemId: item.id,
+            itemName: item.name,
+            unit: item.unit,
+            unitCost: item.unitCost,
+            expectedQty: item.quantity,
+          ),
+      ],
+      createdAt: now,
+      createdBy: actorId,
+      updatedAt: now,
+    );
+    await _saveStocktake(shop, session);
+    _replaceStocktake(session);
+    return session;
+  }
+
+  /// يحفظ الكميات المعدودة دفعة واحدة (كتابة واحدة على الخطة المجانية).
+  Future<Stocktake> saveStocktakeCounts(
+    String stocktakeId,
+    Map<String, double?> counts,
+  ) async {
+    final shop = _shopId;
+    if (shop == null || shop.isEmpty) {
+      throw StateError('لا يوجد محل مرتبط');
+    }
+    final updated = await _saveStocktakeCounts(
+      shopId: shop,
+      stocktakeId: stocktakeId,
+      counts: counts,
+    );
+    _replaceStocktake(updated);
+    return updated;
+  }
+
+  /// ترحيل الجرد. يرجع نتيجة تفصيلية؛ لا تفترض النجاح إذا وُجد تعارض.
+  Future<StocktakePostResult> postStocktake(
+    String stocktakeId, {
+    String? actorId,
+  }) async {
+    final shop = _shopId;
+    if (shop == null || shop.isEmpty) {
+      throw StateError('لا يوجد محل مرتبط');
+    }
+    final result = await _postStocktake(
+      shopId: shop,
+      stocktakeId: stocktakeId,
+      actorId: actorId,
+    );
+    final session = result.session;
+    if (session != null) _replaceStocktake(session);
+    return result;
+  }
+
+  /// إعادة أخذ لقطة الأرصدة بعد تعارض (تغيّر المخزون أثناء العد).
+  Future<Stocktake> refreshStocktakeExpected(String stocktakeId) async {
+    final shop = _shopId;
+    if (shop == null || shop.isEmpty) {
+      throw StateError('لا يوجد محل مرتبط');
+    }
+    final updated = await _refreshStocktakeExpected(
+      shopId: shop,
+      stocktakeId: stocktakeId,
+    );
+    _replaceStocktake(updated);
+    return updated;
+  }
+
+  /// إلغاء جلسة قبل ترحيلها. لا يحذف السجل (يبقى للأثر).
+  Future<Stocktake> cancelStocktake(Stocktake session) async {
+    final shop = _shopId;
+    if (shop == null || shop.isEmpty) {
+      throw StateError('لا يوجد محل مرتبط');
+    }
+    if (!session.isOpen) {
+      throw StateError('لا يمكن إلغاء جلسة مغلقة');
+    }
+    final updated = session.copyWith(
+      status: StocktakeStatus.cancelled,
+      updatedAt: DateTime.now().toUtc(),
+    );
+    await _saveStocktake(shop, updated);
+    _replaceStocktake(updated);
+    return updated;
+  }
+
+  /// حذف مسودة/ملغى فقط؛ الجلسات المرحّلة سجل تدقيق.
+  Future<void> deleteStocktake(Stocktake session) async {
+    final shop = _shopId;
+    if (shop == null || shop.isEmpty) {
+      throw StateError('لا يوجد محل مرتبط');
+    }
+    if (session.isCompleted || session.postedCount > 0) {
+      throw StateError('لا يمكن حذف جلسة رُحّلت إلى المخزون');
+    }
+    if (!session.isDeletable) {
+      throw StateError('لا يمكن حذف جلسة قيد الترحيل');
+    }
+    await _deleteStocktake(shop, session.id);
+    stocktakes = stocktakes.where((s) => s.id != session.id).toList();
+    notifyListeners();
+  }
+
+  Stocktake? stocktakeById(String id) =>
+      stocktakes.where((s) => s.id == id).firstOrNull;
+
+  void _replaceStocktake(Stocktake session) {
+    final next = List<Stocktake>.from(stocktakes);
+    final index = next.indexWhere((s) => s.id == session.id);
+    if (index >= 0) {
+      next[index] = session;
+    } else {
+      next.insert(0, session);
+    }
+    stocktakes = next;
+    notifyListeners();
+  }
+
+  /// يسمح للاختبارات بربط محل دون فتح اشتراكات Firestore.
+  @visibleForTesting
+  void bindForTest(String shopId, {AppRole? role}) {
+    _shopId = shopId;
+    _role = role;
+    loading = false;
+  }
+
   String normalizePhone(String value) =>
       value.replaceAll(RegExp(r'[^0-9+]'), '');
 
@@ -249,8 +447,9 @@ class BusinessToolsProvider extends ChangeNotifier {
       );
       final visits = completed.length;
       final spent = completed.fold<double>(0, (sum, a) => sum + a.totalAmount);
-      final first =
-          completed.isEmpty ? existing?.firstVisitAt : completed.first.startTime;
+      final first = completed.isEmpty
+          ? existing?.firstVisitAt
+          : completed.first.startTime;
       final last =
           completed.isEmpty ? existing?.lastVisitAt : completed.last.startTime;
       final interval = _averageIntervalDays(completed);
@@ -276,9 +475,8 @@ class BusinessToolsProvider extends ChangeNotifier {
         firstVisitAt: first,
         lastVisitAt: last,
         nextExpectedVisitAt: expected,
-        averageVisitIntervalDays: interval > 0
-            ? interval
-            : (existing?.averageVisitIntervalDays ?? 0),
+        averageVisitIntervalDays:
+            interval > 0 ? interval : (existing?.averageVisitIntervalDays ?? 0),
         preferredServiceIds: serviceIds.isEmpty
             ? (existing?.preferredServiceIds ?? const [])
             : serviceIds,
@@ -372,6 +570,7 @@ class BusinessToolsProvider extends ChangeNotifier {
     payments = [];
     inventory = [];
     inventoryMovements = [];
+    stocktakes = [];
     _appointments = [];
     loading = true;
     error = null;

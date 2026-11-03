@@ -222,7 +222,19 @@ class ShopProvider extends ChangeNotifier {
     // Server rules read the capability map from the membership document, so an
     // owner editing the employee must keep both in sync. Best-effort: the
     // employee record is still saved if the membership write is denied.
-    final uid = e.authUid;
+    var uid = e.authUid;
+    if ((uid == null || uid.isEmpty) &&
+        e.email != null &&
+        e.email!.trim().isNotEmpty) {
+      // Accounts paired with an owner-issued code may not have `authUid` in the
+      // roster yet. Look the canonical membership up by its bound email.
+      try {
+        uid = await FirestoreService.instance
+            .findMemberUidByEmail(shopId, e.email);
+      } catch (_) {
+        uid = null;
+      }
+    }
     if (uid != null && uid.isNotEmpty) {
       try {
         await FirestoreService.instance.updateMemberPermissions(
@@ -250,6 +262,10 @@ class ShopProvider extends ChangeNotifier {
     final uid = e.authUid;
     if (uid != null && uid.isNotEmpty) {
       await FirestoreService.instance.removeMember(shopId, uid);
+    } else if (e.email != null && e.email!.trim().isNotEmpty) {
+      // A code-paired account may not have written `authUid` into the roster.
+      // Revoke by the membership's bound email before deleting the employee.
+      await FirestoreService.instance.removeMembersByEmail(shopId, e.email);
     }
     await FirestoreService.instance.deleteEmployee(shopId, e.id);
   }

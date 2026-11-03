@@ -72,6 +72,35 @@ service cloud.firestore {
       return isAdmin(shopId) || perm(shopId, key);
     }
 
+    // A pairing invite is an owner-issued, high-entropy code bound to one
+    // email. The claimant must be signed in with that same Auth email; role and
+    // permissions are copied verbatim from the invite, never chosen by the
+    // claimant.
+    function inviteRef(code) {
+      return /databases/$(database)/documents/invites/$(code);
+    }
+
+    function claimMatchesInvite(shopId, code) {
+      let invite = get(inviteRef(code)).data;
+      return signedIn()
+        && request.auth.token.email != null
+        && invite.shopId == shopId
+        && invite.email == request.auth.token.email.lower()
+        && invite.active == true
+        && invite.expiresAt is timestamp
+        && invite.expiresAt > request.time
+        && invite.role == request.resource.data.role
+        && invite.permissions == request.resource.data.permissions;
+    }
+
+    function canClaimInvite(shopId) {
+      let code = request.resource.data.get('inviteCode', '');
+      return code is string
+        && code != ''
+        && exists(inviteRef(code))
+        && claimMatchesInvite(shopId, code);
+    }
+
     // ------------------------------------------------------------- collection
     match /shops/{shopId} {
       // The single salon owner may bootstrap the shop. Anyone else — including
@@ -101,11 +130,23 @@ service cloud.firestore {
         allow list: if isAdmin(shopId);
 
         // Only the true owner manages membership. Admins cannot promote
-        // themselves or anyone else.
-        allow create: if isOwner(shopId)
-          && request.resource.data.uid == memberId
-          && request.resource.data.role in ['admin', 'staff']
-          && request.resource.data.permissions is map;
+        // themselves or anyone else. The one narrow exception is a signed-in
+        // account claiming an owner-issued pairing invite for its own verified
+        // Auth email: it may only create *itself* with the invite's exact role
+        // and permissions.
+        allow create: if (isOwner(shopId)
+            && request.resource.data.uid == memberId
+            && request.resource.data.role in ['admin', 'staff']
+            && request.resource.data.permissions is map)
+          || (signedIn()
+            && request.auth.uid == memberId
+            && request.auth.token.email != null
+            && request.resource.data.uid == memberId
+            && request.resource.data.email == request.auth.token.email.lower()
+            && request.resource.data.role in ['admin', 'staff']
+            && request.resource.data.permissions is map
+            && request.resource.data.active == true
+            && canClaimInvite(shopId));
 
         // The owner can change anything. An admin member may only adjust a
         // *staff* member's capabilities / active flag / contact details: never
@@ -134,7 +175,19 @@ service cloud.firestore {
       // ------------------------------------------------------------- employees
       match /employees/{docId} {
         allow read: if isMember(shopId) || isOwner(shopId);
-        allow create, update: if can(shopId, 'staff');
+        allow create: if can(shopId, 'staff');
+        // A paired account may attach its own trusted uid to a roster document
+        // that is still unlinked. It can only touch the null `authUid` field and
+        // only for the email bound to its own Auth token.
+        allow update: if can(shopId, 'staff')
+          || (isMember(shopId)
+            && request.auth.token.email != null
+            && resource.data.email is string
+            && resource.data.email.lower() == request.auth.token.email.lower()
+            && (resource.data.authUid == null || resource.data.authUid == '')
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['authUid'])
+            && request.resource.data.authUid == request.auth.uid);
         allow delete: if isAdmin(shopId);
       }
 
@@ -285,6 +338,30 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
+      // Stocktake sessions. A session snapshots expected quantities and later
+      // applies counted quantities through the same inventory writes above.
+      // Completed sessions are the audit trail: only untouched or cancelled
+      // sessions may be deleted.
+      match /stocktakes/{docId} {
+        allow read: if can(shopId, 'businessTools')
+          || can(shopId, 'finance')
+          || can(shopId, 'payments');
+        // Sessions are born as drafts. A submitted/cancelled session is an
+        // audit record and becomes immutable to every client.
+        allow create: if (can(shopId, 'businessTools')
+            || can(shopId, 'finance')
+            || can(shopId, 'payments'))
+          && request.resource.data.status == 'draft';
+        allow update: if (can(shopId, 'businessTools')
+            || can(shopId, 'finance')
+            || can(shopId, 'payments'))
+          && resource.data.status in ['draft', 'posting'];
+        allow delete: if (can(shopId, 'businessTools')
+            || can(shopId, 'finance')
+            || can(shopId, 'payments'))
+          && resource.data.status in ['draft', 'cancelled'];
+      }
+
       // ------------------------------------------------------------- team hub
       match /team_tasks/{docId} {
         allow read: if isMember(shopId) || isOwner(shopId);
@@ -354,6 +431,32 @@ service cloud.firestore {
         && request.resource.data.shopId is string
         && isOwner(request.resource.data.shopId);
       allow delete: if false;
+    }
+
+    // Owner-issued pairing invites for accounts that already exist in Firebase
+    // Auth. The random document id is the secret. Reading is restricted to the
+    // invited Auth email; only the true owner creates/updates one.
+    match /invites/{code} {
+      allow get: if signedIn()
+        && request.auth.token.email != null
+        && resource.data.get('email', '') == request.auth.token.email.lower();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.code == code
+        && request.resource.data.shopId is string
+        && isOwner(request.resource.data.shopId)
+        && request.resource.data.email is string
+        && request.resource.data.email == request.resource.data.email.lower()
+        && request.resource.data.role in ['admin', 'staff']
+        && request.resource.data.permissions is map
+        && request.resource.data.expiresAt is timestamp
+        && request.resource.data.expiresAt > request.time;
+      allow update: if signedIn() && isOwner(resource.data.shopId);
+      // The intended account may discard/consume its own code; nobody else.
+      allow delete: if signedIn()
+        && (isOwner(resource.data.shopId)
+          || (request.auth.token.email != null
+            && resource.data.email == request.auth.token.email.lower()));
     }
 
     // Direct self-readable membership pointer: `memberships/{uid}`.

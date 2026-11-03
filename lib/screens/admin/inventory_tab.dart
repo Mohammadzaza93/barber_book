@@ -7,6 +7,7 @@ import '../../models/business_features.dart';
 import '../../providers/business_tools_provider.dart';
 import '../../widgets/confirm_dialogs.dart';
 import '../../providers/shop_provider.dart';
+import 'stocktake_screen.dart';
 
 const _categories = [
   ('general', 'عام'),
@@ -33,7 +34,8 @@ const _units = [
 class InventoryTab extends StatelessWidget {
   const InventoryTab({super.key});
 
-  Future<void> _showItemDialog(BuildContext context, {InventoryItem? item}) async {
+  Future<void> _showItemDialog(BuildContext context,
+      {InventoryItem? item}) async {
     final name = TextEditingController(text: item?.name ?? '');
     final supplier = TextEditingController(text: item?.supplier ?? '');
     final quantity = TextEditingController(
@@ -150,8 +152,9 @@ class InventoryTab extends StatelessWidget {
                           Expanded(
                             child: TextFormField(
                               controller: quantity,
-                              keyboardType: const TextInputType.numberWithOptions(
-                                  decimal: true),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
                               inputFormatters: [
                                 FilteringTextInputFormatter.allow(
                                     RegExp(r'[0-9.,]')),
@@ -170,8 +173,9 @@ class InventoryTab extends StatelessWidget {
                           Expanded(
                             child: TextFormField(
                               controller: cost,
-                              keyboardType: const TextInputType.numberWithOptions(
-                                  decimal: true),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
                               inputFormatters: [
                                 FilteringTextInputFormatter.allow(
                                     RegExp(r'[0-9.,]')),
@@ -187,8 +191,9 @@ class InventoryTab extends StatelessWidget {
                           Expanded(
                             child: TextFormField(
                               controller: reorder,
-                              keyboardType: const TextInputType.numberWithOptions(
-                                  decimal: true),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
                               inputFormatters: [
                                 FilteringTextInputFormatter.allow(
                                     RegExp(r'[0-9.,]')),
@@ -404,9 +409,8 @@ class InventoryTab extends StatelessWidget {
                 controller: reason,
                 maxLines: 2,
                 decoration: InputDecoration(
-                  labelText: type == 'purchase'
-                      ? 'ملاحظة (اختياري)'
-                      : 'السبب (مطلوب)',
+                  labelText:
+                      type == 'purchase' ? 'ملاحظة (اختياري)' : 'السبب (مطلوب)',
                   border: const OutlineInputBorder(),
                 ),
               ),
@@ -466,8 +470,7 @@ class InventoryTab extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content:
-                Text(error.toString().replaceFirst('Bad state: ', '')),
+            content: Text(error.toString().replaceFirst('Bad state: ', '')),
           ),
         );
       }
@@ -484,8 +487,7 @@ class InventoryTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tools = context.watch<BusinessToolsProvider>();
-    final currency =
-        context.watch<ShopProvider>().settings?.currency ?? 'SAR';
+    final currency = context.watch<ShopProvider>().settings?.currency ?? 'SAR';
     final items = tools.inventory;
     final active = items.where((i) => i.active).toList();
 
@@ -493,6 +495,14 @@ class InventoryTab extends StatelessWidget {
       appBar: AppBar(
         title: const Text('المخزون'),
         actions: [
+          IconButton(
+            tooltip: 'الجرد',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const StocktakeScreen()),
+            ),
+            icon: const Icon(Icons.fact_check_outlined),
+          ),
           IconButton(
             tooltip: 'إضافة مادة',
             onPressed: () => _showItemDialog(context),
@@ -563,13 +573,13 @@ class InventoryTab extends StatelessWidget {
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   leading: CircleAvatar(
-                    backgroundColor: (badgeColor ??
-                            Theme.of(context).colorScheme.primary)
-                        .withOpacity(0.12),
+                    backgroundColor:
+                        (badgeColor ?? Theme.of(context).colorScheme.primary)
+                            .withOpacity(0.12),
                     child: Icon(
                       Icons.inventory_2_outlined,
-                      color: badgeColor ??
-                          Theme.of(context).colorScheme.primary,
+                      color:
+                          badgeColor ?? Theme.of(context).colorScheme.primary,
                     ),
                   ),
                   title: Text(item.name,
@@ -651,8 +661,7 @@ class InventoryTab extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             ...tools.inventoryMovements.take(25).map((m) {
-              final item =
-                  items.where((x) => x.id == m.itemId).firstOrNull;
+              final item = items.where((x) => x.id == m.itemId).firstOrNull;
               final sign = m.type == 'purchase'
                   ? '+'
                   : m.type == 'adjustment'
@@ -739,8 +748,7 @@ class _SummaryCard extends StatelessWidget {
                         Colors.teal.shade700)),
                 Expanded(
                     child: _metric('تحت الحد', '$low', Colors.orange.shade800)),
-                Expanded(
-                    child: _metric('نافد', '$out', Colors.red.shade700)),
+                Expanded(child: _metric('نافد', '$out', Colors.red.shade700)),
               ],
             ),
           ],

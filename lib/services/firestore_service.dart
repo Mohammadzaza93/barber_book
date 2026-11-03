@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -12,6 +15,7 @@ import '../models/enums.dart';
 import '../models/feedback.dart';
 import '../models/member.dart';
 import '../models/service.dart';
+import '../models/shop_invite.dart';
 import '../models/staff_permissions.dart';
 import '../models/unavailability_request.dart';
 
@@ -688,6 +692,198 @@ class FirestoreService {
       // is still deleted below and resolution verifies it before granting access.
     }
     await _members(shopId).doc(uid).delete();
+  }
+
+  /// Finds the canonical membership for an employee email.
+  ///
+  /// Used when an older employee document has no `authUid` (for example an
+  /// account linked through an owner-issued pairing code). Owner/admin only:
+  /// the rules gate `members` listing.
+  Future<String?> findMemberUidByEmail(String shopId, String? email) async {
+    final normalized = email?.trim().toLowerCase() ?? '';
+    if (normalized.isEmpty) return null;
+    final snap = await _members(shopId)
+        .where('email', isEqualTo: normalized)
+        .limit(1)
+        .get();
+    if (snap.docs.isEmpty) return null;
+    return snap.docs.first.id;
+  }
+
+  /// Revokes every membership that belongs to [email].
+  ///
+  /// Removing an employee must not leave a paired account with access just
+  /// because the roster document never received an `authUid`.
+  Future<void> removeMembersByEmail(String shopId, String? email) async {
+    final normalized = email?.trim().toLowerCase() ?? '';
+    if (normalized.isEmpty) return;
+    final snap =
+        await _members(shopId).where('email', isEqualTo: normalized).get();
+    for (final doc in snap.docs) {
+      await removeMember(shopId, doc.id);
+    }
+  }
+
+  // ---------- Pairing invites ----------
+
+  CollectionReference<Map<String, dynamic>> _invites() =>
+      _db.collection('invites');
+
+  static const _inviteAlphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+  /// 20 characters from a 32-symbol alphabet = 100 bits. The code is the
+  /// secret; it is never derived from the email or uid.
+  static String _newInviteCode([Random? random]) {
+    final rnd = random ?? Random.secure();
+    return List.generate(
+      20,
+      (_) => _inviteAlphabet[rnd.nextInt(_inviteAlphabet.length)],
+    ).join();
+  }
+
+  /// Creates a single-use pairing code for an existing Auth account.
+  ///
+  /// Owner-only in `firestore.rules`. The caller must be the true shop owner.
+  Future<ShopInvite> createInvite(
+    String shopId, {
+    required String email,
+    required String name,
+    required AppRole role,
+    required StaffPermissions permissions,
+    Duration ttl = const Duration(days: 7),
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw const InviteClaimException('يجب تسجيل الدخول أولاً');
+    }
+    final normalized = email.trim().toLowerCase();
+    if (normalized.isEmpty || !normalized.contains('@')) {
+      throw const InviteClaimException('أدخل بريداً صحيحاً للموظف');
+    }
+    final effectivePermissions =
+        role.isAdmin ? StaffPermissions.all : permissions;
+    final code = _newInviteCode();
+    final expiresAt = DateTime.now().toUtc().add(ttl);
+    await _invites().doc(code).set({
+      'code': code,
+      'shopId': shopId,
+      'email': normalized,
+      'name': name.trim(),
+      'role': role.name,
+      'permissions': effectivePermissions.toMap(),
+      'active': true,
+      'createdBy': user.uid,
+      'createdAt': FieldValue.serverTimestamp(),
+      'expiresAt': Timestamp.fromDate(expiresAt),
+    });
+    return ShopInvite(
+      code: code,
+      shopId: shopId,
+      email: normalized,
+      name: name.trim(),
+      role: role,
+      permissions: effectivePermissions,
+      expiresAt: expiresAt,
+    );
+  }
+
+  Future<ShopInvite?> getInvite(String code) async {
+    final snap = await _invites().doc(code).get();
+    final data = snap.data();
+    if (data == null) return null;
+    return ShopInvite.fromMap(snap.id, data);
+  }
+
+  /// Claims [code] for the signed-in account.
+  ///
+  /// Security properties enforced by the server rules (not by this client):
+  /// * the invite must belong to the shop in the member path,
+  /// * the signed-in token email must equal the invited email,
+  /// * role and permissions must be copied verbatim from the invite,
+  /// * the invite must be unexpired.
+  ///
+  /// Returns the shop id. The caller should refresh the session afterwards.
+  Future<String> claimInvite(String code) async {
+    final trimmed = code.trim().toUpperCase();
+    if (trimmed.isEmpty) {
+      throw const InviteClaimException('أدخل رمز الربط');
+    }
+    final user = FirebaseAuth.instance.currentUser;
+    final email = user?.email?.trim().toLowerCase();
+    if (user == null || email == null || email.isEmpty) {
+      throw const InviteClaimException('يجب تسجيل الدخول أولاً');
+    }
+
+    final ShopInvite? invite;
+    try {
+      invite = await getInvite(trimmed);
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        throw const InviteClaimException('الرمز غير صالح أو لا يخص هذا البريد');
+      }
+      rethrow;
+    }
+    if (invite == null || invite.shopId.isEmpty) {
+      throw const InviteClaimException('رمز الربط غير موجود');
+    }
+    if (invite.email != email) {
+      throw const InviteClaimException('هذا الرمز مخصص لبريد آخر');
+    }
+    if (invite.isExpired) {
+      throw const InviteClaimException('انتهت صلاحية رمز الربط');
+    }
+
+    final role = invite.role;
+    final permissions =
+        role.isAdmin ? StaffPermissions.all : invite.permissions;
+    // The rules also validate these fields against the invite document.
+    await _members(invite.shopId).doc(user.uid).set({
+      'uid': user.uid,
+      'email': email,
+      'name': invite.name,
+      'role': role.name,
+      'permissions': permissions.toMap(),
+      'active': true,
+      'createdAt': FieldValue.serverTimestamp(),
+      'inviteCode': trimmed,
+    });
+
+    // Best-effort fast lookup. Resolution falls back to appConfig + the
+    // canonical member document when this write is denied.
+    unawaited(_writeMembershipPointer(
+      invite.shopId,
+      user.uid,
+      email: email,
+      name: invite.name,
+      role: role,
+      permissions: permissions,
+      active: true,
+    ));
+
+    // Attach the trusted uid to the roster document(s) for this email, so the
+    // owner's edit/delete actions keep revoking the correct account.
+    try {
+      final employees = await _coll(invite.shopId, 'employees')
+          .where('email', isEqualTo: email)
+          .get();
+      for (final doc in employees.docs) {
+        final current = doc.data()['authUid'];
+        if (current == null || current == '') {
+          await doc.reference.update({'authUid': user.uid});
+        }
+      }
+    } catch (_) {
+      // The canonical membership already grants access; the roster can be
+      // repaired by the owner later.
+    }
+
+    // Single-use: consume the code. If this fails, a second create for the same
+    // uid is still rejected because the member document already exists.
+    try {
+      await _invites().doc(trimmed).delete();
+    } catch (_) {}
+
+    return invite.shopId;
   }
 
   // ---------- Customer helpers ----------

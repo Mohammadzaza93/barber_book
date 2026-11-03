@@ -56,6 +56,7 @@ beforeEach(async () => {
     await member('admin2', 'admin', ALL);
     await member('staff1', 'staff', MINIMAL);
     await member('staff2', 'staff', MINIMAL);
+    await member('restricted1', 'staff', { appointments: true });
     await member('off1', 'staff', MINIMAL, { active: false });
     await setDoc(doc(d, `shops/${SHOP}/appointments/a1`), {
       ...newAppointment({ createdAt: Timestamp.now() }), createdById: 'staff1',
@@ -63,6 +64,18 @@ beforeEach(async () => {
     await setDoc(doc(d, `shops/${SHOP}/payments/p1`), { appointmentId: 'a1', amount: 10 });
     await setDoc(doc(d, `shops/${SHOP}/day_closes/2026-01-01`), { net: 1 });
     await setDoc(doc(d, `shops/${SHOP}/inventoryMovements/m1`), { itemId: 'i1', quantity: 1 });
+    await setDoc(doc(d, `shops/${SHOP}/employees/e-new`), {
+      name: 'New Accountant', email: 'newstaff@example.com',
+      role: 'accountant', active: true, authUid: null,
+    });
+    await setDoc(doc(d, 'invites/PAIRCODE1234567890AB'), {
+      code: 'PAIRCODE1234567890AB', shopId: SHOP, email: 'newstaff@example.com',
+      name: 'New Accountant', role: 'staff', permissions: MINIMAL, active: true,
+      expiresAt: Timestamp.fromDate(new Date(Date.now() + 3600e3)),
+    });
+    await setDoc(doc(d, `shops/${SHOP}/stocktakes/st1`), {
+      status: 'draft', note: '', lines: [],
+    });
   });
 });
 
@@ -178,5 +191,115 @@ describe('memberships pointer', () => {
     await assertSucceeds(setDoc(doc(db('owner1'), 'memberships/staff1'), pointer('staff1')));
     await assertFails(setDoc(doc(db('admin1'), 'memberships/staff1'), { active: false }));
     await assertSucceeds(setDoc(doc(db('owner1'), 'memberships/staff1'), { active: false }));
+  });
+});
+
+describe('pairing invites', () => {
+  const invite = (over = {}) => ({
+    code: 'NEWCODE1234567890ABC', shopId: SHOP, email: 'newstaff@example.com',
+    name: 'New Accountant', role: 'staff', permissions: MINIMAL, active: true,
+    expiresAt: Timestamp.fromDate(new Date(Date.now() + 3600e3)), ...over,
+  });
+  const member = (over = {}) => ({
+    uid: 'newstaff', email: 'newstaff@example.com', name: 'New Accountant',
+    role: 'staff', permissions: MINIMAL, active: true,
+    inviteCode: 'PAIRCODE1234567890AB', ...over,
+  });
+
+  it('only the owner creates a pairing code', async () => {
+    await assertSucceeds(setDoc(doc(db('owner1'), 'invites/NEWCODE1234567890ABC'), invite()));
+    await assertFails(setDoc(doc(db('admin1'), 'invites/NEWCODE1234567890ABC'), invite()));
+    await assertFails(setDoc(doc(db('stranger'), 'invites/NEWCODE1234567890ABC'), invite()));
+  });
+
+  it('only the invited Auth email can read the code', async () => {
+    await assertSucceeds(getDoc(doc(db('newstaff'), 'invites/PAIRCODE1234567890AB')));
+    await assertFails(getDoc(doc(db('staff1'), 'invites/PAIRCODE1234567890AB')));
+    await assertFails(getDoc(doc(db('stranger'), 'invites/PAIRCODE1234567890AB')));
+  });
+
+  it('the invited account can claim itself with the exact invite role/perms', async () => {
+    await assertSucceeds(setDoc(
+      doc(db('newstaff'), `shops/${SHOP}/members/newstaff`), member()));
+    await assertSucceeds(getDoc(doc(db('newstaff'), `shops/${SHOP}/appointments/a1`)));
+  });
+
+  it('cannot claim another email, a tampered role, or extra permissions', async () => {
+    await assertFails(setDoc(
+      doc(db('stranger'), `shops/${SHOP}/members/stranger`),
+      member({ uid: 'stranger', email: 'stranger@example.com' })));
+    await assertFails(setDoc(
+      doc(db('newstaff'), `shops/${SHOP}/members/newstaff`), member({ role: 'admin' })));
+    await assertFails(setDoc(
+      doc(db('newstaff'), `shops/${SHOP}/members/newstaff`),
+      member({ permissions: ALL })));
+    await assertFails(setDoc(
+      doc(db('newstaff'), `shops/${SHOP}/members/other`),
+      member({ uid: 'other' })));
+  });
+
+  it('cannot claim with an unknown, expired, or disabled code', async () => {
+    await assertFails(setDoc(
+      doc(db('newstaff'), `shops/${SHOP}/members/newstaff`),
+      member({ inviteCode: 'UNKNOWNCODE123456789' })));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const d = ctx.firestore();
+      await setDoc(doc(d, 'invites/EXPIREDCODE123456789A'), invite({
+        code: 'EXPIREDCODE123456789A',
+        expiresAt: Timestamp.fromDate(new Date(Date.now() - 3600e3)),
+      }));
+    });
+    await assertFails(setDoc(
+      doc(db('newstaff'), `shops/${SHOP}/members/newstaff`),
+      member({ inviteCode: 'EXPIREDCODE123456789A' })));
+  });
+
+  it('a claimed account may self-link only its own unlinked employee record', async () => {
+    await assertSucceeds(setDoc(
+      doc(db('newstaff'), `shops/${SHOP}/members/newstaff`), member()));
+    await assertSucceeds(updateDoc(
+      doc(db('newstaff'), `shops/${SHOP}/employees/e-new`), { authUid: 'newstaff' }));
+    await assertFails(updateDoc(
+      doc(db('newstaff'), `shops/${SHOP}/employees/e-new`), { role: 'manager' }));
+  });
+});
+
+describe('stocktakes', () => {
+  const draft = (over = {}) => ({
+    status: 'draft', note: '', lines: [], createdAt: serverTimestamp(), ...over,
+  });
+
+  it('inventory-capability holders can read and create a draft session', async () => {
+    await assertSucceeds(getDoc(doc(db('staff1'), `shops/${SHOP}/stocktakes/st1`)));
+    await assertSucceeds(setDoc(
+      doc(db('staff1'), `shops/${SHOP}/stocktakes/new1`), draft()));
+    await assertSucceeds(setDoc(
+      doc(db('admin1'), `shops/${SHOP}/stocktakes/new2`), draft()));
+  });
+
+  it('members without an inventory capability are denied', async () => {
+    await assertFails(getDoc(doc(db('restricted1'), `shops/${SHOP}/stocktakes/st1`)));
+    await assertFails(setDoc(
+      doc(db('restricted1'), `shops/${SHOP}/stocktakes/new3`), draft()));
+  });
+
+  it('a session must start as a draft', async () => {
+    await assertFails(setDoc(
+      doc(db('staff1'), `shops/${SHOP}/stocktakes/new4`),
+      draft({ status: 'completed' })));
+  });
+
+  it('completed sessions are immutable and cannot be deleted', async () => {
+    await assertSucceeds(updateDoc(
+      doc(db('staff1'), `shops/${SHOP}/stocktakes/st1`), { status: 'completed' }));
+    await assertFails(updateDoc(
+      doc(db('staff1'), `shops/${SHOP}/stocktakes/st1`), { note: 'tamper' }));
+    await assertFails(deleteDoc(
+      doc(db('admin1'), `shops/${SHOP}/stocktakes/st1`)));
+  });
+
+  it('draft sessions can be deleted by inventory-capability holders', async () => {
+    await assertSucceeds(deleteDoc(
+      doc(db('staff1'), `shops/${SHOP}/stocktakes/st1`)));
   });
 });

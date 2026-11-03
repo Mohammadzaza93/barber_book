@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import '../config/owner.dart';
 import '../models/app_role.dart';
+import '../models/shop_invite.dart';
 import '../models/staff_permissions.dart';
 import '../services/auth_service.dart';
 import '../services/firebase_status.dart';
@@ -44,6 +45,18 @@ typedef ShopOwnerCheck = Future<bool> Function(String shopId);
 typedef MemberPermissionsLoader = Future<StaffPermissions> Function(
     String shopId, String uid);
 
+/// Creates an owner-issued pairing code for an existing Auth account.
+typedef StaffInviteCreator = Future<ShopInvite> Function(
+  String shopId, {
+  required String email,
+  required String name,
+  required AppRole role,
+  required StaffPermissions permissions,
+});
+
+/// Claims a pairing code for the signed-in account and returns the shop id.
+typedef InviteClaimer = Future<String> Function(String code);
+
 /// Thrown when the email already has a Firebase Auth account.
 class StaffAccountAlreadyExists implements Exception {
   const StaffAccountAlreadyExists(this.email);
@@ -70,6 +83,8 @@ class AuthProvider extends ChangeNotifier {
     ShopTopicOp? unsubscribeShopNotifications,
     StaffAuthCreator? createStaffAuth,
     MembershipWriter? writeMembership,
+    StaffInviteCreator? createStaffInvite,
+    InviteClaimer? claimInvite,
     ShopOwnerCheck? isShopOwner,
     MemberPermissionsLoader? loadMemberPermissions,
     Duration topicRetryDelay = const Duration(seconds: 5),
@@ -84,7 +99,11 @@ class AuthProvider extends ChangeNotifier {
             createStaffAuth ?? AuthService.instance.createStaffAccount,
         _writeMembership =
             writeMembership ?? FirestoreService.instance.saveMember,
-        _isShopOwner = isShopOwner ?? FirestoreService.instance.isShopOwner,
+        _createStaffInvite =
+            createStaffInvite ?? FirestoreService.instance.createInvite,
+        _claimInvite = claimInvite ?? FirestoreService.instance.claimInvite,
+        _isShopOwnerCheck =
+            isShopOwner ?? FirestoreService.instance.isShopOwner,
         _loadMemberPermissions = loadMemberPermissions ??
             FirestoreService.instance.getMemberPermissions,
         _topicRetryDelay = topicRetryDelay,
@@ -112,12 +131,20 @@ class AuthProvider extends ChangeNotifier {
   bool initializing = true;
   String? error;
 
+  /// True only when the signed-in uid is `shops/{shopId}.ownerId`.
+  ///
+  /// This is deliberately separate from [isOwnerAccount] (the literal bootstrap
+  /// email) and from `role.isAdmin` (which also covers owner-created admins).
+  bool _isShopOwner = false;
+
   final ShopResolver _resolveShop;
   final ShopTopicOp _subscribeShopNotifications;
   final ShopTopicOp _unsubscribeShopNotifications;
   final StaffAuthCreator _createStaffAuth;
   final MembershipWriter _writeMembership;
-  final ShopOwnerCheck _isShopOwner;
+  final StaffInviteCreator _createStaffInvite;
+  final InviteClaimer _claimInvite;
+  final ShopOwnerCheck _isShopOwnerCheck;
   final MemberPermissionsLoader _loadMemberPermissions;
   final Duration _topicRetryDelay;
   final int _maxTopicRetries;
@@ -127,10 +154,12 @@ class AuthProvider extends ChangeNotifier {
   int _retryAttempt = 0;
   bool _disposed = false;
   int _sessionGeneration = 0;
+  String? _sessionUid;
   String? _confirmedTopic;
   Future<void> _topicQueue = Future<void>.value();
 
-  bool get isOwner => role == AppRole.admin;
+  /// The immutable owner of the current shop, not merely an admin member.
+  bool get isOwner => _isShopOwner;
   bool get isOwnerAccount => isOwnerEmail(user?.email);
   bool get canManageRules => role.canManageRules;
   bool get canManageOperations => role.canManageOperations;
@@ -148,6 +177,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _applySession(String? uid) async {
     final generation = ++_sessionGeneration;
+    _sessionUid = uid;
     if (uid == null) {
       _clearSession();
       initializing = false;
@@ -163,6 +193,20 @@ class AuthProvider extends ChangeNotifier {
       ShopManager.shopId = resolvedShopId;
       _staffPermissions =
           role.isAdmin ? StaffPermissions.all : StaffPermissions.minimal;
+
+      // `role.isAdmin` includes owner-created admin members. The staff screen's
+      // destructive/owner-only actions require the immutable owner id instead.
+      var owner = false;
+      if (role.isAdmin && resolvedShopId != null && resolvedShopId.isNotEmpty) {
+        try {
+          owner = await _isShopOwnerCheck(resolvedShopId);
+        } catch (_) {
+          owner = false;
+        }
+        if (generation != _sessionGeneration) return;
+      }
+      _isShopOwner = owner;
+
       if (!role.isAdmin &&
           resolvedShopId != null &&
           resolvedShopId.isNotEmpty) {
@@ -174,6 +218,7 @@ class AuthProvider extends ChangeNotifier {
       error = e.toString();
       shopId = null;
       role = AppRole.staff;
+      _isShopOwner = false;
       _staffPermissions = StaffPermissions.minimal;
       ShopManager.reset();
     }
@@ -182,7 +227,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> refreshSession() async {
-    final uid = user?.uid;
+    final uid = user?.uid ?? _sessionUid;
     if (uid == null) return;
     error = null;
     initializing = false;
@@ -207,6 +252,7 @@ class AuthProvider extends ChangeNotifier {
   void _clearSession() {
     shopId = null;
     role = AppRole.staff;
+    _isShopOwner = false;
     _staffPermissions = StaffPermissions.minimal;
     ShopManager.reset();
     _scheduleTopicReconcile(null, guarded: false);
@@ -349,7 +395,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       throw StateError('no-shop');
     }
-    if (!await _isShopOwner(shop)) {
+    if (!await _isShopOwnerCheck(shop)) {
       error = 'not-shop-owner';
       notifyListeners();
       throw StateError('not-shop-owner');
@@ -368,7 +414,9 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       rethrow;
     }
-    final safeRole = AppRole.staff;
+    final safeRole = role == AppRole.admin ? AppRole.admin : AppRole.staff;
+    final safePermissions =
+        safeRole.isAdmin ? StaffPermissions.all : permissions;
     try {
       await _writeMembership(
         shop,
@@ -376,7 +424,7 @@ class AuthProvider extends ChangeNotifier {
         email: normalized,
         name: name,
         role: safeRole,
-        permissions: permissions,
+        permissions: safePermissions,
       );
     } catch (e) {
       error = 'membership-write-failed';
@@ -390,6 +438,62 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     }
     return uid;
+  }
+
+  /// Owner-only: creates a single-use pairing code for an existing account.
+  ///
+  /// This is the safe replacement for the old "paste the UID" flow. The code is
+  /// bound to [email] and the claimed account must be signed in with that same
+  /// email; the server rules copy role/permissions from the invite.
+  Future<ShopInvite> createStaffInvite({
+    required String email,
+    required String name,
+    required AppRole role,
+    required StaffPermissions permissions,
+  }) async {
+    error = null;
+    final shop = shopId ?? ShopManager.shopId;
+    if (shop == null || shop.isEmpty) {
+      error = 'no-shop';
+      notifyListeners();
+      throw StateError('no-shop');
+    }
+    if (!await _isShopOwnerCheck(shop)) {
+      error = 'not-shop-owner';
+      notifyListeners();
+      throw StateError('not-shop-owner');
+    }
+    try {
+      return await _createStaffInvite(
+        shop,
+        email: email,
+        name: name,
+        role: role,
+        permissions: permissions,
+      );
+    } catch (e) {
+      error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// Claims an owner-issued pairing code for the currently signed-in account.
+  ///
+  /// No uid is ever typed by a user: the uid comes from the Firebase Auth
+  /// session, and the server rules verify the invite's email/role/permissions.
+  Future<String> claimInvite(String code) async {
+    error = null;
+    try {
+      final claimedShop = await _claimInvite(code);
+      ShopManager.shopId = claimedShop;
+      await refreshSession();
+      return claimedShop;
+    } catch (e) {
+      error = e is InviteClaimException ? e.message : e.toString();
+      notifyListeners();
+      rethrow;
+    }
   }
 
   /// Disabled: client-supplied UID is not proof of identity.

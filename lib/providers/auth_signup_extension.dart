@@ -1,5 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
-
 import 'auth_provider.dart';
 
 /// Public self-registration is disabled for this single-salon app.
@@ -8,7 +6,6 @@ extension AuthProviderSignUp on AuthProvider {
   @Deprecated('Self-registration disabled')
   Future<bool> signUp(String email, String password) async {
     error = 'self-registration-disabled';
-    notifyListeners();
     return false;
   }
 }

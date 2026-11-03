@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -27,7 +28,7 @@ class StaffScreen extends StatelessWidget {
     // Only the immutable owner may write `members`, and deleting an employee
     // revokes the membership first — so deletion is owner-only even though a
     // manager can still edit the employee record.
-    final canDelete = canManage && auth.isOwnerAccount;
+    final canDelete = canManage && auth.isOwner;
     return Scaffold(
       body: Column(
         children: [
@@ -225,9 +226,9 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
         title: const Text('الحساب موجود مسبقاً'),
         content: Text(
           'البريد $email يملك حساب دخول بالفعل.\n\n'
-              'لا يمكن إدخال UID يدوياً لأسباب أمنية.\n'
-              'اطلب من المحاسب استخدام «نسيت كلمة المرور»، '
-              'أو أعد محاولة إنشاء حساب الدخول إن فشلت العضوية سابقاً.',
+          'لا يمكن إدخال UID يدوياً لأسباب أمنية.\n'
+          'أنشئ «رمز ربط» وأرسله للمحاسب: يسجّل دخوله بالبريد ثم يدخل '
+          'الرمز من شاشة «الحساب غير مرتبط».',
         ),
         actions: [
           TextButton(
@@ -235,6 +236,13 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
             child: Text(t(ctx).cancel),
           ),
           FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _createInvite();
+            },
+            child: const Text('إنشاء رمز ربط'),
+          ),
+          TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
               try {
@@ -264,15 +272,16 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
       return;
     }
     // كلمة مرور مؤقتة فقط لإنشاء حساب Firebase — لا تُعرض ولا تُحفظ
-    final password = 'Tmp!' + Uuid().v4().replaceAll('-', '').substring(0, 16);
+    final password =
+        'Tmp!${const Uuid().v4().replaceAll('-', '').substring(0, 16)}';
     setState(() => _busy = true);
     final auth = context.read<AuthProvider>();
     try {
       final uid = await auth.addStaffAccount(
         email: email,
         name: _name.text.trim(),
-        role: AppRole.staff,
-        permissions: _perms,
+        role: _accountRole,
+        permissions: _accountRole.isAdmin ? StaffPermissions.all : _perms,
         password: password,
       );
       await _attachUid(uid);
@@ -289,7 +298,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
         showSnack(
           context,
           'تم إنشاء حساب الدخول لكن فشل ربط العضوية. '
-              'أعد الضغط على إنشاء حساب الدخول لاحقاً.',
+          'أعد الضغط على إنشاء حساب الدخول لاحقاً.',
         );
       }
     } on FirebaseAuthException catch (e) {
@@ -303,17 +312,83 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     }
   }
 
+  /// Owner-only fallback for an email that already has a Firebase Auth account.
+  /// Nothing is typed as a uid: the accountant claims the code from their own
+  /// authenticated session, and the rules verify the invited email.
+  Future<void> _createInvite() async {
+    final email = _email.text.trim().toLowerCase();
+    if (email.isEmpty || !email.contains('@')) {
+      showSnack(context, 'أدخل بريد الموظف أولاً');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final invite = await context.read<AuthProvider>().createStaffInvite(
+            email: email,
+            name: _name.text.trim(),
+            role: _accountRole,
+            permissions: _accountRole.isAdmin ? StaffPermissions.all : _perms,
+          );
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('رمز ربط الحساب'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'أرسل هذا الرمز للمحاسب. يسجّل الدخول ببريده، ثم يختار '
+                '«ربط برمز من الأدمن» ويُدخل الرمز. الرمز صالح 7 أيام ولمرة واحدة.',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              SelectableText(
+                invite.code,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 3,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: invite.code));
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) showSnack(context, 'تم نسخ رمز الربط');
+              },
+              child: const Text('نسخ الرمز'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('تم'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) showSnack(context, 'تعذّر إنشاء رمز الربط: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _attachUid(String uid) async {
     final employee = widget.employee;
     if (employee == null) return;
     await context.read<ShopProvider>().updateEmployee(
-      employee.copyWith(
-        authUid: uid,
-        email: _email.text.trim(),
-        permissions: _perms,
-      ),
-      ShopManager.shopId!,
-    );
+          employee.copyWith(
+            authUid: uid,
+            email: _email.text.trim(),
+            permissions: _perms,
+          ),
+          ShopManager.shopId!,
+        );
     if (!mounted) return;
     setState(() => _authUid.text = uid);
   }
@@ -382,9 +457,9 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     final canManage = auth.canManageRules;
     // Changing a role writes `members/{uid}.role`, which only the true owner may
     // do (an admin must not be able to promote themselves or anyone else).
-    final canChangeRole = auth.isOwnerAccount;
+    final canChangeRole = auth.isOwner;
     // Provisioning/linking a login writes `members/{uid}`, which is owner-only.
-    final canProvisionLogin = auth.isOwnerAccount;
+    final canProvisionLogin = auth.isOwner;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.employee == null
@@ -469,11 +544,22 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                             style: TextStyle(fontSize: 12),
                           )
                         : _authUid.text.isEmpty
-                            ? FilledButton.tonalIcon(
-                                onPressed: _busy ? null : _createLogin,
-                                icon:
-                                    const Icon(Icons.person_add_alt_1_rounded),
-                                label: const Text('إنشاء حساب دخول للموظف'),
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  FilledButton.tonalIcon(
+                                    onPressed: _busy ? null : _createLogin,
+                                    icon: const Icon(
+                                        Icons.person_add_alt_1_rounded),
+                                    label: const Text('إنشاء حساب دخول للموظف'),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  OutlinedButton.icon(
+                                    onPressed: _busy ? null : _createInvite,
+                                    icon: const Icon(Icons.link_rounded),
+                                    label: const Text('رمز ربط لحساب موجود'),
+                                  ),
+                                ],
                               )
                             : OutlinedButton.icon(
                                 onPressed: _busy ? null : _resendPasswordReset,

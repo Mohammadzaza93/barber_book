@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:barber_app/models/app_role.dart';
+import 'package:barber_app/models/shop_invite.dart';
 import 'package:barber_app/models/staff_permissions.dart';
 import 'package:barber_app/providers/auth_provider.dart';
 import 'package:barber_app/services/firebase_status.dart';
@@ -30,6 +31,8 @@ void main() {
     Future<bool> Function(String shopId)? isShopOwner,
     Future<String> Function(String email, String password)? createStaffAuth,
     MembershipWriter? writeMembership,
+    StaffInviteCreator? createStaffInvite,
+    InviteClaimer? claimInvite,
     MemberPermissionsLoader? loadMemberPermissions,
   }) {
     return AuthProvider(
@@ -47,6 +50,22 @@ void main() {
               required name,
               required role,
               required permissions}) async {},
+      createStaffInvite: createStaffInvite ??
+          (shopId,
+                  {required email,
+                  required name,
+                  required role,
+                  required permissions}) async =>
+              ShopInvite(
+                code: 'CODE1234',
+                shopId: shopId,
+                email: email,
+                name: name,
+                role: role,
+                permissions: permissions,
+                expiresAt: DateTime.now().add(const Duration(days: 7)),
+              ),
+      claimInvite: claimInvite ?? (_) async => 'shop-A',
     );
   }
 
@@ -125,7 +144,8 @@ void main() {
     );
   });
 
-  test('linking only writes membership and rejects a malformed uid', () async {
+  test('manual uid linking is refused: only the pairing code is trusted',
+      () async {
     var writes = 0;
     final auth = build(
       writeMembership: (shopId, memberUid,
@@ -134,33 +154,109 @@ void main() {
           required role,
           required permissions}) async {
         writes++;
-        expect(shopId, 'shop-A');
-        expect(memberUid, uid);
-        expect(role, AppRole.staff);
       },
     );
     await auth.applySessionForTest('owner-uid');
 
     await expectLater(
       auth.linkStaffAccount(
-        uid: 'short',
+        uid: uid,
         email: 'barber@example.com',
         name: 'Barber',
         role: AppRole.staff,
         permissions: StaffPermissions.minimal,
       ),
-      throwsA(isA<ArgumentError>()),
+      throwsA(isA<UnsupportedError>()),
     );
-    expect(writes, 0);
+    expect(writes, 0,
+        reason: 'a typed uid is never proof of account ownership');
+  });
 
-    await auth.linkStaffAccount(
-      uid: uid,
+  test('an owner-created pairing code is bound to the invited email/role',
+      () async {
+    String? createdFor;
+    final auth = build(
+      createStaffInvite: (shopId,
+          {required email,
+          required name,
+          required role,
+          required permissions}) async {
+        createdFor = email;
+        expect(shopId, 'shop-A');
+        expect(role, AppRole.staff);
+        return ShopInvite(
+          code: 'PAIR1234',
+          shopId: shopId,
+          email: email,
+          name: name,
+          role: role,
+          permissions: permissions,
+          expiresAt: DateTime.now().add(const Duration(days: 7)),
+        );
+      },
+    );
+    await auth.applySessionForTest('owner-uid');
+
+    final invite = await auth.createStaffInvite(
       email: 'barber@example.com',
       name: 'Barber',
       role: AppRole.staff,
-      permissions: StaffPermissions.minimal,
+      permissions: StaffPermissions.accountant,
     );
-    expect(writes, 1);
+
+    expect(createdFor, 'barber@example.com');
+    expect(invite.code, 'PAIR1234');
+  });
+
+  test('a non-owner cannot create a pairing code', () async {
+    var called = false;
+    final auth = build(
+      isShopOwner: (_) async => false,
+      createStaffInvite: (shopId,
+          {required email,
+          required name,
+          required role,
+          required permissions}) async {
+        called = true;
+        throw StateError('unreachable');
+      },
+    );
+    await auth.applySessionForTest('owner-uid');
+
+    await expectLater(
+      auth.createStaffInvite(
+        email: 'barber@example.com',
+        name: 'Barber',
+        role: AppRole.staff,
+        permissions: StaffPermissions.accountant,
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(called, isFalse);
+  });
+
+  test('claiming a pairing code refreshes the session into the shop', () async {
+    var claimed = false;
+    final auth = build(
+      resolveShop: (_) async => claimed
+          ? (shopId: 'shop-A', role: AppRole.staff)
+          : (shopId: null, role: AppRole.staff),
+      loadMemberPermissions: (_, __) async => StaffPermissions.accountant,
+      claimInvite: (code) async {
+        expect(code, 'PAIR1234');
+        claimed = true;
+        return 'shop-A';
+      },
+    );
+    await auth.applySessionForTest('staff-uid');
+    expect(auth.shopId, isNull);
+
+    final shopId = await auth.claimInvite('PAIR1234');
+
+    expect(shopId, 'shop-A');
+    expect(auth.shopId, 'shop-A');
+    await pumpEventQueue();
+    expect(auth.permissions.finance, isTrue);
   });
 
   test('successful creation writes the membership with the new uid', () async {
