@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import '../../l10n/strings.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/auth_signup_extension.dart';
 import '../../providers/language_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/confirm.dart';
@@ -20,54 +19,25 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
-  final _confirm = TextEditingController();
   bool _obscure = true;
   bool _busy = false;
-  bool _registerMode = false;
 
   @override
   void dispose() {
     _email.dispose();
     _password.dispose();
-    _confirm.dispose();
     super.dispose();
-  }
-
-  String _mapAuthError(String? code) {
-    switch (code) {
-      case 'email-already-in-use':
-        return 'هذا البريد مسجّل مسبقاً — سجّل الدخول أو استعد كلمة المرور';
-      case 'weak-password':
-        return 'كلمة المرور ضعيفة (6 أحرف على الأقل)';
-      case 'invalid-email':
-        return 'صيغة البريد غير صحيحة';
-      case 'network-request-failed':
-        return 'تحقق من الاتصال بالإنترنت';
-      default:
-        return code == null || code.isEmpty
-            ? 'تعذّر إنشاء الحساب'
-            : 'تعذّر إنشاء الحساب ($code)';
-    }
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthProvider>();
     setState(() => _busy = true);
-    final bool ok;
-    if (_registerMode) {
-      ok = await auth.signUp(_email.text, _password.text);
-    } else {
-      ok = await auth.signIn(_email.text, _password.text);
-    }
+    final ok = await auth.signIn(_email.text, _password.text);
     if (!mounted) return;
     setState(() => _busy = false);
     if (!ok) {
-      if (_registerMode) {
-        showSnack(context, _mapAuthError(auth.error));
-      } else {
-        showSnack(context, t(context).invalidCredentials);
-      }
+      showSnack(context, t(context).invalidCredentials);
     }
   }
 
@@ -122,7 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      _registerMode ? 'إنشاء حساب' : t(context).welcome,
+                      t(context).welcome,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         fontSize: 26,
@@ -132,14 +102,21 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      _registerMode
-                          ? 'أنشئ حساباً ثم اطلب من المالك ربطه بالمحل من شاشة الموظفين'
-                          : t(context).welcomeSubtitle,
+                      t(context).welcomeSubtitle,
                       textAlign: TextAlign.center,
                       style:
                           TextStyle(color: Colors.grey.shade600, fontSize: 13),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 12),
+                    Text(
+                      'حسابات المحاسبين تُنشأ من المالك فقط عبر شاشة الموظفين.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                     TextFormField(
                       controller: _email,
                       keyboardType: TextInputType.emailAddress,
@@ -170,43 +147,20 @@ class _LoginScreenState extends State<LoginScreen> {
                           ? t(context).required
                           : (v.length < 6 ? t(context).passwordTooShort : null),
                     ),
-                    if (_registerMode) ...[
-                      const SizedBox(height: 14),
-                      TextFormField(
-                        controller: _confirm,
-                        obscureText: _obscure,
-                        decoration: const InputDecoration(
-                          labelText: 'تأكيد كلمة المرور',
-                          prefixIcon: Icon(Icons.lock_outline_rounded),
-                        ),
-                        validator: (v) {
-                          if (v == null || v.isEmpty) {
-                            return t(context).required;
-                          }
-                          if (v != _password.text) {
-                            return 'كلمتا المرور غير متطابقتين';
-                          }
-                          return null;
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: TextButton(
+                        onPressed: () async {
+                          await context
+                              .read<AuthProvider>()
+                              .sendPasswordReset(_email.text);
+                          if (!context.mounted) return;
+                          showSnack(context, t(context).settingsSaved);
                         },
+                        child: Text(t(context).forgotPassword),
                       ),
-                    ],
-                    if (!_registerMode) ...[
-                      const SizedBox(height: 6),
-                      Align(
-                        alignment: AlignmentDirectional.centerEnd,
-                        child: TextButton(
-                          onPressed: () async {
-                            await context
-                                .read<AuthProvider>()
-                                .sendPasswordReset(_email.text);
-                            if (!context.mounted) return;
-                            showSnack(context, t(context).settingsSaved);
-                          },
-                          child: Text(t(context).forgotPassword),
-                        ),
-                      ),
-                    ] else
-                      const SizedBox(height: 12),
+                    ),
                     const SizedBox(height: 12),
                     FilledButton(
                       onPressed: _busy ? null : _submit,
@@ -216,22 +170,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(_registerMode
-                              ? 'إنشاء الحساب'
-                              : t(context).signIn),
-                    ),
-                    const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: _busy
-                          ? null
-                          : () => setState(() {
-                                _registerMode = !_registerMode;
-                              }),
-                      child: Text(
-                        _registerMode
-                            ? 'لديك حساب؟ تسجيل الدخول'
-                            : 'إنشاء حساب جديد',
-                      ),
+                          : Text(t(context).signIn),
                     ),
                   ],
                 ),
