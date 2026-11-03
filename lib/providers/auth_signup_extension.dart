@@ -1,28 +1,14 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 
-import '../services/auth_service.dart';
 import 'auth_provider.dart';
 
-/// Login-screen registration (keeps the large auth_provider file unchanged).
+/// Public self-registration is disabled for this single-salon app.
+/// Accountants are provisioned only by the owner via [AuthProvider.addStaffAccount].
 extension AuthProviderSignUp on AuthProvider {
-  /// Creates a Firebase Auth account and signs the user in.
-  ///
-  /// After success the auth stream resolves the shop:
-  /// - owner email → setup wizard if no shop yet
-  /// - other emails → no-access until the owner links members/{uid}
+  @Deprecated('Self-registration disabled')
   Future<bool> signUp(String email, String password) async {
-    error = null;
-    try {
-      await AuthService.instance.signUp(email, password);
-      return true;
-    } on FirebaseAuthException catch (e) {
-      error = e.code;
-      notifyListeners();
-      return false;
-    } catch (e) {
-      error = e.toString();
-      notifyListeners();
-      return false;
-    }
+    error = 'self-registration-disabled';
+    notifyListeners();
+    return false;
   }
 }
