@@ -23,15 +23,39 @@ class FirestoreInventory {
       _items(shopId).orderBy('name').snapshots().map((snap) =>
           snap.docs.map((d) => InventoryItem.fromMap(d.id, d.data())).toList());
 
-  Future<void> saveInventoryItem(String shopId, InventoryItem item) =>
-      _items(shopId).doc(item.id).set(item.toMap(), SetOptions(merge: true));
+  /// تحديث بيانات مادة موجودة دون المساس بالرصيد.
+  ///
+  /// الكمية تتغيّر فقط عبر الحركات أو الجرد، لذا لا تُكتب هنا حتى لا تدهس
+  /// حركة سُجّلت أثناء فتح المحرّر. تاريخ الإنشاء ومنشئه يبقيان ثابتين.
+  Future<void> saveInventoryItem(String shopId, InventoryItem item) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final data = item.toMap()
+      ..remove('quantity')
+      ..remove('createdAt')
+      ..remove('createdBy')
+      ..['updatedAt'] = FieldValue.serverTimestamp();
+    if (uid != null) data['updatedBy'] = uid;
+    return _items(shopId).doc(item.id).set(data, SetOptions(merge: true));
+  }
+
+  /// هل للمادة أي حركة تاريخية؟ يُستخدم قبل الحذف النهائي فقط.
+  Future<bool> hasMovements(String shopId, String itemId) async {
+    final snap = await _movements(shopId)
+        .where('itemId', isEqualTo: itemId)
+        .limit(1)
+        .get();
+    return snap.docs.isNotEmpty;
+  }
 
   /// تعطيل ناعم — لا نحذف سجلاً له حركات.
-  Future<void> deactivateInventoryItem(String shopId, String id) =>
-      _items(shopId).doc(id).set({
-        'active': false,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+  Future<void> deactivateInventoryItem(String shopId, String id) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    return _items(shopId).doc(id).set({
+      'active': false,
+      'updatedAt': FieldValue.serverTimestamp(),
+      if (uid != null) 'updatedBy': uid,
+    }, SetOptions(merge: true));
+  }
 
   Future<void> deleteInventoryItem(String shopId, String id) =>
       _items(shopId).doc(id).delete();
@@ -48,6 +72,77 @@ class FirestoreInventory {
   Future<void> addInventoryMovement(
           String shopId, InventoryMovement movement) =>
       _movements(shopId).doc(movement.id).set(movement.toMap());
+
+  /// حركات فترة محددة — تُطلب عند فتح التقارير فقط (توفيراً للقراءات).
+  ///
+  /// الفلترة والترتيب على نفس الحقل `createdAt` لا يحتاجان فهرساً مركّباً.
+  Future<List<InventoryMovement>> fetchInventoryMovementsBetween({
+    required String shopId,
+    required DateTime from,
+    required DateTime to,
+    int limit = 1000,
+  }) async {
+    final snap = await _movements(shopId)
+        .where('createdAt', isGreaterThanOrEqualTo: from.toUtc())
+        .where('createdAt', isLessThanOrEqualTo: to.toUtc())
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
+    return snap.docs
+        .map((d) => InventoryMovement.fromMap(d.id, d.data()))
+        .toList();
+  }
+
+  /// إنشاء مادة جديدة مع رصيد افتتاحي مسجّل كحركة شراء.
+
+  /// الكتابة داخل معاملة واحدة: إما تُنشأ المادة وحركتها معاً أو لا شيء،
+  /// حتى لا يظهر رصيد بلا أثر محاسبي.
+  Future<void> createItemWithOpeningStock({
+    required String shopId,
+    required InventoryItem item,
+    required double openingQty,
+    String? actorId,
+  }) async {
+    if (openingQty < 0) {
+      throw StateError('الرصيد الافتتاحي يجب أن يكون ≥ 0');
+    }
+    final itemRef = _items(shopId).doc(item.id);
+    final movementRef = _movements(shopId).doc('opening_${item.id}');
+    final uid = actorId ?? FirebaseAuth.instance.currentUser?.uid;
+    final now = DateTime.now().toUtc();
+
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(itemRef);
+      if (snap.exists) {
+        throw StateError('توجد مادة بنفس المعرّف مسبقاً');
+      }
+      final created = item.copyWith(
+        quantity: openingQty,
+        createdAt: now,
+        updatedAt: now,
+        createdBy: uid,
+        updatedBy: uid,
+      );
+      tx.set(itemRef, created.toMap());
+      if (openingQty > 0) {
+        tx.set(
+          movementRef,
+          InventoryMovement(
+            id: movementRef.id,
+            itemId: item.id,
+            type: 'purchase',
+            quantity: openingQty,
+            unitCost: item.unitCost,
+            reason: 'رصيد افتتاحي',
+            balanceBefore: 0,
+            balanceAfter: openingQty,
+            actorId: uid,
+            createdAt: now,
+          ).toMap(),
+        );
+      }
+    });
+  }
 
   /// تطبيق حركة داخل معاملة: قراءة الرصيد → حركة → تحديث الصنف.
   /// الشراء يحدّث unitCost بتكلفة آخر شراء.

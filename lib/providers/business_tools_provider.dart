@@ -34,6 +34,16 @@ typedef StocktakeDeleter = Future<void> Function(
     String shopId, String stocktakeId);
 typedef CustomerAppointmentLoader = Future<List<Appointment>> Function(
     String shopId, String phone);
+typedef InventoryHistoryLoader = Future<List<InventoryMovement>> Function(
+    String shopId, DateTime from, DateTime to);
+
+Future<List<InventoryMovement>> _firestoreInventoryHistory(
+        String shopId, DateTime from, DateTime to) =>
+    FirestoreInventory.instance.fetchInventoryMovementsBetween(
+      shopId: shopId,
+      from: from,
+      to: to,
+    );
 
 class BusinessToolsProvider extends ChangeNotifier {
   BusinessToolsProvider({
@@ -43,6 +53,7 @@ class BusinessToolsProvider extends ChangeNotifier {
     StocktakeRefresher? refreshStocktakeExpected,
     StocktakeDeleter? deleteStocktake,
     CustomerAppointmentLoader? loadCustomerAppointments,
+    InventoryHistoryLoader? loadInventoryMovements,
   })  : _saveStocktake =
             saveStocktake ?? FirestoreInventory.instance.saveStocktake,
         _saveStocktakeCounts = saveStocktakeCounts ??
@@ -54,7 +65,9 @@ class BusinessToolsProvider extends ChangeNotifier {
         _deleteStocktake =
             deleteStocktake ?? FirestoreInventory.instance.deleteStocktake,
         _loadCustomerAppointments = loadCustomerAppointments ??
-            FirestoreService.instance.findAppointmentsByPhone;
+            FirestoreService.instance.findAppointmentsByPhone,
+        _loadInventoryMovements =
+            loadInventoryMovements ?? _firestoreInventoryHistory;
 
   String? _shopId;
   AppRole? _role;
@@ -66,6 +79,7 @@ class BusinessToolsProvider extends ChangeNotifier {
   final StocktakeRefresher _refreshStocktakeExpected;
   final StocktakeDeleter _deleteStocktake;
   final CustomerAppointmentLoader _loadCustomerAppointments;
+  final InventoryHistoryLoader _loadInventoryMovements;
 
   List<CustomerProfile> customers = [];
   List<LoyaltyAccount> loyalty = [];
@@ -82,6 +96,9 @@ class BusinessToolsProvider extends ChangeNotifier {
   bool loading = true;
   String? error;
   bool permissionDenied = false;
+
+  /// صحيح إذا تعذّر تحميل سجل الحركات الكامل فاعتمد التقرير على النافذة المحلية.
+  bool inventoryHistoryDegraded = false;
 
   List<Appointment> _appointments = [];
 
@@ -282,8 +299,19 @@ class BusinessToolsProvider extends ChangeNotifier {
       FirestoreInventory.instance.saveInventoryItem(shopId, item);
 
   Future<void> deleteInventoryItem(String id) async {
-    final hasMoves = inventoryMovements.any((m) => m.itemId == id);
-    if (hasMoves) {
+    final item = inventory.where((i) => i.id == id).firstOrNull;
+    final hasStock = (item?.quantity ?? 0) > kStockEpsilon;
+
+    // لا نحذف مادة لها رصيد أو حركات. عند تعذّر التحقق (انقطاع) نعطّل بدل
+    // الحذف، حتى لا نفقد صنفاً له سجل محاسبي.
+    bool hasMoves;
+    try {
+      hasMoves = await FirestoreInventory.instance.hasMovements(shopId, id);
+    } catch (_) {
+      hasMoves = true;
+    }
+
+    if (hasMoves || hasStock) {
       await FirestoreInventory.instance.deactivateInventoryItem(shopId, id);
     } else {
       await FirestoreInventory.instance.deleteInventoryItem(shopId, id);
@@ -302,6 +330,55 @@ class BusinessToolsProvider extends ChangeNotifier {
       actorId: movement.actorId,
     );
   }
+
+  /// إنشاء مادة جديدة + رصيد افتتاحي كحركة شراء (معاملة واحدة).
+  Future<void> createInventoryItem(
+    InventoryItem item, {
+    double openingQty = 0,
+  }) =>
+      FirestoreInventory.instance.createItemWithOpeningStock(
+        shopId: shopId,
+        item: item,
+        openingQty: openingQty,
+      );
+
+  /// يحمّل حركات المخزون لفترة التقرير.
+  ///
+  /// يبدأ بالنافذة المحمّلة (سريعة وتعمل بلا اتصال)، ثم يدمج حركات الفترة من
+  /// Firestore. أي فشل وصول لا يُفشل التقرير؛ يُعلَّم [inventoryHistoryDegraded]
+  /// لتظهر ملاحظة أن الأرقام قد تكون ناقصة.
+  Future<List<InventoryMovement>> loadInventoryMovements({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    inventoryHistoryDegraded = false;
+    final local = _movementsBetween(from, to);
+    final shop = _shopId;
+    if (shop == null || shop.isEmpty) return local;
+
+    try {
+      final remote = await _loadInventoryMovements(shop, from, to);
+      final byId = <String, InventoryMovement>{
+        for (final movement in local) movement.id: movement,
+        for (final movement in remote) movement.id: movement,
+      };
+      final merged = byId.values.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return merged;
+    } on FirebaseException {
+      inventoryHistoryDegraded = true;
+      return local;
+    } catch (_) {
+      inventoryHistoryDegraded = true;
+      return local;
+    }
+  }
+
+  List<InventoryMovement> _movementsBetween(DateTime from, DateTime to) =>
+      inventoryMovements
+          .where((m) => !m.createdAt.isBefore(from) && !m.createdAt.isAfter(to))
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
   // ---------- Stocktaking (جرد) ----------
 

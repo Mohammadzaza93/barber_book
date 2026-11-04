@@ -1,495 +1,138 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../models/business_features.dart';
+import '../../models/inventory_catalog.dart';
 import '../../providers/business_tools_provider.dart';
-import '../../widgets/confirm_dialogs.dart';
-import '../../widgets/controller_scope.dart';
 import '../../providers/shop_provider.dart';
+import '../../services/inventory_analytics.dart';
+import '../../widgets/confirm_dialogs.dart';
+import 'inventory_item_editor.dart';
+import 'inventory_item_screen.dart';
+import 'inventory_movement_sheet.dart';
+import 'inventory_reports_screen.dart';
 import 'stocktake_screen.dart';
 
-const _categories = [
-  ('general', 'عام'),
-  ('shampoo', 'شامبو وبلسم'),
-  ('dye', 'صبغات وكيماويات'),
-  ('styling', 'جل وسبراي'),
-  ('shaving', 'حلاقة'),
-  ('blades', 'شفرات ومواد استهلاكية'),
-  ('hygiene', 'نظافة وتعقيم'),
-  ('retail', 'منتجات للبيع'),
-];
+enum _StockFilter { all, low, out, expiring, inactive }
 
-const _units = [
-  ('piece', 'قطعة'),
-  ('bottle', 'زجاجة'),
-  ('box', 'علبة'),
-  ('pack', 'عبوة'),
-  ('ml', 'مل'),
-  ('liter', 'لتر'),
-  ('g', 'غرام'),
-  ('kg', 'كغ'),
-];
-
-class InventoryTab extends StatelessWidget {
+class InventoryTab extends StatefulWidget {
   const InventoryTab({super.key});
 
-  Future<void> _showItemDialog(BuildContext context,
-      {InventoryItem? item}) async {
-    final name = TextEditingController(text: item?.name ?? '');
-    final supplier = TextEditingController(text: item?.supplier ?? '');
-    final quantity = TextEditingController(
-        text: item == null ? '0' : item.quantity.toString());
-    final cost = TextEditingController(
-        text: item == null ? '0' : item.unitCost.toString());
-    final consumeCtrl = TextEditingController(
-      text: (item?.consumePerUse ?? 0) == 0
-          ? '0'
-          : item!.consumePerUse.toString(),
-    );
-    var linked = List<String>.from(item?.linkedServiceIds ?? const []);
-    final reorder = TextEditingController(
-        text: item == null ? '0' : item.reorderLevel.toString());
-    var category = item?.category ?? 'general';
-    if (!_categories.any((c) => c.$1 == category)) category = 'general';
-    var unit = item?.unit ?? 'piece';
-    if (!_units.any((u) => u.$1 == unit)) unit = 'piece';
-    final formKey = GlobalKey<FormState>();
+  @override
+  State<InventoryTab> createState() => _InventoryTabState();
+}
 
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (ctx) {
-        return ControllerScope(
-          controllers: [name, supplier, quantity, cost, consumeCtrl, reorder],
-          builder: (ctx) => Padding(
-            padding: EdgeInsets.only(
-              left: 20,
-              right: 20,
-              top: 8,
-              bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20,
-            ),
-            child: StatefulBuilder(
-              builder: (context, setLocal) {
-                return Form(
-                  key: formKey,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          item == null ? 'مادة جديدة' : 'تعديل المادة',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleLarge
-                              ?.copyWith(fontWeight: FontWeight.w800),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: name,
-                          textInputAction: TextInputAction.next,
-                          decoration: const InputDecoration(
-                            labelText: 'اسم المادة',
-                            prefixIcon: Icon(Icons.label_outline),
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (v) =>
-                              (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
-                        ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          value: category,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'التصنيف',
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 14),
-                          ),
-                          items: [
-                            for (final c in _categories)
-                              DropdownMenuItem(
-                                value: c.$1,
-                                child: Text(
-                                  c.$2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                          ],
-                          onChanged: (v) =>
-                              setLocal(() => category = v ?? 'general'),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                value: unit,
-                                isExpanded: true,
-                                decoration: const InputDecoration(
-                                  labelText: 'الوحدة',
-                                  border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 14),
-                                ),
-                                items: [
-                                  for (final u in _units)
-                                    DropdownMenuItem(
-                                      value: u.$1,
-                                      child: Text(
-                                        u.$2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                ],
-                                onChanged: (v) =>
-                                    setLocal(() => unit = v ?? 'piece'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextFormField(
-                                controller: quantity,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                        decimal: true),
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.allow(
-                                      RegExp(r'[0-9.,]')),
-                                ],
-                                decoration: const InputDecoration(
-                                  labelText: 'الكمية الحالية',
-                                  border: OutlineInputBorder(),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: cost,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                        decimal: true),
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.allow(
-                                      RegExp(r'[0-9.,]')),
-                                ],
-                                decoration: const InputDecoration(
-                                  labelText: 'تكلفة الوحدة',
-                                  helperText: 'آخر شراء',
-                                  border: OutlineInputBorder(),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextFormField(
-                                controller: reorder,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                        decimal: true),
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.allow(
-                                      RegExp(r'[0-9.,]')),
-                                ],
-                                decoration: const InputDecoration(
-                                  labelText: 'حد إعادة الطلب',
-                                  border: OutlineInputBorder(),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: consumeCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
-                          decoration: const InputDecoration(
-                            labelText: 'استهلاك لكل خدمة (اختياري)',
-                            helperText: 'يُخصم تلقائياً عند تحصيل خدمة مرتبطة',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Builder(builder: (ctx) {
-                          final services = ctx
-                              .watch<ShopProvider>()
-                              .services
-                              .where((s) => s.active)
-                              .toList();
-                          if (services.isEmpty) {
-                            return const SizedBox.shrink();
-                          }
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('ربط بخدمات (للاستهلاك التلقائي)',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.w700)),
-                              const SizedBox(height: 6),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 4,
-                                children: [
-                                  for (final s in services)
-                                    FilterChip(
-                                      label: Text(s.name),
-                                      selected: linked.contains(s.id),
-                                      onSelected: (v) => setLocal(() {
-                                        if (v) {
-                                          linked = [...linked, s.id];
-                                        } else {
-                                          linked = linked
-                                              .where((x) => x != s.id)
-                                              .toList();
-                                        }
-                                      }),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          );
-                        }),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: supplier,
-                          decoration: const InputDecoration(
-                            labelText: 'المورد (اختياري)',
-                            prefixIcon: Icon(Icons.local_shipping_outlined),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        FilledButton.icon(
-                          onPressed: () {
-                            if (formKey.currentState?.validate() ?? false) {
-                              Navigator.pop(ctx, true);
-                            }
-                          },
-                          icon: const Icon(Icons.check_rounded),
-                          label: const Text('حفظ'),
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size.fromHeight(48),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('إلغاء'),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        );
-      },
-    );
+class _InventoryTabState extends State<InventoryTab> {
+  final _search = TextEditingController();
+  _StockFilter _filter = _StockFilter.all;
+  String _query = '';
 
-    final nameValue = name.text.trim();
-    final supplierValue = supplier.text.trim();
-    final quantityValue =
-        double.tryParse(quantity.text.replaceAll(',', '.')) ?? 0;
-    final costValue = double.tryParse(cost.text.replaceAll(',', '.')) ?? 0;
-    final reorderValue =
-        double.tryParse(reorder.text.replaceAll(',', '.')) ?? 0;
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
-    if (saved != true || !context.mounted || nameValue.isEmpty) return;
-
+  Future<void> _openEditor({InventoryItem? item}) async {
+    final draft = await showInventoryItemEditor(context, item: item);
+    if (draft == null || !mounted) return;
     final tools = context.read<BusinessToolsProvider>();
-    final now = DateTime.now();
-    final consumeValue =
-        double.tryParse(consumeCtrl.text.replaceAll(',', '.')) ?? 0;
-    await tools.saveInventoryItem(InventoryItem(
-      id: item?.id ?? const Uuid().v4(),
-      name: nameValue,
-      sku: item?.sku ?? '',
-      category: category,
-      unit: unit,
-      quantity: quantityValue,
-      unitCost: costValue,
-      reorderLevel: reorderValue,
-      supplier: supplierValue,
-      createdAt: item?.createdAt ?? now,
-      updatedAt: now,
-      active: item?.active ?? true,
-      consumePerUse: consumeValue,
-      linkedServiceIds: linked,
-    ));
-  }
-
-  Future<void> _showMovementDialog(
-      BuildContext context, InventoryItem item, String type) async {
-    final quantity = TextEditingController();
-    final unitCost = TextEditingController(text: item.unitCost.toString());
-    final reason = TextEditingController();
-    final labels = {
-      'purchase': 'شراء وإضافة للمخزون',
-      'usage': 'صرف يدوي',
-      'waste': 'هدر أو تلف',
-      'adjustment': 'جرد وتصحيح الرصيد',
-    };
-    final unitLabel =
-        _units.where((u) => u.$1 == item.unit).map((u) => u.$2).firstOrNull ??
-            item.unit;
-
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (ctx) {
-        return ControllerScope(
-          controllers: [quantity, unitCost, reason],
-          builder: (ctx) => Padding(
-            padding: EdgeInsets.only(
-              left: 20,
-              right: 20,
-              top: 8,
-              bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  labels[type] ?? 'حركة مخزون',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w800),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${item.name} · الرصيد: ${item.quantity.toStringAsFixed(2)} $unitLabel',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: quantity,
-                  autofocus: true,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(
-                    labelText: type == 'adjustment'
-                        ? 'الرصيد الفعلي بعد الجرد'
-                        : 'الكمية ($unitLabel)',
-                    border: const OutlineInputBorder(),
-                  ),
-                ),
-                if (type == 'purchase') ...[
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: unitCost,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'تكلفة الوحدة (تحدّث آخر شراء)',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                TextField(
-                  controller: reason,
-                  maxLines: 2,
-                  decoration: InputDecoration(
-                    labelText: type == 'purchase'
-                        ? 'ملاحظة (اختياري)'
-                        : 'السبب (مطلوب)',
-                    border: const OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                FilledButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(48),
-                  ),
-                  child: const Text('تسجيل'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('إلغاء'),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-
-    final quantityValue =
-        double.tryParse(quantity.text.replaceAll(',', '.')) ?? 0;
-    final costValue =
-        double.tryParse(unitCost.text.replaceAll(',', '.')) ?? item.unitCost;
-    final reasonValue = reason.text.trim();
-    if (saved != true || !context.mounted || quantityValue < 0) return;
-    if (type != 'purchase' && reasonValue.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('السبب مطلوب لصرف / هدر / جرد')),
-      );
-      return;
-    }
     try {
-      await context.read<BusinessToolsProvider>().applyInventoryMovement(
-            InventoryMovement(
-              id: const Uuid().v4(),
-              itemId: item.id,
-              type: type,
-              quantity: quantityValue,
-              unitCost: costValue,
-              reason: reasonValue,
-              createdAt: DateTime.now(),
-            ),
-          );
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم تسجيل حركة المخزون')),
-        );
+      if (item == null) {
+        await tools.createInventoryItem(draft, openingQty: draft.quantity);
+      } else {
+        await tools.saveInventoryItem(draft);
       }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(item == null ? 'تمت إضافة المادة' : 'تم تحديث المادة'),
+        ),
+      );
     } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error.toString().replaceFirst('Bad state: ', '')),
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Bad state: ', '')),
+        ),
+      );
     }
   }
 
-  String _catLabel(String code) =>
-      _categories.where((c) => c.$1 == code).map((c) => c.$2).firstOrNull ??
-      code;
+  Future<void> _delete(InventoryItem item) async {
+    final tools = context.read<BusinessToolsProvider>();
+    final hasMoves = tools.inventoryMovements.any((m) => m.itemId == item.id);
+    final ok = await confirmDelete(
+      context,
+      title: 'حذف / تعطيل المادة؟',
+      message: hasMoves || item.quantity > 0
+          ? 'المادة لها رصيد أو حركات، لذا ستُعطَّل بدل حذفها للحفاظ على السجل.'
+          : 'سيتم حذف «${item.name}» من المخزون.',
+    );
+    if (!ok || !mounted) return;
+    try {
+      await tools.deleteInventoryItem(item.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حذف / تعطيل المادة')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Bad state: ', '')),
+        ),
+      );
+    }
+  }
 
-  String _unitLabel(String code) =>
-      _units.where((u) => u.$1 == code).map((u) => u.$2).firstOrNull ?? code;
+  List<InventoryItem> _filtered(List<InventoryItem> items) {
+    final query = _query.trim().toLowerCase();
+    return items.where((item) {
+      final matchesQuery = query.isEmpty ||
+          item.name.toLowerCase().contains(query) ||
+          item.sku.toLowerCase().contains(query) ||
+          item.barcode.contains(query) ||
+          item.brand.toLowerCase().contains(query) ||
+          item.supplier.toLowerCase().contains(query);
+      if (!matchesQuery) return false;
+      return switch (_filter) {
+        _StockFilter.all => true,
+        _StockFilter.low => item.lowStock,
+        _StockFilter.out => item.outOfStock,
+        _StockFilter.expiring => item.isExpired || item.expiringSoon,
+        _StockFilter.inactive => !item.active,
+      };
+    }).toList()
+      ..sort((a, b) {
+        if (a.active != b.active) return a.active ? -1 : 1;
+        return a.name.compareTo(b.name);
+      });
+  }
 
   @override
   Widget build(BuildContext context) {
     final tools = context.watch<BusinessToolsProvider>();
     final currency = context.watch<ShopProvider>().settings?.currency ?? 'SAR';
     final items = tools.inventory;
-    final active = items.where((i) => i.active).toList();
+    final health = InventoryAnalytics.health(items);
+    final restock = InventoryAnalytics.restockSuggestions(items);
+    final shown = _filtered(items);
+    final names = {for (final item in items) item.id: item.name};
+    final recent = tools.inventoryMovements.take(8).toList();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('المخزون'),
         actions: [
+          IconButton(
+            tooltip: 'تقارير المخزون',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const InventoryReportsScreen()),
+            ),
+            icon: const Icon(Icons.insights_outlined),
+          ),
           IconButton(
             tooltip: 'الجرد',
             onPressed: () => Navigator.push(
@@ -500,24 +143,78 @@ class InventoryTab extends StatelessWidget {
           ),
           IconButton(
             tooltip: 'إضافة مادة',
-            onPressed: () => _showItemDialog(context),
+            onPressed: () => _openEditor(),
             icon: const Icon(Icons.add_box_outlined),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'inventory_main_fab',
-        onPressed: () => _showItemDialog(context),
+        onPressed: () => _openEditor(),
         icon: const Icon(Icons.add),
         label: const Text('مادة'),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
         children: [
-          _SummaryCard(items: active, currency: currency),
-          const SizedBox(height: 16),
+          _SummaryCard(health: health, currency: currency),
+          if (restock.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _RestockBanner(
+              count: restock.length,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const InventoryReportsScreen(),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          TextField(
+            controller: _search,
+            onChanged: (value) => setState(() => _query = value),
+            decoration: InputDecoration(
+              hintText: 'ابحث بالاسم أو SKU أو الباركود أو المورد',
+              prefixIcon: const Icon(Icons.search_rounded),
+              border: const OutlineInputBorder(),
+              isDense: true,
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'مسح البحث',
+                      onPressed: () {
+                        _search.clear();
+                        setState(() => _query = '');
+                      },
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              _filterChip(
+                  _StockFilter.all, 'الكل', items.length, Colors.blueGrey),
+              _filterChip(_StockFilter.low, 'تحت الحد', health.lowStock,
+                  Colors.orange.shade800),
+              _filterChip(_StockFilter.out, 'نافد', health.outOfStock,
+                  Colors.red.shade700),
+              _filterChip(
+                _StockFilter.expiring,
+                'الصلاحية',
+                health.expiringSoon + health.expired,
+                Colors.deepOrange.shade700,
+              ),
+              _filterChip(_StockFilter.inactive, 'معطّل', health.inactive,
+                  Colors.grey.shade700),
+            ],
+          ),
+          const SizedBox(height: 14),
           Text(
-            'المواد',
+            'المواد (${shown.length})',
             style: Theme.of(context)
                 .textTheme
                 .titleMedium
@@ -525,22 +222,23 @@ class InventoryTab extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           if (items.isEmpty)
+            _EmptyInventory(onAdd: _openEditor)
+          else if (shown.isEmpty)
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
-                    Icon(Icons.inventory_2_outlined,
-                        size: 48, color: Colors.grey.shade400),
-                    const SizedBox(height: 12),
+                    Icon(Icons.search_off_rounded,
+                        size: 44, color: Colors.grey.shade400),
+                    const SizedBox(height: 10),
                     const Text(
-                      'لا مواد بعد',
+                      'لا نتائج مطابقة',
                       style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'أضف شامبو، صبغة، شفرات… ثم سجّل الشراء والصرف',
-                      textAlign: TextAlign.center,
+                      'جرّب بحثاً آخر أو أزل الفلاتر.',
                       style: TextStyle(color: Colors.grey.shade600),
                     ),
                   ],
@@ -548,165 +246,194 @@ class InventoryTab extends StatelessWidget {
               ),
             )
           else
-            ...items.map((item) {
-              final unitL = _unitLabel(item.unit);
-              Color? badgeColor;
-              String? badgeText;
-              if (!item.active) {
-                badgeText = 'معطّل';
-                badgeColor = Colors.grey;
-              } else if (item.outOfStock) {
-                badgeText = 'نافد';
-                badgeColor = Colors.red;
-              } else if (item.lowStock) {
-                badgeText = 'تحت الحد';
-                badgeColor = Colors.orange;
-              }
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  leading: CircleAvatar(
-                    backgroundColor:
-                        (badgeColor ?? Theme.of(context).colorScheme.primary)
-                            .withOpacity(0.12),
-                    child: Icon(
-                      Icons.inventory_2_outlined,
-                      color:
-                          badgeColor ?? Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  title: Text(item.name,
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${item.quantity.toStringAsFixed(2)} $unitL'
-                          '  ·  ${_catLabel(item.category)}'
-                          '  ·  ${item.stockValue.toStringAsFixed(0)} $currency',
-                        ),
-                        if (badgeText != null) ...[
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: badgeColor!.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              badgeText,
-                              style: TextStyle(
-                                color: badgeColor,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  isThreeLine: badgeText != null,
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (value) async {
-                      if (value == 'edit') {
-                        await _showItemDialog(context, item: item);
-                      } else if (value == 'delete') {
-                        final ok = await confirmDelete(
-                          context,
-                          title: 'حذف المادة؟',
-                          message: 'سيتم حذف «${item.name}» من المخزون.',
-                        );
-                        if (ok && context.mounted) {
-                          await context
-                              .read<BusinessToolsProvider>()
-                              .deleteInventoryItem(item.id);
-                        }
-                      } else {
-                        await _showMovementDialog(context, item, value);
-                      }
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'purchase', child: Text('شراء')),
-                      PopupMenuItem(value: 'usage', child: Text('صرف')),
-                      PopupMenuItem(value: 'waste', child: Text('هدر')),
-                      PopupMenuItem(value: 'adjustment', child: Text('جرد')),
-                      PopupMenuDivider(),
-                      PopupMenuItem(value: 'edit', child: Text('تعديل')),
-                      PopupMenuItem(
-                          value: 'delete', child: Text('حذف / تعطيل')),
-                    ],
+            ...shown.map(
+              (item) => _InventoryTile(
+                item: item,
+                currency: currency,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => InventoryItemScreen(item: item),
                   ),
                 ),
-              );
-            }),
-          if (tools.inventoryMovements.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            Text(
-              'آخر الحركات',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w800),
+                onEdit: () => _openEditor(item: item),
+                onDelete: () => _delete(item),
+                onMovement: (type) => showInventoryMovementSheet(
+                  context,
+                  item: item,
+                  type: type,
+                ),
+              ),
             ),
-            const SizedBox(height: 8),
-            ...tools.inventoryMovements.take(25).map((m) {
-              final item = items.where((x) => x.id == m.itemId).firstOrNull;
-              final sign = m.type == 'purchase'
-                  ? '+'
-                  : m.type == 'adjustment'
-                      ? '↔'
-                      : '−';
-              return Card(
-                child: ListTile(
-                  dense: true,
-                  leading: Icon(
-                    m.type == 'purchase'
-                        ? Icons.add_circle_outline
-                        : Icons.remove_circle_outline,
-                    color: m.type == 'purchase'
-                        ? Colors.green
-                        : Colors.orange.shade800,
-                  ),
-                  title: Text(
-                      '${item?.name ?? 'مادة'}  $sign${m.quantity.toStringAsFixed(2)}'),
-                  subtitle: Text(
-                    '${m.reason.isEmpty ? _moveLabel(m.type) : m.reason}'
-                    '${m.balanceAfter != null ? '  → ${m.balanceAfter!.toStringAsFixed(2)}' : ''}',
+          if (recent.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'آخر الحركات',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w800),
                   ),
                 ),
-              );
-            }),
+                TextButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const InventoryReportsScreen(),
+                    ),
+                  ),
+                  child: const Text('التقارير'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            ...recent.map(
+              (movement) => _RecentMovement(
+                movement: movement,
+                itemName: names[movement.itemId] ?? 'مادة',
+                currency: currency,
+              ),
+            ),
           ],
         ],
       ),
     );
   }
 
-  String _moveLabel(String type) => switch (type) {
-        'purchase' => 'شراء',
-        'usage' => 'صرف',
-        'waste' => 'هدر',
-        'adjustment' => 'جرد',
-        _ => 'حركة',
-      };
+  Widget _filterChip(
+    _StockFilter filter,
+    String label,
+    int count,
+    Color color,
+  ) {
+    final selected = _filter == filter;
+    return ChoiceChip(
+      label: Text(count > 0 ? '$label ($count)' : label),
+      selected: selected,
+      selectedColor: color.withOpacity(0.15),
+      labelStyle: TextStyle(
+        fontSize: 12,
+        color: selected ? color : null,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+      ),
+      onSelected: (_) => setState(() => _filter = filter),
+    );
+  }
+}
+
+class _InventoryTile extends StatelessWidget {
+  const _InventoryTile({
+    required this.item,
+    required this.currency,
+    required this.onTap,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onMovement,
+  });
+
+  final InventoryItem item;
+  final String currency;
+  final VoidCallback onTap;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final void Function(String type) onMovement;
+
+  @override
+  Widget build(BuildContext context) {
+    final unit = inventoryUnitLabel(item.unit);
+    final status = _status(item);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        onTap: onTap,
+        leading: CircleAvatar(
+          backgroundColor: status.$2.withOpacity(0.12),
+          child: Icon(Icons.inventory_2_outlined, color: status.$2),
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                item.name,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: status.$2.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: Text(
+                status.$1,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: status.$2,
+                ),
+              ),
+            ),
+          ],
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            '${_formatQty(item.quantity)} $unit'
+            '  ·  ${inventoryCategoryLabel(item.category)}'
+            '  ·  ${_money(item.stockValue)} $currency'
+            '${item.expiresAt != null ? '  ·  تنتهي ${_date(item.expiresAt!)}' : ''}',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+          ),
+        ),
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) {
+            switch (value) {
+              case 'edit':
+                onEdit();
+              case 'delete':
+                onDelete();
+              case 'stocktake':
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const StocktakeScreen()),
+                );
+              default:
+                onMovement(value);
+            }
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'purchase', child: Text('شراء')),
+            PopupMenuItem(value: 'usage', child: Text('صرف')),
+            PopupMenuItem(value: 'waste', child: Text('هدر')),
+            PopupMenuItem(value: 'damage', child: Text('تلف')),
+            PopupMenuItem(value: 'adjustment', child: Text('جرد')),
+            PopupMenuItem(value: 'expiry', child: Text('إتلاف منتهي')),
+            PopupMenuDivider(),
+            PopupMenuItem(value: 'edit', child: Text('تعديل')),
+            PopupMenuItem(value: 'stocktake', child: Text('جرد شامل')),
+            PopupMenuItem(value: 'delete', child: Text('حذف / تعطيل')),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.items, required this.currency});
-  final List<InventoryItem> items;
+  const _SummaryCard({required this.health, required this.currency});
+
+  final InventoryHealth health;
   final String currency;
 
   @override
   Widget build(BuildContext context) {
-    final value = items.fold<double>(0, (s, i) => s + i.stockValue);
-    final low = items.where((i) => i.lowStock).length;
-    final out = items.where((i) => i.outOfStock).length;
     final scheme = Theme.of(context).colorScheme;
     return Card(
       elevation: 0,
@@ -720,9 +447,15 @@ class _SummaryCard extends StatelessWidget {
               children: [
                 Icon(Icons.analytics_outlined, color: scheme.primary),
                 const SizedBox(width: 8),
-                const Text(
-                  'ملخص المخزون',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                const Expanded(
+                  child: Text(
+                    'ملخص المخزون',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                  ),
+                ),
+                Text(
+                  '${health.activeItems} نشط',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                 ),
               ],
             ),
@@ -735,15 +468,19 @@ class _SummaryCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                    child: _metric('أصناف', '${items.length}', scheme.primary)),
+                    child: _metric(
+                        'أصناف', '${health.activeItems}', scheme.primary)),
                 Expanded(
                     child: _metric(
                         'القيمة',
-                        '${value.toStringAsFixed(0)} $currency',
+                        '${_money(health.totalValue)} $currency',
                         Colors.teal.shade700)),
                 Expanded(
-                    child: _metric('تحت الحد', '$low', Colors.orange.shade800)),
-                Expanded(child: _metric('نافد', '$out', Colors.red.shade700)),
+                    child: _metric('تحت الحد', '${health.lowStock}',
+                        Colors.orange.shade800)),
+                Expanded(
+                    child: _metric(
+                        'نافد', '${health.outOfStock}', Colors.red.shade700)),
               ],
             ),
           ],
@@ -757,6 +494,8 @@ class _SummaryCard extends StatelessWidget {
       children: [
         Text(value,
             textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
                 fontWeight: FontWeight.w800, fontSize: 15, color: color)),
         const SizedBox(height: 2),
@@ -767,3 +506,159 @@ class _SummaryCard extends StatelessWidget {
     );
   }
 }
+
+class _RestockBanner extends StatelessWidget {
+  const _RestockBanner({required this.count, required this.onTap});
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.orange.shade50,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Icon(Icons.shopping_cart_outlined,
+                  size: 20, color: Colors.orange.shade800),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '$count مادة تحتاج شراءً — اعرض القائمة المقترحة',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.orange.shade900,
+                  ),
+                ),
+              ),
+              Icon(Icons.chevron_left_rounded,
+                  size: 18, color: Colors.orange.shade800),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RecentMovement extends StatelessWidget {
+  const _RecentMovement({
+    required this.movement,
+    required this.itemName,
+    required this.currency,
+  });
+
+  final InventoryMovement movement;
+  final String itemName;
+  final String currency;
+
+  @override
+  Widget build(BuildContext context) {
+    final isIn = movement.signedDelta > 0;
+    final color = movement.type == 'adjustment'
+        ? Colors.blueGrey
+        : isIn
+            ? Colors.green.shade700
+            : Colors.orange.shade800;
+    final sign = movement.type == 'adjustment'
+        ? '↔'
+        : isIn
+            ? '+'
+            : '−';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 6),
+      child: ListTile(
+        dense: true,
+        leading: Icon(
+          movement.type == 'purchase'
+              ? Icons.add_circle_outline
+              : movement.type == 'adjustment'
+                  ? Icons.swap_vert_rounded
+                  : Icons.remove_circle_outline,
+          color: color,
+        ),
+        title: Text(
+          '$itemName  $sign${_formatQty(movement.quantity)}'
+          '${movement.quantity * movement.unitCost > 0 ? '  ·  ${_money(movement.quantity * movement.unitCost)} $currency' : ''}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(
+          '${inventoryMovementLabel(movement.type)}'
+          '${movement.reason.isEmpty ? '' : ' · ${movement.reason}'}'
+          '${movement.balanceAfter != null ? '  →  ${_formatQty(movement.balanceAfter!)}' : ''}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyInventory extends StatelessWidget {
+  const _EmptyInventory({required this.onAdd});
+
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Icon(Icons.inventory_2_outlined,
+                size: 48, color: Colors.grey.shade400),
+            const SizedBox(height: 12),
+            const Text(
+              'لا مواد بعد',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'أضف شامبو، صبغة، شفرات… ثم سجّل الشراء والصرف والجرد.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add),
+              label: const Text('إضافة أول مادة'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+(String, Color) _status(InventoryItem item) {
+  if (!item.active) return ('معطّل', Colors.grey);
+  if (item.quantity <= 0) return ('نافد', Colors.red.shade700);
+  if (item.isExpired) return ('منتهي', Colors.red.shade700);
+  if (item.lowStock) return ('تحت الحد', Colors.orange.shade800);
+  if (item.expiringSoon) return ('قريب الانتهاء', Colors.orange.shade700);
+  return ('متوفر', Colors.green.shade700);
+}
+
+String _formatQty(double value) {
+  if (value == value.roundToDouble()) return value.toStringAsFixed(0);
+  return value.toStringAsFixed(2);
+}
+
+String _money(double value) {
+  if (value == value.roundToDouble()) return value.toStringAsFixed(0);
+  return value.toStringAsFixed(2);
+}
+
+String _date(DateTime value) =>
+    '${value.year}/${value.month.toString().padLeft(2, '0')}/'
+    '${value.day.toString().padLeft(2, '0')}';
