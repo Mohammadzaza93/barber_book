@@ -7,6 +7,7 @@ import '../../models/business_features.dart';
 import '../../providers/business_tools_provider.dart';
 import '../../providers/shop_provider.dart';
 import 'customer_editor.dart';
+import 'customer_profile_screen.dart';
 
 class CustomerManagementTab extends StatefulWidget {
   const CustomerManagementTab({super.key});
@@ -26,16 +27,33 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
   }
 
   Future<void> _openEditor({CustomerProfile? existing}) async {
-    await showCustomerEditor(context, existing: existing);
+    final saved = await showCustomerEditor(context, existing: existing);
+    if (!mounted || saved == null || existing != null) return;
+    // بعد تسجيل زبون جديد، افتح صفحته مباشرة ليرى سجله وتحليله.
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CustomerProfileScreen(customer: saved),
+      ),
+    );
   }
+
+  Future<void> _openProfile(CustomerProfile customer) => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CustomerProfileScreen(customer: customer),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
     final tools = context.watch<BusinessToolsProvider>();
     final shop = context.watch<ShopProvider>();
-    final threshold =
-        tools.loyaltyRules.where((r) => r.enabled).firstOrNull?.inactiveAfterDays ??
-            45;
+    final threshold = tools.loyaltyRules
+            .where((r) => r.enabled)
+            .firstOrNull
+            ?.inactiveAfterDays ??
+        45;
     final query = _search.text.trim().toLowerCase();
     final customers = tools.customers.where((customer) {
       final matches = query.isEmpty ||
@@ -123,9 +141,12 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
                       final preferredServices = customer.preferredServiceIds
                           .map((id) => shop.serviceById(id)?.name ?? id)
                           .join(t(context).listSeparator);
-                      final preferredBarber = customer.preferredEmployeeId == null
+                      final preferredBarber = customer.preferredEmployeeId ==
+                              null
                           ? ''
-                          : shop.employeeById(customer.preferredEmployeeId!)?.name ??
+                          : shop
+                                  .employeeById(customer.preferredEmployeeId!)
+                                  ?.name ??
                               '';
                       final status = customer.visitCount == 0
                           ? t(context).customerStatusFirstVisit
@@ -135,12 +156,14 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
                                   ? t(context).customerStatusReturning
                                   : t(context).customerStatusSingleVisit;
                       final extra = [
-                        if (customer.area.isNotEmpty) 'المنطقة: ${customer.area}',
+                        if (customer.area.isNotEmpty)
+                          'المنطقة: ${customer.area}',
                         if (customer.allergies.isNotEmpty)
                           '⚠️ ${customer.allergies}',
                       ].join(' · ');
                       return Card(
                         child: ListTile(
+                          onTap: () => _openProfile(customer),
                           leading: CircleAvatar(
                             child: Text(customer.name.isEmpty
                                 ? '?'
@@ -199,6 +222,9 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
                           isThreeLine: true,
                           trailing: PopupMenuButton<String>(
                             onSelected: (value) async {
+                              if (value == 'history') {
+                                await _openProfile(customer);
+                              }
                               if (value == 'edit') {
                                 await _openEditor(existing: customer);
                               }
@@ -207,6 +233,9 @@ class _CustomerManagementTabState extends State<CustomerManagementTab> {
                               }
                             },
                             itemBuilder: (_) => [
+                              const PopupMenuItem(
+                                  value: 'history',
+                                  child: Text('السجل والتحليل')),
                               PopupMenuItem(
                                   value: 'edit',
                                   child: Text(t(context).menuEditProfile)),

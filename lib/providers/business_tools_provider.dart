@@ -32,6 +32,8 @@ typedef StocktakeRefresher = Future<Stocktake> Function({
 });
 typedef StocktakeDeleter = Future<void> Function(
     String shopId, String stocktakeId);
+typedef CustomerAppointmentLoader = Future<List<Appointment>> Function(
+    String shopId, String phone);
 
 class BusinessToolsProvider extends ChangeNotifier {
   BusinessToolsProvider({
@@ -40,6 +42,7 @@ class BusinessToolsProvider extends ChangeNotifier {
     StocktakePoster? postStocktake,
     StocktakeRefresher? refreshStocktakeExpected,
     StocktakeDeleter? deleteStocktake,
+    CustomerAppointmentLoader? loadCustomerAppointments,
   })  : _saveStocktake =
             saveStocktake ?? FirestoreInventory.instance.saveStocktake,
         _saveStocktakeCounts = saveStocktakeCounts ??
@@ -49,7 +52,9 @@ class BusinessToolsProvider extends ChangeNotifier {
         _refreshStocktakeExpected = refreshStocktakeExpected ??
             FirestoreInventory.instance.refreshStocktakeExpected,
         _deleteStocktake =
-            deleteStocktake ?? FirestoreInventory.instance.deleteStocktake;
+            deleteStocktake ?? FirestoreInventory.instance.deleteStocktake,
+        _loadCustomerAppointments = loadCustomerAppointments ??
+            FirestoreService.instance.findAppointmentsByPhone;
 
   String? _shopId;
   AppRole? _role;
@@ -60,6 +65,7 @@ class BusinessToolsProvider extends ChangeNotifier {
   final StocktakePoster _postStocktake;
   final StocktakeRefresher _refreshStocktakeExpected;
   final StocktakeDeleter _deleteStocktake;
+  final CustomerAppointmentLoader _loadCustomerAppointments;
 
   List<CustomerProfile> customers = [];
   List<LoyaltyAccount> loyalty = [];
@@ -152,6 +158,42 @@ class BusinessToolsProvider extends ChangeNotifier {
       FirestoreService.instance.saveCustomer(shopId, customer);
   Future<void> deleteCustomer(String id) =>
       FirestoreService.instance.deleteCustomer(shopId, id);
+
+  /// يحمّل سجل الزبون الكامل (كل السنوات) بدمج:
+  /// 1) المواعيد المحمّلة محلياً (نافذة قريبة) — تغطي صيغ الهاتف المختلفة.
+  /// 2) استعلام Firestore بالهاتف المعياري — يغطي التاريخ القديم.
+  ///
+  /// الدمج بالمعرّف يمنع تكرار الموعد، ويُرتّب تصاعدياً حسب الوقت.
+  Future<List<Appointment>> loadCustomerHistory(String phone) async {
+    final shop = _shopId;
+    if (shop == null || shop.isEmpty) {
+      throw StateError('لا يوجد محل مرتبط');
+    }
+    final normalized = normalizePhone(phone);
+    if (normalized.isEmpty) return const [];
+
+    final seenIds = <String>{};
+    final merged = <Appointment>[];
+    void addAll(Iterable<Appointment> appointments) {
+      for (final appointment in appointments) {
+        if (seenIds.add(appointment.id)) merged.add(appointment);
+      }
+    }
+
+    addAll(_appointments.where(
+      (a) => normalizePhone(a.customerPhone) == normalized,
+    ));
+
+    try {
+      addAll(await _loadCustomerAppointments(shop, normalized));
+    } on FirebaseException catch (e) {
+      // السجل الكامل ميزة إضافية؛ لا نُفشل الصفحة إذا مُنع الوصول.
+      if (e.code != 'permission-denied') rethrow;
+    }
+
+    merged.sort((a, b) => a.startTime.compareTo(b.startTime));
+    return merged;
+  }
 
   Future<void> saveLoyalty(LoyaltyAccount account) =>
       FirestoreService.instance.saveLoyalty(shopId, account);

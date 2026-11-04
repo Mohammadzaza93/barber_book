@@ -409,7 +409,7 @@ void main() {
         Stocktake(
           id: 'st1',
           lines: [
-            StocktakeLine(
+            const StocktakeLine(
               itemId: 'i1',
               itemName: 'Shampoo',
               expectedQty: 10,
@@ -441,7 +441,7 @@ void main() {
         Stocktake(
           id: 'st1',
           lines: [
-            StocktakeLine(
+            const StocktakeLine(
               itemId: 'i1',
               itemName: 'Shampoo',
               expectedQty: 10,

@@ -10,7 +10,8 @@ String normalizeCustomerPhone(String value) =>
     value.replaceAll(RegExp(r'[^0-9+]'), '');
 
 /// حوار إضافة/تعديل عميل بالحقول الموسّعة.
-Future<void> showCustomerEditor(
+/// يرجع البيانات المحفوظة عند النجاح، أو null عند الإلغاء.
+Future<CustomerProfile?> showCustomerEditor(
   BuildContext context, {
   CustomerProfile? existing,
 }) async {
@@ -147,17 +148,16 @@ Future<void> showCustomerEditor(
                     for (final o in sourceOptions)
                       DropdownMenuItem(value: o.$1, child: Text(o.$2)),
                   ],
-                  onChanged: (v) =>
-                      setState(() => acquisitionSource = v ?? ''),
+                  onChanged: (v) => setState(() => acquisitionSource = v ?? ''),
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String?>(
                   value: preferredEmployeeId != null &&
-                          shop.employees
-                              .any((e) => e.id == preferredEmployeeId)
+                          shop.employees.any((e) => e.id == preferredEmployeeId)
                       ? preferredEmployeeId
                       : null,
-                  decoration: const InputDecoration(labelText: 'الحلاق المفضّل'),
+                  decoration:
+                      const InputDecoration(labelText: 'الحلاق المفضّل'),
                   items: [
                     const DropdownMenuItem<String?>(
                         value: null, child: Text('—')),
@@ -242,11 +242,11 @@ Future<void> showCustomerEditor(
       ),
     ),
   );
-  if (saved != true || !context.mounted) return;
+  if (saved != true || !context.mounted) return null;
   final tools = context.read<BusinessToolsProvider>();
   final normalizedPhone = normalizeCustomerPhone(phone.text);
   final now = DateTime.now();
-  await tools.saveCustomer(CustomerProfile(
+  final profile = CustomerProfile(
     id: existing?.id ?? normalizedPhone,
     name: name.text.trim(),
     phone: normalizedPhone,
@@ -271,5 +271,7 @@ Future<void> showCustomerEditor(
     marketingOptIn: marketingOptIn,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
-  ));
+  );
+  await tools.saveCustomer(profile);
+  return profile;
 }

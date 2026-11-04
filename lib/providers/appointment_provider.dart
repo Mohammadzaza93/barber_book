@@ -95,10 +95,8 @@ class AppointmentProvider extends ChangeNotifier {
 
   Future<void> _persistCache(String shopId, List<Appointment> list) async {
     try {
-      final payload = list
-          .take(300)
-          .map((a) => a.toMap()..['id'] = a.id)
-          .toList();
+      final payload =
+          list.take(300).map((a) => a.toMap()..['id'] = a.id).toList();
       await LocalCache.instance.putJson(
         LocalCache.instance.shopKey(shopId, 'appointments'),
         payload,
@@ -171,8 +169,8 @@ class AppointmentProvider extends ChangeNotifier {
       final sameChair = chairId != null &&
           existing.chairId != null &&
           existing.chairId == chairId;
-      final overlaps = start.isBefore(existing.endTime) &&
-          end.isAfter(existing.startTime);
+      final overlaps =
+          start.isBefore(existing.endTime) && end.isAfter(existing.startTime);
       return overlaps && (sameEmployee || sameChair);
     });
   }
@@ -206,6 +204,9 @@ class AppointmentProvider extends ChangeNotifier {
     final db = FirebaseFirestore.instance;
     final col = db.collection('shops').doc(shopId).collection('appointments');
     final ref = col.doc();
+    // صيغة موحّدة حتى يطابق سجل الزبون (المعرّف = الهاتف المعياري).
+    final normalizedPhone =
+        (customerPhone ?? '').replaceAll(RegExp(r'[^0-9+]'), '');
 
     final windowStart = start.subtract(const Duration(hours: 12));
     final windowEnd = end.add(const Duration(hours: 12));
@@ -243,7 +244,7 @@ class AppointmentProvider extends ChangeNotifier {
         'shopId': shopId,
         'reference': 'APT-$refNum',
         'customerName': customerName,
-        'customerPhone': customerPhone ?? '',
+        'customerPhone': normalizedPhone,
         'customerEmail': customerEmail ?? '',
         'employeeId': employeeId,
         'chairId': chairId,
