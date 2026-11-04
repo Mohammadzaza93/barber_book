@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../models/business_features.dart';
 import '../../providers/business_tools_provider.dart';
 import '../../widgets/confirm_dialogs.dart';
+import '../../widgets/controller_scope.dart';
 import '../../providers/shop_provider.dart';
 import 'stocktake_screen.dart';
 
@@ -62,231 +63,235 @@ class InventoryTab extends StatelessWidget {
       useSafeArea: true,
       showDragHandle: true,
       builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 8,
-            bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20,
-          ),
-          child: StatefulBuilder(
-            builder: (context, setLocal) {
-              return Form(
-                key: formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        item == null ? 'مادة جديدة' : 'تعديل المادة',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: name,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: 'اسم المادة',
-                          prefixIcon: Icon(Icons.label_outline),
-                          border: OutlineInputBorder(),
+        return ControllerScope(
+          controllers: [name, supplier, quantity, cost, consumeCtrl, reorder],
+          builder: (ctx) => Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 8,
+              bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20,
+            ),
+            child: StatefulBuilder(
+              builder: (context, setLocal) {
+                return Form(
+                  key: formKey,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          item == null ? 'مادة جديدة' : 'تعديل المادة',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                          textAlign: TextAlign.center,
                         ),
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        value: category,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'التصنيف',
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 14),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: name,
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(
+                            labelText: 'اسم المادة',
+                            prefixIcon: Icon(Icons.label_outline),
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (v) =>
+                              (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
                         ),
-                        items: [
-                          for (final c in _categories)
-                            DropdownMenuItem(
-                              value: c.$1,
-                              child: Text(
-                                c.$2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                        ],
-                        onChanged: (v) =>
-                            setLocal(() => category = v ?? 'general'),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              value: unit,
-                              isExpanded: true,
-                              decoration: const InputDecoration(
-                                labelText: 'الوحدة',
-                                border: OutlineInputBorder(),
-                                contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 14),
-                              ),
-                              items: [
-                                for (final u in _units)
-                                  DropdownMenuItem(
-                                    value: u.$1,
-                                    child: Text(
-                                      u.$2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                              ],
-                              onChanged: (v) =>
-                                  setLocal(() => unit = v ?? 'piece'),
-                            ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          value: category,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'التصنيف',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 14),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextFormField(
-                              controller: quantity,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                      decimal: true),
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(
-                                    RegExp(r'[0-9.,]')),
-                              ],
-                              decoration: const InputDecoration(
-                                labelText: 'الكمية الحالية',
-                                border: OutlineInputBorder(),
+                          items: [
+                            for (final c in _categories)
+                              DropdownMenuItem(
+                                value: c.$1,
+                                child: Text(
+                                  c.$2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                              controller: cost,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                      decimal: true),
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(
-                                    RegExp(r'[0-9.,]')),
-                              ],
-                              decoration: const InputDecoration(
-                                labelText: 'تكلفة الوحدة',
-                                helperText: 'آخر شراء',
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextFormField(
-                              controller: reorder,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                      decimal: true),
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(
-                                    RegExp(r'[0-9.,]')),
-                              ],
-                              decoration: const InputDecoration(
-                                labelText: 'حد إعادة الطلب',
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: consumeCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: 'استهلاك لكل خدمة (اختياري)',
-                          helperText: 'يُخصم تلقائياً عند تحصيل خدمة مرتبطة',
-                          border: OutlineInputBorder(),
+                          ],
+                          onChanged: (v) =>
+                              setLocal(() => category = v ?? 'general'),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Builder(builder: (ctx) {
-                        final services = ctx
-                            .watch<ShopProvider>()
-                            .services
-                            .where((s) => s.active)
-                            .toList();
-                        if (services.isEmpty) {
-                          return const SizedBox.shrink();
-                        }
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        const SizedBox(height: 12),
+                        Row(
                           children: [
-                            const Text('ربط بخدمات (للاستهلاك التلقائي)',
-                                style: TextStyle(fontWeight: FontWeight.w700)),
-                            const SizedBox(height: 6),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 4,
-                              children: [
-                                for (final s in services)
-                                  FilterChip(
-                                    label: Text(s.name),
-                                    selected: linked.contains(s.id),
-                                    onSelected: (v) => setLocal(() {
-                                      if (v) {
-                                        linked = [...linked, s.id];
-                                      } else {
-                                        linked = linked
-                                            .where((x) => x != s.id)
-                                            .toList();
-                                      }
-                                    }),
-                                  ),
-                              ],
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                value: unit,
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'الوحدة',
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 14),
+                                ),
+                                items: [
+                                  for (final u in _units)
+                                    DropdownMenuItem(
+                                      value: u.$1,
+                                      child: Text(
+                                        u.$2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                ],
+                                onChanged: (v) =>
+                                    setLocal(() => unit = v ?? 'piece'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: quantity,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                        decimal: true),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                      RegExp(r'[0-9.,]')),
+                                ],
+                                decoration: const InputDecoration(
+                                  labelText: 'الكمية الحالية',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
                             ),
                           ],
-                        );
-                      }),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: supplier,
-                        decoration: const InputDecoration(
-                          labelText: 'المورد (اختياري)',
-                          prefixIcon: Icon(Icons.local_shipping_outlined),
-                          border: OutlineInputBorder(),
                         ),
-                      ),
-                      const SizedBox(height: 20),
-                      FilledButton.icon(
-                        onPressed: () {
-                          if (formKey.currentState?.validate() ?? false) {
-                            Navigator.pop(ctx, true);
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: cost,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                        decimal: true),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                      RegExp(r'[0-9.,]')),
+                                ],
+                                decoration: const InputDecoration(
+                                  labelText: 'تكلفة الوحدة',
+                                  helperText: 'آخر شراء',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: reorder,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                        decimal: true),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                      RegExp(r'[0-9.,]')),
+                                ],
+                                decoration: const InputDecoration(
+                                  labelText: 'حد إعادة الطلب',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: consumeCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          decoration: const InputDecoration(
+                            labelText: 'استهلاك لكل خدمة (اختياري)',
+                            helperText: 'يُخصم تلقائياً عند تحصيل خدمة مرتبطة',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Builder(builder: (ctx) {
+                          final services = ctx
+                              .watch<ShopProvider>()
+                              .services
+                              .where((s) => s.active)
+                              .toList();
+                          if (services.isEmpty) {
+                            return const SizedBox.shrink();
                           }
-                        },
-                        icon: const Icon(Icons.check_rounded),
-                        label: const Text('حفظ'),
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(48),
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('ربط بخدمات (للاستهلاك التلقائي)',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.w700)),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                children: [
+                                  for (final s in services)
+                                    FilterChip(
+                                      label: Text(s.name),
+                                      selected: linked.contains(s.id),
+                                      onSelected: (v) => setLocal(() {
+                                        if (v) {
+                                          linked = [...linked, s.id];
+                                        } else {
+                                          linked = linked
+                                              .where((x) => x != s.id)
+                                              .toList();
+                                        }
+                                      }),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          );
+                        }),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: supplier,
+                          decoration: const InputDecoration(
+                            labelText: 'المورد (اختياري)',
+                            prefixIcon: Icon(Icons.local_shipping_outlined),
+                            border: OutlineInputBorder(),
+                          ),
                         ),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('إلغاء'),
-                      ),
-                    ],
+                        const SizedBox(height: 20),
+                        FilledButton.icon(
+                          onPressed: () {
+                            if (formKey.currentState?.validate() ?? false) {
+                              Navigator.pop(ctx, true);
+                            }
+                          },
+                          icon: const Icon(Icons.check_rounded),
+                          label: const Text('حفظ'),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('إلغاء'),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         );
       },
@@ -299,15 +304,6 @@ class InventoryTab extends StatelessWidget {
     final costValue = double.tryParse(cost.text.replaceAll(',', '.')) ?? 0;
     final reorderValue =
         double.tryParse(reorder.text.replaceAll(',', '.')) ?? 0;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      name.dispose();
-      supplier.dispose();
-      quantity.dispose();
-      cost.dispose();
-      reorder.dispose();
-      consumeCtrl.dispose();
-    });
 
     if (saved != true || !context.mounted || nameValue.isEmpty) return;
 
@@ -354,79 +350,83 @@ class InventoryTab extends StatelessWidget {
       useSafeArea: true,
       showDragHandle: true,
       builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 8,
-            bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                labels[type] ?? 'حركة مخزون',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w800),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${item.name} · الرصيد: ${item.quantity.toStringAsFixed(2)} $unitLabel',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: quantity,
-                autofocus: true,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                  labelText: type == 'adjustment'
-                      ? 'الرصيد الفعلي بعد الجرد'
-                      : 'الكمية ($unitLabel)',
-                  border: const OutlineInputBorder(),
+        return ControllerScope(
+          controllers: [quantity, unitCost, reason],
+          builder: (ctx) => Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 8,
+              bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  labels[type] ?? 'حركة مخزون',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                  textAlign: TextAlign.center,
                 ),
-              ),
-              if (type == 'purchase') ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 4),
+                Text(
+                  '${item.name} · الرصيد: ${item.quantity.toStringAsFixed(2)} $unitLabel',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 16),
                 TextField(
-                  controller: unitCost,
+                  controller: quantity,
+                  autofocus: true,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'تكلفة الوحدة (تحدّث آخر شراء)',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: type == 'adjustment'
+                        ? 'الرصيد الفعلي بعد الجرد'
+                        : 'الكمية ($unitLabel)',
+                    border: const OutlineInputBorder(),
                   ),
                 ),
+                if (type == 'purchase') ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: unitCost,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'تكلفة الوحدة (تحدّث آخر شراء)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: reason,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    labelText: type == 'purchase'
+                        ? 'ملاحظة (اختياري)'
+                        : 'السبب (مطلوب)',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                  child: const Text('تسجيل'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('إلغاء'),
+                ),
               ],
-              const SizedBox(height: 12),
-              TextField(
-                controller: reason,
-                maxLines: 2,
-                decoration: InputDecoration(
-                  labelText:
-                      type == 'purchase' ? 'ملاحظة (اختياري)' : 'السبب (مطلوب)',
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
-                ),
-                child: const Text('تسجيل'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('إلغاء'),
-              ),
-            ],
+            ),
           ),
         );
       },
@@ -437,11 +437,6 @@ class InventoryTab extends StatelessWidget {
     final costValue =
         double.tryParse(unitCost.text.replaceAll(',', '.')) ?? item.unitCost;
     final reasonValue = reason.text.trim();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      quantity.dispose();
-      unitCost.dispose();
-      reason.dispose();
-    });
     if (saved != true || !context.mounted || quantityValue < 0) return;
     if (type != 'purchase' && reasonValue.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(

@@ -11,6 +11,7 @@ import '../../services/ops_helpers.dart';
 import '../../providers/shop_provider.dart';
 import 'queue_finish_payment.dart';
 import '../../widgets/confirm_dialogs.dart';
+import '../../widgets/controller_scope.dart';
 
 class ChairOperationsTab extends StatefulWidget {
   const ChairOperationsTab({super.key});
@@ -83,53 +84,65 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
     var active = existing?.active ?? true;
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(existing == null ? t(context).addChair : t(context).editChair),
-          content: Form(
-            key: formKey,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(controller: number, decoration: InputDecoration(labelText: t(context).chairNumberField)),
-              TextFormField(
-                controller: name,
-                decoration: InputDecoration(labelText: t(context).chairNameField),
-                validator: (v) => v == null || v.trim().isEmpty ? t(context).required : null,
-              ),
-              DropdownButtonFormField<String>(
-                value: employeeId,
-                isExpanded: true,
-                decoration: InputDecoration(labelText: t(context).assignedBarberField),
-                items: shop.activeEmployees
-                    .map((e) => DropdownMenuItem(value: e.id, child: Text(e.name)))
-                    .toList(),
-                onChanged: (value) => setState(() => employeeId = value),
-              ),
-              SwitchListTile.adaptive(
-                contentPadding: EdgeInsets.zero,
-                title: Text(t(context).chairActive),
-                value: active,
-                onChanged: (value) => setState(() => active = value),
-              ),
-            ]),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: Text(t(context).cancel)),
-            FilledButton(
-              onPressed: () {
-                if (formKey.currentState?.validate() ?? false) Navigator.pop(context, true);
-              },
-              child: Text(t(context).save),
+      builder: (_) => ControllerScope(
+        controllers: [name, number],
+        builder: (_) => StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: Text(
+                existing == null ? t(context).addChair : t(context).editChair),
+            content: Form(
+              key: formKey,
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                TextField(
+                    controller: number,
+                    decoration: InputDecoration(
+                        labelText: t(context).chairNumberField)),
+                TextFormField(
+                  controller: name,
+                  decoration:
+                      InputDecoration(labelText: t(context).chairNameField),
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? t(context).required
+                      : null,
+                ),
+                DropdownButtonFormField<String>(
+                  value: employeeId,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                      labelText: t(context).assignedBarberField),
+                  items: shop.activeEmployees
+                      .map((e) =>
+                          DropdownMenuItem(value: e.id, child: Text(e.name)))
+                      .toList(),
+                  onChanged: (value) => setState(() => employeeId = value),
+                ),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(t(context).chairActive),
+                  value: active,
+                  onChanged: (value) => setState(() => active = value),
+                ),
+              ]),
             ),
-          ],
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(t(context).cancel)),
+              FilledButton(
+                onPressed: () {
+                  if (formKey.currentState?.validate() ?? false) {
+                    Navigator.pop(context, true);
+                  }
+                },
+                child: Text(t(context).save),
+              ),
+            ],
+          ),
         ),
       ),
     );
     final nameText = name.text.trim();
     final numberText = number.text.trim();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      name.dispose();
-      number.dispose();
-    });
     if (saved != true || !context.mounted) return;
     final tools = context.read<BusinessToolsProvider>();
     await tools.saveChair(Chair(
@@ -180,18 +193,22 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(entry.customerName, style: const TextStyle(fontWeight: FontWeight.w700)),
+              Text(entry.customerName,
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
               if (entry.customerPhone.isNotEmpty) Text(entry.customerPhone),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: chairId,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'الكرسي', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                    labelText: 'الكرسي', border: OutlineInputBorder()),
                 items: freeChairs
                     .map((c) => DropdownMenuItem(
                           value: c.id,
                           child: Text(
-                            c.number.trim().isEmpty ? c.name : '${c.number} — ${c.name}',
+                            c.number.trim().isEmpty
+                                ? c.name
+                                : '${c.number} — ${c.name}',
                             overflow: TextOverflow.ellipsis,
                           ),
                         ))
@@ -214,15 +231,20 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                     border: const OutlineInputBorder(),
                   ),
                   items: shop.activeEmployees
-                      .map((e) => DropdownMenuItem(value: e.id, child: Text(e.name)))
+                      .map((e) =>
+                          DropdownMenuItem(value: e.id, child: Text(e.name)))
                       .toList(),
                   onChanged: (v) => setLocal(() => employeeId = v),
                 ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t(context).cancel)),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('بدء')),
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(t(context).cancel)),
+            FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('بدء')),
           ],
         ),
       ),
@@ -253,8 +275,12 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
           'سيُعاد «${entry.customerName}» إلى الطابور ويُحرَّر الكرسي.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('إرجاع')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('إلغاء')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('إرجاع')),
         ],
       ),
     );
@@ -361,8 +387,8 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(selected.name,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w800)),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w800)),
                           const SizedBox(height: 4),
                           Text(
                             [
@@ -382,8 +408,7 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                             const SizedBox(height: 4),
                             Text('حساسية: ${selected.allergies}',
                                 style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.red.shade800)),
+                                    fontSize: 12, color: Colors.red.shade800)),
                           ],
                           Builder(builder: (ctx) {
                             final prefs = selected.preferredServiceIds;
@@ -422,8 +447,8 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                         border: const OutlineInputBorder(),
                       ),
                       items: shop.activeEmployees
-                          .map((e) =>
-                              DropdownMenuItem(value: e.id, child: Text(e.name)))
+                          .map((e) => DropdownMenuItem(
+                              value: e.id, child: Text(e.name)))
                           .toList(),
                       onChanged: (v) => setLocal(() => employeeId = v),
                     ),
@@ -484,8 +509,9 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
             !p.paidAt.isBefore(_weekStart) &&
             p.paidAt.isBefore(end))
         .toList();
-    final stored =
-        tools.weeklyProfits.where((r) => r.id == '${_weekId()}_${chair.id}').firstOrNull;
+    final stored = tools.weeklyProfits
+        .where((r) => r.id == '${_weekId()}_${chair.id}')
+        .firstOrNull;
     final revenue = appointments.fold<double>(0, (s, a) => s + a.totalAmount);
     final supplyCost = payments.fold<double>(0, (s, p) => s + p.materialCost);
     final workingMinutes = appointments.fold<int>(
@@ -511,8 +537,8 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
     final canManage = context.watch<AuthProvider>().canManageRules;
     final shop = context.watch<ShopProvider>();
     final currency = shop.settings?.currency ?? 'SAR';
-    final totalProfit =
-        tools.chairs.fold<double>(0, (sum, chair) => sum + _computedReport(tools, chair).profit);
+    final totalProfit = tools.chairs.fold<double>(
+        0, (sum, chair) => sum + _computedReport(tools, chair).profit);
     final busyCount = tools.chairs.where((c) {
       if (!c.active || c.onBreak) return false;
       return _activeOnChair(tools, c.id) != null;
@@ -521,14 +547,18 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
       if (!c.active || c.onBreak) return false;
       return _activeOnChair(tools, c.id) == null;
     }).length;
-    final waiting = tools.queue.where((e) => e.status == QueueStatus.waiting).toList()
-      ..sort((a, b) {
-        final p = b.priority.compareTo(a.priority);
-        if (p != 0) return p;
-        return a.joinedAt.compareTo(b.joinedAt);
-      });
-    final inService = tools.queue.where((e) => e.status == QueueStatus.inService).toList()
-      ..sort((a, b) => (a.startedAt ?? a.joinedAt).compareTo(b.startedAt ?? b.joinedAt));
+    final waiting =
+        tools.queue.where((e) => e.status == QueueStatus.waiting).toList()
+          ..sort((a, b) {
+            final p = b.priority.compareTo(a.priority);
+            if (p != 0) return p;
+            return a.joinedAt.compareTo(b.joinedAt);
+          });
+    final inService = tools.queue
+        .where((e) => e.status == QueueStatus.inService)
+        .toList()
+      ..sort((a, b) =>
+          (a.startedAt ?? a.joinedAt).compareTo(b.startedAt ?? b.joinedAt));
 
     return Scaffold(
       body: ListView(
@@ -566,7 +596,8 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
             Expanded(
               child: Text(
                 t(context).sectionChairsAndBarbers,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                style:
+                    const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
               ),
             ),
             if (canManage)
@@ -589,13 +620,19 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
               final kind = _floorKind(chair, active);
               final employee = chair.employeeId == null
                   ? null
-                  : shop.activeEmployees.where((e) => e.id == chair.employeeId).firstOrNull;
-              final barberOnService = active == null || active.employeeId.isEmpty
-                  ? null
-                  : shop.activeEmployees.where((e) => e.id == active.employeeId).firstOrNull;
+                  : shop.activeEmployees
+                      .where((e) => e.id == chair.employeeId)
+                      .firstOrNull;
+              final barberOnService =
+                  active == null || active.employeeId.isEmpty
+                      ? null
+                      : shop.activeEmployees
+                          .where((e) => e.id == active.employeeId)
+                          .firstOrNull;
               final statusColor = _statusColor(context, kind);
-              final sessionFrom =
-                  kind == ChairFloorKind.onBreak ? chair.breakStartedAt : active?.startedAt;
+              final sessionFrom = kind == ChairFloorKind.onBreak
+                  ? chair.breakStartedAt
+                  : active?.startedAt;
               return Card(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
@@ -617,18 +654,23 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(_chairLabel(context, chair),
-                                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 15)),
                               Text(
                                 employee == null
                                     ? t(context).chairUnassigned
-                                    : t(context).chairAssignedBarber(employee.name),
-                                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                                    : t(context)
+                                        .chairAssignedBarber(employee.name),
+                                style: TextStyle(
+                                    fontSize: 12, color: Colors.grey.shade700),
                               ),
                             ],
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: statusColor.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(20),
@@ -646,7 +688,8 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                           PopupMenuButton<String>(
                             onSelected: (value) async {
                               if (value == 'edit') {
-                                await _showChairDialog(context, existing: chair);
+                                await _showChairDialog(context,
+                                    existing: chair);
                               } else if (value == 'break') {
                                 await _toggleBreak(chair);
                               } else if (value == 'delete') {
@@ -660,12 +703,17 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                               }
                             },
                             itemBuilder: (_) => [
-                              PopupMenuItem(value: 'edit', child: Text(t(context).edit)),
+                              PopupMenuItem(
+                                  value: 'edit', child: Text(t(context).edit)),
                               PopupMenuItem(
                                 value: 'break',
-                                child: Text(chair.onBreak ? 'إنهاء الاستراحة' : 'استراحة'),
+                                child: Text(chair.onBreak
+                                    ? 'إنهاء الاستراحة'
+                                    : 'استراحة'),
                               ),
-                              PopupMenuItem(value: 'delete', child: Text(t(context).delete)),
+                              PopupMenuItem(
+                                  value: 'delete',
+                                  child: Text(t(context).delete)),
                             ],
                           ),
                       ]),
@@ -674,7 +722,9 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Row(children: [
@@ -684,8 +734,10 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                               child: Text(
                                 [
                                   active.customerName,
-                                  if (barberOnService != null) barberOnService.name,
-                                  if (sessionFrom != null) _durationLabel(sessionFrom),
+                                  if (barberOnService != null)
+                                    barberOnService.name,
+                                  if (sessionFrom != null)
+                                    _durationLabel(sessionFrom),
                                 ].join('  •  '),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -703,7 +755,8 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                         const SizedBox(height: 6),
                         Text(
                           'استراحة منذ ${_durationLabel(chair.breakStartedAt)}',
-                          style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.orange.shade900),
                         ),
                       ],
                     ],
@@ -713,7 +766,8 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
             }),
           const SizedBox(height: 16),
           Text(t(context).sectionChairProfit,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              style:
+                  const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
           Card(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -721,8 +775,8 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
-                    onPressed: () => setState(
-                        () => _weekStart = _weekStart.subtract(const Duration(days: 7))),
+                    onPressed: () => setState(() => _weekStart =
+                        _weekStart.subtract(const Duration(days: 7))),
                     icon: const Icon(Icons.chevron_right),
                   ),
                   Text(
@@ -730,8 +784,8 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   IconButton(
-                    onPressed: () => setState(
-                        () => _weekStart = _weekStart.add(const Duration(days: 7))),
+                    onPressed: () => setState(() =>
+                        _weekStart = _weekStart.add(const Duration(days: 7))),
                     icon: const Icon(Icons.chevron_left),
                   ),
                 ],
@@ -761,7 +815,8 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
           const SizedBox(height: 20),
           Row(children: [
             const Expanded(
-              child: Text('الطابور', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              child: Text('الطابور',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
             ),
             if (canManage)
               TextButton.icon(
@@ -774,14 +829,16 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
             const Card(
               child: ListTile(
                 title: Text('لا يوجد أحد في الطابور حالياً'),
-                subtitle: Text('أضف زبوناً ينتظر، ثم ابدأ الخدمة على كرسي فارغ'),
+                subtitle:
+                    Text('أضف زبوناً ينتظر، ثم ابدأ الخدمة على كرسي فارغ'),
               ),
             )
           else ...[
             if (waiting.isNotEmpty) ...[
               const Padding(
                 padding: EdgeInsets.only(top: 4, bottom: 6),
-                child: Text('بانتظار الخدمة', style: TextStyle(fontWeight: FontWeight.w700)),
+                child: Text('بانتظار الخدمة',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
               ),
               ...waiting.asMap().entries.map((pair) {
                 final i = pair.key;
@@ -790,16 +847,16 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                   queue: tools.queue,
                   waitingAhead: i,
                 );
-                final waitLabel = waitMin <= 0
-                    ? 'قريب'
-                    : 'تقدير الانتظار ≈ $waitMin د';
+                final waitLabel =
+                    waitMin <= 0 ? 'قريب' : 'تقدير الانتظار ≈ $waitMin د';
                 return Card(
                   child: ListTile(
                     isThreeLine: true,
                     leading: CircleAvatar(
                       child: Text(
                         entry.priority > 0 ? 'P${entry.priority}' : '${i + 1}',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w800),
                       ),
                     ),
                     title: Text(entry.customerName),
@@ -839,15 +896,20 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
             if (inService.isNotEmpty) ...[
               const Padding(
                 padding: EdgeInsets.only(top: 12, bottom: 6),
-                child: Text('قيد الخدمة', style: TextStyle(fontWeight: FontWeight.w700)),
+                child: Text('قيد الخدمة',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
               ),
               ...inService.map((entry) {
-                final chair =
-                    tools.chairs.where((c) => c.id == entry.chairId).firstOrNull;
+                final chair = tools.chairs
+                    .where((c) => c.id == entry.chairId)
+                    .firstOrNull;
                 final overtime = _isOvertime(entry, tools.queue);
                 return Card(
                   color: overtime
-                      ? Theme.of(context).colorScheme.errorContainer.withOpacity(0.35)
+                      ? Theme.of(context)
+                          .colorScheme
+                          .errorContainer
+                          .withOpacity(0.35)
                       : null,
                   child: ListTile(
                     isThreeLine: overtime,
@@ -857,14 +919,16 @@ class _ChairOperationsTabState extends State<ChairOperationsTab> {
                         if (overtime)
                           const Padding(
                             padding: EdgeInsets.only(right: 6),
-                            child: Icon(Icons.timer_off_outlined, size: 18, color: Color(0xFFB91C1C)),
+                            child: Icon(Icons.timer_off_outlined,
+                                size: 18, color: Color(0xFFB91C1C)),
                           ),
                       ],
                     ),
                     subtitle: Text(
                       [
                         if (chair != null) _chairLabel(context, chair),
-                        DateFormat('HH:mm').format(entry.startedAt ?? entry.joinedAt),
+                        DateFormat('HH:mm')
+                            .format(entry.startedAt ?? entry.joinedAt),
                         _durationLabel(entry.startedAt),
                         if (overtime) 'طال الوقت — راجع الخدمة',
                       ].where((s) => s.isNotEmpty).join('  •  '),
@@ -923,7 +987,8 @@ class _Card extends StatelessWidget {
             Text(value,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                style:
+                    const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
             Text(label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

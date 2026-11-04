@@ -10,6 +10,7 @@ import '../../providers/finance_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../services/app_error.dart';
 import '../../services/ops_helpers.dart';
+import '../../widgets/controller_scope.dart';
 
 class QueueFinishPayment {
   static Future<void> show(BuildContext context, QueueEntry entry) async {
@@ -94,241 +95,253 @@ class QueueFinishPayment {
     final result = await showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => StatefulBuilder(
-        builder: (context, setLocal) {
-          double numOf(TextEditingController c) =>
-              double.tryParse(c.text.replaceAll(',', '').trim()) ?? 0;
-          final total = numOf(amountCtrl);
-          final tip = numOf(tipCtrl);
-          final material = numOf(materialCtrl);
-          final pct = numOf(percentCtrl).clamp(0, 100);
-          final net = (total - material).clamp(0, double.infinity);
-          final barberShare = net * pct / 100;
-          final salonShare = net - barberShare;
+      builder: (_) => ControllerScope(
+        controllers: [
+          tipCtrl,
+          amountCtrl,
+          materialCtrl,
+          notesCtrl,
+          percentCtrl
+        ],
+        builder: (_) => StatefulBuilder(
+          builder: (context, setLocal) {
+            double numOf(TextEditingController c) =>
+                double.tryParse(c.text.replaceAll(',', '').trim()) ?? 0;
+            final total = numOf(amountCtrl);
+            final tip = numOf(tipCtrl);
+            final material = numOf(materialCtrl);
+            final pct = numOf(percentCtrl).clamp(0, 100);
+            final net = (total - material).clamp(0, double.infinity);
+            final barberShare = net * pct / 100;
+            final salonShare = net - barberShare;
 
-          return AlertDialog(
-            title: const Text('تحصيل أجرة الزبون'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(entry.customerName,
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
-                  if (entry.customerPhone.isNotEmpty)
-                    Text(entry.customerPhone,
-                        style: TextStyle(color: Colors.grey.shade700)),
-                  if (customerNote != null) ...[
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.shade50,
-                        borderRadius: BorderRadius.circular(8),
+            return AlertDialog(
+              title: const Text('تحصيل أجرة الزبون'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(entry.customerName,
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                    if (entry.customerPhone.isNotEmpty)
+                      Text(entry.customerPhone,
+                          style: TextStyle(color: Colors.grey.shade700)),
+                    if (customerNote != null) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text('ملاحظة: $customerNote',
+                            style: const TextStyle(fontSize: 12)),
                       ),
-                      child: Text('ملاحظة: $customerNote',
-                          style: const TextStyle(fontSize: 12)),
-                    ),
-                  ],
-                  if (loyalty != null) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      'نقاط الولاء: ${loyalty.points} (${loyalty.tier})',
-                      style:
-                          TextStyle(fontSize: 12, color: Colors.blue.shade800),
-                    ),
-                  ],
-                  if (lowStock.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      'تنبيه مخزون: ${lowStock.take(3).map((i) => i.name).join('، ')}',
-                      style:
-                          TextStyle(fontSize: 12, color: Colors.red.shade800),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  if (activeServices.isNotEmpty)
-                    DropdownButtonFormField<String>(
-                      value: serviceId,
-                      isExpanded: true,
+                    ],
+                    if (loyalty != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'نقاط الولاء: ${loyalty.points} (${loyalty.tier})',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.blue.shade800),
+                      ),
+                    ],
+                    if (lowStock.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'تنبيه مخزون: ${lowStock.take(3).map((i) => i.name).join('، ')}',
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.red.shade800),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    if (activeServices.isNotEmpty)
+                      DropdownButtonFormField<String>(
+                        value: serviceId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'الخدمة / نوع الأجرة *',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: activeServices
+                            .map(
+                              (s) => DropdownMenuItem(
+                                value: s.id,
+                                child: Text(
+                                  '${s.name} — ${s.price.toStringAsFixed(0)}',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) => setLocal(() {
+                          serviceId = v;
+                          final svc = activeServices
+                              .where((s) => s.id == v)
+                              .firstOrNull;
+                          if (svc != null && svc.price > 0) {
+                            amountCtrl.text = svc.price.toStringAsFixed(0);
+                          }
+                        }),
+                      )
+                    else
+                      const Text(
+                        'لا توجد خدمات — أضف خدمات من شاشة الخدمات',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: amountCtrl,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(
-                        labelText: 'الخدمة / نوع الأجرة *',
+                        labelText: 'أجرة الخدمة *',
                         border: OutlineInputBorder(),
                       ),
-                      items: activeServices
-                          .map(
-                            (s) => DropdownMenuItem(
-                              value: s.id,
+                      onChanged: (_) => setLocal(() {}),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: tipCtrl,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'بقشيش (اختياري)',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => setLocal(() {}),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: materialCtrl,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'تكلفة مواد (اختياري)',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => setLocal(() {}),
+                    ),
+                    if (gifts.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String?>(
+                        value: selectedGiftId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'استخدام هدية ولاء (اختياري)',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                              value: null, child: Text('بدون هدية')),
+                          ...gifts.map(
+                            (g) => DropdownMenuItem(
+                              value: g.id,
                               child: Text(
-                                '${s.name} — ${s.price.toStringAsFixed(0)}',
+                                '${g.name} (${g.pointsCost} نقطة)',
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                          )
-                          .toList(),
-                      onChanged: (v) => setLocal(() {
-                        serviceId = v;
-                        final svc =
-                            activeServices.where((s) => s.id == v).firstOrNull;
-                        if (svc != null && svc.price > 0) {
-                          amountCtrl.text = svc.price.toStringAsFixed(0);
-                        }
-                      }),
-                    )
-                  else
-                    const Text(
-                      'لا توجد خدمات — أضف خدمات من شاشة الخدمات',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: amountCtrl,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'أجرة الخدمة *',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => setLocal(() {}),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: tipCtrl,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'بقشيش (اختياري)',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => setLocal(() {}),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: materialCtrl,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'تكلفة مواد (اختياري)',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => setLocal(() {}),
-                  ),
-                  if (gifts.isNotEmpty) ...[
+                          ),
+                        ],
+                        onChanged: (v) => setLocal(() => selectedGiftId = v),
+                      ),
+                    ],
                     const SizedBox(height: 10),
-                    DropdownButtonFormField<String?>(
-                      value: selectedGiftId,
-                      isExpanded: true,
+                    if (shop.activeEmployees.isNotEmpty)
+                      DropdownButtonFormField<String>(
+                        value: barberId,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: t(context).assignedBarberField,
+                          border: const OutlineInputBorder(),
+                        ),
+                        items: shop.activeEmployees
+                            .map((e) => DropdownMenuItem(
+                                value: e.id, child: Text(e.name)))
+                            .toList(),
+                        onChanged: (v) => setLocal(() {
+                          barberId = v;
+                          for (final s in finance.barberSettlements) {
+                            if (s.barberId == v &&
+                                s.payType == BarberPayType.percent) {
+                              percentCtrl.text = s.percent.toStringAsFixed(0);
+                              break;
+                            }
+                          }
+                        }),
+                      ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: percentCtrl,
+                      keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
-                        labelText: 'استخدام هدية ولاء (اختياري)',
+                        labelText: 'نسبة الحلاق %',
                         border: OutlineInputBorder(),
                       ),
-                      items: [
-                        const DropdownMenuItem(
-                            value: null, child: Text('بدون هدية')),
-                        ...gifts.map(
-                          (g) => DropdownMenuItem(
-                            value: g.id,
-                            child: Text(
-                              '${g.name} (${g.pointsCost} نقطة)',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
+                      onChanged: (_) => setLocal(() {}),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<PaymentMethod>(
+                      value: payMethod,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'طريقة الدفع',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                            value: PaymentMethod.cash, child: Text('نقداً')),
+                        DropdownMenuItem(
+                            value: PaymentMethod.card, child: Text('بطاقة')),
+                        DropdownMenuItem(
+                            value: PaymentMethod.transfer,
+                            child: Text('حوالة')),
+                        DropdownMenuItem(
+                            value: PaymentMethod.other, child: Text('أخرى')),
                       ],
-                      onChanged: (v) => setLocal(() => selectedGiftId = v),
+                      onChanged: (v) =>
+                          setLocal(() => payMethod = v ?? PaymentMethod.cash),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: notesCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'ملاحظات',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'صافي: ${net.toStringAsFixed(0)}  •  '
+                      'حلاق: ${barberShare.toStringAsFixed(0)}  •  '
+                      'صالون: ${salonShare.toStringAsFixed(0)}'
+                      '${tip > 0 ? '  •  بقشيش: ${tip.toStringAsFixed(0)}' : ''}',
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade800),
                     ),
                   ],
-                  const SizedBox(height: 10),
-                  if (shop.activeEmployees.isNotEmpty)
-                    DropdownButtonFormField<String>(
-                      value: barberId,
-                      isExpanded: true,
-                      decoration: InputDecoration(
-                        labelText: t(context).assignedBarberField,
-                        border: const OutlineInputBorder(),
-                      ),
-                      items: shop.activeEmployees
-                          .map((e) => DropdownMenuItem(
-                              value: e.id, child: Text(e.name)))
-                          .toList(),
-                      onChanged: (v) => setLocal(() {
-                        barberId = v;
-                        for (final s in finance.barberSettlements) {
-                          if (s.barberId == v &&
-                              s.payType == BarberPayType.percent) {
-                            percentCtrl.text = s.percent.toStringAsFixed(0);
-                            break;
-                          }
-                        }
-                      }),
-                    ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: percentCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'نسبة الحلاق %',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => setLocal(() {}),
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<PaymentMethod>(
-                    value: payMethod,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'طريقة الدفع',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                          value: PaymentMethod.cash, child: Text('نقداً')),
-                      DropdownMenuItem(
-                          value: PaymentMethod.card, child: Text('بطاقة')),
-                      DropdownMenuItem(
-                          value: PaymentMethod.transfer, child: Text('حوالة')),
-                      DropdownMenuItem(
-                          value: PaymentMethod.other, child: Text('أخرى')),
-                    ],
-                    onChanged: (v) =>
-                        setLocal(() => payMethod = v ?? PaymentMethod.cash),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: notesCtrl,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'ملاحظات',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'صافي: ${net.toStringAsFixed(0)}  •  '
-                    'حلاق: ${barberShare.toStringAsFixed(0)}  •  '
-                    'صالون: ${salonShare.toStringAsFixed(0)}'
-                    '${tip > 0 ? '  •  بقشيش: ${tip.toStringAsFixed(0)}' : ''}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
-                  ),
-                ],
+                ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, 'skip'),
-                child: const Text('إنهاء بدون دفع'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, 'cancel'),
-                child: Text(t(context).cancel),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, 'pay'),
-                child: const Text('تحصيل وإنهاء'),
-              ),
-            ],
-          );
-        },
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, 'skip'),
+                  child: const Text('إنهاء بدون دفع'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, 'cancel'),
+                  child: Text(t(context).cancel),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, 'pay'),
+                  child: const Text('تحصيل وإنهاء'),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
 
@@ -341,13 +354,6 @@ class QueueFinishPayment {
     final selectedBarberId = barberId;
     final selectedPay = payMethod;
     final giftId = selectedGiftId;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      tipCtrl.dispose();
-      amountCtrl.dispose();
-      materialCtrl.dispose();
-      percentCtrl.dispose();
-      notesCtrl.dispose();
-    });
 
     if (result == null || result == 'cancel' || !context.mounted) return;
 
