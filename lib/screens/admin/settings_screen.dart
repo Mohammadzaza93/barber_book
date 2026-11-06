@@ -21,7 +21,9 @@ import '../../widgets/work_hours_editor.dart';
 
 class SettingsScreen extends StatefulWidget {
   final bool openShare;
-  const SettingsScreen({super.key, this.openShare = false});
+  final bool embedded;
+  const SettingsScreen(
+      {super.key, this.openShare = false, this.embedded = false});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -63,8 +65,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         TextEditingController(text: _draft.socialLinks['instagram'] ?? '');
     _facebook =
         TextEditingController(text: _draft.socialLinks['facebook'] ?? '');
-    _google =
-        TextEditingController(text: _draft.socialLinks['google'] ?? '');
+    _google = TextEditingController(text: _draft.socialLinks['google'] ?? '');
     _googleBookingUrl =
         TextEditingController(text: _draft.googleBookingUrl ?? '');
 
@@ -91,10 +92,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
-  String get _link =>
-      _googleBookingUrl.text.trim().isNotEmpty
-          ? _googleBookingUrl.text.trim()
-          : 'https://barberbook.app/${_draft.slug.isEmpty ? 'book' : _draft.slug}';
+  String get _link => _googleBookingUrl.text.trim().isNotEmpty
+      ? _googleBookingUrl.text.trim()
+      : 'https://barberbook.app/${_draft.slug.isEmpty ? 'book' : _draft.slug}';
 
   void _set(BuildingSettingsBuilder fn) {
     if (!context.read<AuthProvider>().canManageRules) return;
@@ -112,7 +112,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       email: _email.text.trim(),
       currency: _currency.text.trim(),
       slug: _draft.slug,
-      googleBookingUrl: _googleBookingUrl.text.trim().isEmpty ? null : _googleBookingUrl.text.trim(),
+      googleBookingUrl: _googleBookingUrl.text.trim().isEmpty
+          ? null
+          : _googleBookingUrl.text.trim(),
       logoUrl: _draft.logoUrl,
       seoTitle: _seoTitle.text.trim(),
       seoDescription: _seoDescription.text.trim(),
@@ -146,8 +148,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (file == null) return;
     try {
       final bytes = File(file.path);
-      final ref = FirebaseStorage.instance
-          .ref('shops/${ShopManager.shopId}/logo');
+      final ref =
+          FirebaseStorage.instance.ref('shops/${ShopManager.shopId}/logo');
       await ref.putFile(bytes);
       final url = await ref.getDownloadURL();
       if (!mounted) return;
@@ -206,7 +208,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context), child: Text(t(context).close)),
+              onPressed: () => Navigator.pop(context),
+              child: Text(t(context).close)),
         ],
       ),
     );
@@ -220,31 +223,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     return Scaffold(
-      appBar: AppBar(title: Text(t(context).bookingPageSettings)),
+      appBar: widget.embedded
+          ? null
+          : AppBar(title: Text(t(context).bookingPageSettings)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-            // ---- Booking link ----
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+          if (widget.embedded) ...[
+            Text(
+              t(context).bookingPageSettings,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 12),
+          ],
+          // ---- Booking link ----
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(t(context).bookingLink,
                       style: const TextStyle(
                           fontWeight: FontWeight.w800, fontSize: 15)),
                   const SizedBox(height: 4),
                   Text(t(context).shareLinkHint,
-                      style: TextStyle(
-                          color: Colors.grey.shade600, fontSize: 12)),
+                      style:
+                          TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                   const SizedBox(height: 12),
                   LabeledField(
                     label: 'Google Booking URL',
                     child: TextField(
                       controller: _googleBookingUrl,
                       enabled: canManage,
-                      decoration: const InputDecoration(hintText: 'https://calendar.google.com/...'),
+                      decoration: const InputDecoration(
+                          hintText: 'https://calendar.google.com/...'),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -261,7 +277,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(_link,
-                              style: const TextStyle(fontWeight: FontWeight.w600)),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w600)),
                         ),
                       ],
                     ),
@@ -293,10 +310,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
-                  ],
-                ),
+                ],
               ),
             ),
+          ),
           const SizedBox(height: 12),
 
           _card(t(context).brandingSettings, [
@@ -316,8 +333,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: LabeledField(
                     label: t(context).phone,
                     child: TextField(
-                        controller: _phone,
-                        keyboardType: TextInputType.phone),
+                        controller: _phone, keyboardType: TextInputType.phone),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -416,8 +432,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   prefixIcon: const Icon(Icons.timer_outlined),
                   hintText: '${_draft.cancelFreeHours}',
                 ),
-                onChanged: (v) => _set((s) => s
-                    .copyWith(cancelFreeHours: int.tryParse(v) ?? 6)),
+                onChanged: (v) => _set(
+                    (s) => s.copyWith(cancelFreeHours: int.tryParse(v) ?? 6)),
               ),
             ),
             const SizedBox(height: 12),
@@ -429,15 +445,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   prefixIcon: const Icon(Icons.percent_rounded),
                   hintText: '${_draft.cancelFeePercent}',
                 ),
-                onChanged: (v) => _set((s) => s
-                    .copyWith(cancelFeePercent: double.tryParse(v) ?? 20)),
+                onChanged: (v) => _set((s) =>
+                    s.copyWith(cancelFeePercent: double.tryParse(v) ?? 20)),
               ),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: _draft.whoPaysFees,
-              decoration:
-                  InputDecoration(labelText: t(context).whoPaysFee),
+              decoration: InputDecoration(labelText: t(context).whoPaysFee),
               items: [
                 DropdownMenuItem(
                     value: 'customer', child: Text(t(context).customerPays)),
@@ -462,8 +477,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 contentPadding: EdgeInsets.zero,
                 title: Text(t(context).depositHighDemandOnly),
                 value: _draft.depositHighDemandOnly,
-                onChanged: (v) => _set(
-                    (s) => s.copyWith(depositHighDemandOnly: v)),
+                onChanged: (v) =>
+                    _set((s) => s.copyWith(depositHighDemandOnly: v)),
               ),
               LabeledField(
                 label: t(context).depositPercent,
@@ -473,8 +488,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     prefixIcon: const Icon(Icons.percent_rounded),
                     hintText: '${_draft.depositPercent}',
                   ),
-                  onChanged: (v) => _set((s) => s
-                      .copyWith(depositPercent: double.tryParse(v) ?? 20)),
+                  onChanged: (v) => _set((s) =>
+                      s.copyWith(depositPercent: double.tryParse(v) ?? 20)),
                 ),
               ),
             ],
@@ -486,8 +501,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               contentPadding: EdgeInsets.zero,
               title: Text(t(context).enableReminders),
               value: _draft.remindersEnabled,
-              onChanged: (v) =>
-                  _set((s) => s.copyWith(remindersEnabled: v)),
+              onChanged: (v) => _set((s) => s.copyWith(remindersEnabled: v)),
             ),
             const SizedBox(height: 8),
             Text(t(context).channels,
@@ -496,9 +510,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Wrap(
               spacing: 8,
               children: [
-                _channelChip('email', t(context).channelEmail, Icons.email_outlined),
+                _channelChip(
+                    'email', t(context).channelEmail, Icons.email_outlined),
                 _channelChip('sms', t(context).channelSms, Icons.sms_outlined),
-                _channelChip('whatsapp', t(context).channelWhatsapp, Icons.chat_rounded),
+                _channelChip(
+                    'whatsapp', t(context).channelWhatsapp, Icons.chat_rounded),
               ],
             ),
             const SizedBox(height: 12),
@@ -513,9 +529,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   InputChip(
                     label: Text('$h h'),
                     onDeleted: () => _set((s) => s.copyWith(
-                        reminderTimings: s.reminderTimings
-                            .where((x) => x != h)
-                            .toList())),
+                        reminderTimings:
+                            s.reminderTimings.where((x) => x != h).toList())),
                   ),
                 ActionChip(
                   avatar: const Icon(Icons.add_rounded, size: 16),
@@ -548,12 +563,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             for (var i = 0; i < _draft.policies.length; i++)
               Row(
                 children: [
-                  const Icon(Icons.check_circle_outline_rounded, size: 16, color: Color(0xFF059669)),
+                  const Icon(Icons.check_circle_outline_rounded,
+                      size: 16, color: Color(0xFF059669)),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(_draft.policies[i], style: const TextStyle(fontSize: 13))),
+                  Expanded(
+                      child: Text(_draft.policies[i],
+                          style: const TextStyle(fontSize: 13))),
                   IconButton(
                     onPressed: () => _set((s) => s.copyWith(
-                        policies: s.policies.where((x) => x != _draft.policies[i]).toList())),
+                        policies: s.policies
+                            .where((x) => x != _draft.policies[i])
+                            .toList())),
                     icon: const Icon(Icons.close_rounded, size: 16),
                   ),
                 ],
@@ -573,8 +593,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       FilledButton(
                           onPressed: () {
                             if (c.text.trim().isNotEmpty) {
-                              _set((s) =>
-                                  s.copyWith(policies: [...s.policies, c.text.trim()]));
+                              _set((s) => s.copyWith(
+                                  policies: [...s.policies, c.text.trim()]));
                             }
                             Navigator.pop(ctx);
                           },
@@ -612,21 +632,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               label: t(context).instagram,
               child: TextField(
                   controller: _instagram,
-                  decoration: const InputDecoration(hintText: 'instagram.com/...')),
+                  decoration:
+                      const InputDecoration(hintText: 'instagram.com/...')),
             ),
             const SizedBox(height: 12),
             LabeledField(
               label: t(context).facebook,
               child: TextField(
                   controller: _facebook,
-                  decoration: const InputDecoration(hintText: 'facebook.com/...')),
+                  decoration:
+                      const InputDecoration(hintText: 'facebook.com/...')),
             ),
             const SizedBox(height: 12),
             LabeledField(
               label: t(context).googleProfile,
               child: TextField(
                   controller: _google,
-                  decoration: const InputDecoration(hintText: 'google.com/...')),
+                  decoration:
+                      const InputDecoration(hintText: 'google.com/...')),
             ),
           ]),
           const SizedBox(height: 16),

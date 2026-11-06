@@ -16,6 +16,8 @@ import 'inventory_tab.dart';
 import 'finance/daily_sales_screen.dart';
 import '../../services/ops_helpers.dart';
 import '../../providers/business_tools_provider.dart';
+import 'admin_navigation.dart';
+import 'finance/finance_home_screen.dart';
 
 /// لوحة تحكم واحدة شاملة — كل الأرقام من SmartAnalytics فقط.
 class DashboardScreen extends StatelessWidget {
@@ -49,94 +51,108 @@ class DashboardScreen extends StatelessWidget {
     final pending = appointments.pendingRequests.length;
     final todayAppts = appointments.todayAppointments.length;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-      children: [
-        const _Header(),
-        const SizedBox(height: 14),
-        const _SectionTitle('ملخص اليوم'),
-        const SizedBox(height: 8),
-        _KpiGrid(
-          currency: currency,
-          accent: accent,
-          todayRevenue: report.today.revenue,
-          todayOps: report.today.salesOps > 0
-              ? report.today.salesOps
-              : report.today.bookings,
-          todayNet: report.today.netProfit,
-          monthNet: report.thisMonth.netProfit,
-          pending: pending,
-          todayAppts: todayAppts,
-        ),
-        const SizedBox(height: 14),
-        const _SectionTitle('مقارنة الإيراد'),
-        const SizedBox(height: 8),
-        _CompareCard(report: report, currency: currency),
-        const SizedBox(height: 14),
-        const _SectionTitle('تشغيل سريع'),
-        const SizedBox(height: 8),
-        const _QuickActions(),
-        const SizedBox(height: 10),
-        const _ShortcutRow(),
-        const SizedBox(height: 10),
-        const _LowStockAlert(),
-        const SizedBox(height: 14),
-        const _SectionTitle('الإيراد — آخر 7 أيام'),
-        const SizedBox(height: 8),
-        _BarChartCard(
-          daily: dailyRev,
-          color: accent,
-          emptyHint: 'سجّل وارد الزبائن ليظهر الرسم',
-          valueSuffix: currency,
-        ),
-        const SizedBox(height: 14),
-        const _SectionTitle('العمليات — آخر 7 أيام'),
-        const SizedBox(height: 8),
-        _BarChartCard(
-          daily: dailyOps,
-          color: const Color(0xFF059669),
-          emptyHint: 'لا عمليات مسجّلة بعد',
-          valueSuffix: '',
-          isCount: true,
-        ),
-        const SizedBox(height: 14),
-        const _SectionTitle('توقع الإيراد — 7 أيام قادمة'),
-        const SizedBox(height: 4),
-        Text(
-          report.forecastConfidence.isNotEmpty
-              ? 'ثقة النموذج: ${report.forecastConfidence}'
-              : 'حساب محلي من متوسط متحرك + اتجاه (بدون أدوات مدفوعة)',
-          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-        ),
-        const SizedBox(height: 8),
-        _ForecastCard(values: report.forecastNext7, currency: currency),
-        const SizedBox(height: 14),
-        const _SectionTitle('أبرز النقاط'),
-        const SizedBox(height: 8),
-        _HighlightsCard(report: report, currency: currency),
-        const SizedBox(height: 14),
-        const _SectionTitle('هذا الشهر مقابل السابق'),
-        const SizedBox(height: 8),
-        _MonthVsCard(report: report, currency: currency),
-        const SizedBox(height: 14),
-        const _SectionTitle('رؤى ذكية'),
-        const SizedBox(height: 8),
-        ...report.insights.map((i) => _InsightTile(insight: i)),
-        if (report.insights.isEmpty)
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Text(
-                'سجّل الوارد والمصاريف بانتظام لتظهر الرؤى هنا.',
-                style: TextStyle(color: Colors.grey.shade600),
-                textAlign: TextAlign.center,
-              ),
+    // Lazy list: widgets below the fold are only built when scrolled into view,
+    // which keeps the first frame of the dashboard light.
+    final builders = <WidgetBuilder>[
+      (_) => const _Header(),
+      (_) => const SizedBox(height: 14),
+      (_) => const _SectionTitle('ملخص اليوم'),
+      (_) => const SizedBox(height: 8),
+      (_) => _KpiGrid(
+            currency: currency,
+            accent: accent,
+            todayRevenue: report.today.revenue,
+            todayOps: report.today.salesOps > 0
+                ? report.today.salesOps
+                : report.today.bookings,
+            todayNet: report.today.netProfit,
+            monthNet: report.thisMonth.netProfit,
+            pending: pending,
+            todayAppts: todayAppts,
+          ),
+      (_) => const SizedBox(height: 14),
+      (_) => const _SectionTitle('مقارنة الإيراد'),
+      (_) => const SizedBox(height: 8),
+      (_) => _CompareCard(report: report, currency: currency),
+      (_) => const SizedBox(height: 14),
+      (_) => const _SectionTitle('تشغيل سريع'),
+      (_) => const SizedBox(height: 8),
+      (_) => const _QuickActionsGrid(),
+      (_) => const SizedBox(height: 10),
+      (_) => const _LowStockAlert(),
+      (_) => const SizedBox(height: 14),
+      (_) => const _SectionTitle('الإيراد — آخر 7 أيام'),
+      (_) => const SizedBox(height: 8),
+      (_) => RepaintBoundary(
+            child: _BarChartCard(
+              daily: dailyRev,
+              color: accent,
+              emptyHint: 'سجّل وارد الزبائن ليظهر الرسم',
+              valueSuffix: currency,
             ),
           ),
-      ],
+      (_) => const SizedBox(height: 14),
+      (_) => const _SectionTitle('العمليات — آخر 7 أيام'),
+      (_) => const SizedBox(height: 8),
+      (_) => RepaintBoundary(
+            child: _BarChartCard(
+              daily: dailyOps,
+              color: const Color(0xFF059669),
+              emptyHint: 'لا عمليات مسجّلة بعد',
+              valueSuffix: '',
+              isCount: true,
+            ),
+          ),
+      (_) => const SizedBox(height: 14),
+      (_) => const _SectionTitle('توقع الإيراد — 7 أيام قادمة'),
+      (_) => const SizedBox(height: 4),
+      (_) => Text(
+            report.forecastConfidence.isNotEmpty
+                ? 'ثقة النموذج: ${report.forecastConfidence}'
+                : 'حساب محلي من متوسط متحرك + اتجاه (بدون أدوات مدفوعة)',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+      (_) => const SizedBox(height: 8),
+      (_) => RepaintBoundary(
+            child: _ForecastCard(
+              values: report.forecastNext7,
+              currency: currency,
+            ),
+          ),
+      (_) => const SizedBox(height: 14),
+      (_) => const _SectionTitle('أبرز النقاط'),
+      (_) => const SizedBox(height: 8),
+      (_) => _HighlightsCard(report: report, currency: currency),
+      (_) => const SizedBox(height: 14),
+      (_) => const _SectionTitle('هذا الشهر مقابل السابق'),
+      (_) => const SizedBox(height: 8),
+      (_) => _MonthVsCard(report: report, currency: currency),
+      (_) => const SizedBox(height: 14),
+      (_) => const _SectionTitle('رؤى ذكية'),
+      (_) => const SizedBox(height: 8),
+      for (final insight in report.insights)
+        (_) => _InsightTile(insight: insight),
+      if (report.insights.isEmpty)
+        (_) => Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  'سجّل الوارد والمصاريف بانتظام لتظهر الرؤى هنا.',
+                  style: TextStyle(color: Colors.grey.shade600),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+    ];
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+      itemCount: builders.length,
+      itemBuilder: (context, index) => builders[index](context),
     );
   }
 }
@@ -332,9 +348,8 @@ class _CompareCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pct = report.monthVsLast.revenuePct;
-    final pctLabel = pct.isFinite
-        ? '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(0)}%'
-        : '—';
+    final pctLabel =
+        pct.isFinite ? '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(0)}%' : '—';
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -384,35 +399,162 @@ class _CompareCard extends StatelessWidget {
   }
 }
 
-class _QuickActions extends StatelessWidget {
-  const _QuickActions();
+class _QuickActionsGrid extends StatelessWidget {
+  const _QuickActionsGrid();
+
+  void _openTab(BuildContext context, int index, Widget fallback) {
+    final nav = AdminNavigationScope.maybeOf(context);
+    if (nav != null) {
+      nav.select(index);
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => fallback),
+    );
+  }
+
+  void _push(BuildContext context, Widget screen) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => screen),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: FilledButton.tonalIcon(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const DayCloseScreen()),
-            ),
-            icon: const Icon(Icons.nightlight_round, size: 18),
-            label: const Text('إغلاق اليوم'),
+    final pending = context.select<AppointmentProvider, int>(
+      (a) => a.pendingRequests.length,
+    );
+    final lowStock = context.select<BusinessToolsProvider, int>(
+      (t) => OpsHelpers.lowStockItems(t.inventory).length,
+    );
+
+    final actions = <_QuickActionData>[
+      _QuickActionData(
+        icon: Icons.event_note_rounded,
+        label: 'المواعيد',
+        color: const Color(0xFF0EA5E9),
+        badge: pending,
+        onTap: () => _openTab(context, 1, const AppointmentsScreen()),
+      ),
+      _QuickActionData(
+        icon: Icons.account_balance_wallet_rounded,
+        label: 'المالية',
+        color: const Color(0xFF7C3AED),
+        onTap: () => _openTab(context, 11, const FinanceHomeScreen()),
+      ),
+      _QuickActionData(
+        icon: Icons.inventory_2_rounded,
+        label: 'المخزون',
+        color: const Color(0xFF059669),
+        badge: lowStock,
+        onTap: () => _openTab(context, 12, const InventoryTab()),
+      ),
+      _QuickActionData(
+        icon: Icons.nightlight_round,
+        label: 'إغلاق اليوم',
+        color: const Color(0xFFD97706),
+        onTap: () => _push(context, const DayCloseScreen()),
+      ),
+      _QuickActionData(
+        icon: Icons.point_of_sale_rounded,
+        label: 'وارد اليوم',
+        color: const Color(0xFF0284C7),
+        onTap: () => _push(context, const DailySalesScreen()),
+      ),
+      _QuickActionData(
+        icon: Icons.phone_callback_rounded,
+        label: 'زبائن للاتصال',
+        color: const Color(0xFFDC2626),
+        onTap: () => _push(context, const CustomersToCallScreen()),
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 560 ? 6 : 3;
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: actions.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            mainAxisExtent: 104,
+          ),
+          itemBuilder: (context, index) =>
+              _QuickActionTile(data: actions[index]),
+        );
+      },
+    );
+  }
+}
+
+class _QuickActionData {
+  const _QuickActionData({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+    this.badge = 0,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  final int badge;
+}
+
+class _QuickActionTile extends StatelessWidget {
+  const _QuickActionTile({required this.data});
+
+  final _QuickActionData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: data.color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(13),
+      ),
+      child: Icon(data.icon, color: data.color, size: 22),
+    );
+
+    return Card(
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: data.onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Badge(
+                isLabelVisible: data.badge > 0,
+                label: Text('${data.badge}'),
+                child: icon,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                data.label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CustomersToCallScreen()),
-            ),
-            icon: const Icon(Icons.phone_callback_outlined, size: 18),
-            label: const Text('زبائن للاتصال'),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -622,8 +764,7 @@ class _ForecastCard extends StatelessWidget {
                             dotData: const FlDotData(show: true),
                             belowBarData: BarAreaData(
                               show: true,
-                              color:
-                                  const Color(0xFF7C3AED).withOpacity(0.12),
+                              color: const Color(0xFF7C3AED).withOpacity(0.12),
                             ),
                           ),
                         ],
@@ -787,24 +928,21 @@ class _MonthVsCard extends StatelessWidget {
                   child: Text(
                     'الحالي',
                     textAlign: TextAlign.center,
-                    style:
-                        TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   ),
                 ),
                 Expanded(
                   child: Text(
                     'السابق',
                     textAlign: TextAlign.center,
-                    style:
-                        TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   ),
                 ),
                 Expanded(
                   child: Text(
                     'التغير',
                     textAlign: TextAlign.end,
-                    style:
-                        TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   ),
                 ),
               ],
@@ -861,64 +999,6 @@ class _InsightTile extends StatelessWidget {
         subtitle: Text(insight.body),
         isThreeLine: insight.body.length > 50,
       ),
-    );
-  }
-}
-
-class _ShortcutRow extends StatelessWidget {
-  const _ShortcutRow();
-
-  @override
-  Widget build(BuildContext context) {
-    final pending = context.select<AppointmentProvider, int>(
-      (a) => a.pendingRequests.length,
-    );
-    final low = context.select<BusinessToolsProvider, int>(
-      (t) => OpsHelpers.lowStockItems(t.inventory).length,
-    );
-    return Row(
-      children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const DailySalesScreen()),
-            ),
-            icon: const Icon(Icons.point_of_sale_outlined, size: 18),
-            label: const Text('وارد اليوم'),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const InventoryTab()),
-            ),
-            icon: Icon(
-              Icons.inventory_2_outlined,
-              size: 18,
-              color: low > 0 ? Colors.red.shade700 : null,
-            ),
-            label: Text(low > 0 ? 'مخزون ($low)' : 'مخزون'),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AppointmentsScreen()),
-            ),
-            icon: Icon(
-              Icons.event_note_outlined,
-              size: 18,
-              color: pending > 0 ? Colors.orange.shade800 : null,
-            ),
-            label: Text(pending > 0 ? 'معلّق ($pending)' : 'مواعيد'),
-          ),
-        ),
-      ],
     );
   }
 }

@@ -41,12 +41,25 @@ ThemeData buildAppTheme({
     useMaterial3: true,
     brightness: brightness,
     colorScheme: scheme,
+    visualDensity: VisualDensity.adaptivePlatformDensity,
     scaffoldBackgroundColor:
         isDark ? const Color(0xFF0B0B0D) : const Color(0xFFF1F2F4),
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+        TargetPlatform.fuchsia: FadeUpwardsPageTransitionsBuilder(),
+        TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
+        TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+      },
+    ),
     appBarTheme: AppBarTheme(
       backgroundColor: isDark ? const Color(0xFF0B0B0D) : kBlackBg,
       foregroundColor: kSilver,
       elevation: 0,
+      scrolledUnderElevation: 0,
+      surfaceTintColor: Colors.transparent,
       centerTitle: true,
       titleTextStyle: const TextStyle(
         color: Colors.white,
@@ -62,9 +75,10 @@ ThemeData buildAppTheme({
     cardTheme: CardThemeData(
       elevation: 0,
       color: isDark ? const Color(0xFF16181D) : Colors.white,
+      surfaceTintColor: Colors.transparent,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: const BorderRadius.all(Radius.circular(16)),
+        borderRadius: const BorderRadius.all(Radius.circular(18)),
         side: BorderSide(
           color: isDark ? const Color(0xFF2A2D34) : Colors.grey.shade200,
         ),
@@ -73,6 +87,15 @@ ThemeData buildAppTheme({
     drawerTheme: DrawerThemeData(
       backgroundColor: isDark ? const Color(0xFF12141A) : Colors.white,
     ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: isDark ? const Color(0xFF16181D) : Colors.white,
+      surfaceTintColor: Colors.transparent,
+      modalBackgroundColor: isDark ? const Color(0xFF16181D) : Colors.white,
+      elevation: 0,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+    ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: isDark ? const Color(0xFF1C1F26) : Colors.white,
@@ -80,32 +103,32 @@ ThemeData buildAppTheme({
         color: isDark ? Colors.grey.shade500 : Colors.grey.shade400,
       ),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(
           color: isDark ? const Color(0xFF2A2D34) : kSilverBorder,
         ),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(
           color: isDark ? accent : primary,
           width: 1.5,
         ),
       ),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: isDark ? accent : primary,
         foregroundColor: isDark ? kBlackBg : Colors.white,
+        minimumSize: const Size(0, 48),
         padding: const EdgeInsets.symmetric(vertical: 14),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
         ),
         textStyle: const TextStyle(fontWeight: FontWeight.w700),
       ),
@@ -114,9 +137,10 @@ ThemeData buildAppTheme({
       style: FilledButton.styleFrom(
         backgroundColor: isDark ? accent : primary,
         foregroundColor: isDark ? kBlackBg : Colors.white,
+        minimumSize: const Size(0, 48),
         padding: const EdgeInsets.symmetric(vertical: 14),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
         ),
         textStyle: const TextStyle(fontWeight: FontWeight.w700),
       ),
@@ -127,9 +151,10 @@ ThemeData buildAppTheme({
         side: BorderSide(
           color: (isDark ? accent : primary).withOpacity(0.35),
         ),
+        minimumSize: const Size(0, 48),
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
         ),
         textStyle: const TextStyle(fontWeight: FontWeight.w600),
       ),
@@ -144,12 +169,15 @@ ThemeData buildAppTheme({
           isDark ? const Color(0xFF1C1F26) : const Color(0xFFF3F4F6),
       selectedColor: accent.withOpacity(0.25),
       side: BorderSide.none,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      shape: const StadiumBorder(),
       labelStyle: TextStyle(
         color: isDark ? const Color(0xFFE8EAED) : kInk,
       ),
     ),
     dividerTheme: DividerThemeData(
       color: isDark ? const Color(0xFF2A2D34) : kSilverBorder,
+      thickness: 1,
     ),
     progressIndicatorTheme: ProgressIndicatorThemeData(
       color: accent,
@@ -159,13 +187,13 @@ ThemeData buildAppTheme({
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: isDark ? accent : primary,
       foregroundColor: isDark ? kBlackBg : Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: isDark ? const Color(0xFF1C1F26) : kInk,
       contentTextStyle: const TextStyle(color: Colors.white),
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
     listTileTheme: ListTileThemeData(
       textColor: isDark ? const Color(0xFFE8EAED) : null,
@@ -173,10 +201,30 @@ ThemeData buildAppTheme({
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: isDark ? const Color(0xFF16181D) : Colors.white,
+      surfaceTintColor: Colors.transparent,
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+      ),
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: isDark ? const Color(0xFF12141A) : Colors.white,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      height: 68,
       indicatorColor: accent.withOpacity(0.3),
+      indicatorShape: const StadiumBorder(),
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => TextStyle(
+          fontSize: 11.5,
+          fontWeight: states.contains(WidgetState.selected)
+              ? FontWeight.w700
+              : FontWeight.w500,
+          color: states.contains(WidgetState.selected)
+              ? (isDark ? accent : primary)
+              : kMutedText,
+        ),
+      ),
       iconTheme: WidgetStateProperty.resolveWith(
         (states) => IconThemeData(
           color: states.contains(WidgetState.selected)
@@ -184,6 +232,20 @@ ThemeData buildAppTheme({
               : kMutedText,
         ),
       ),
+    ),
+    navigationRailTheme: NavigationRailThemeData(
+      backgroundColor: isDark ? const Color(0xFF12141A) : Colors.white,
+      indicatorColor: accent.withOpacity(0.3),
+      indicatorShape: const StadiumBorder(),
+      selectedIconTheme: IconThemeData(
+        color: isDark ? accent : primary,
+      ),
+      unselectedIconTheme: const IconThemeData(color: kMutedText),
+      selectedLabelTextStyle: TextStyle(
+        color: isDark ? accent : primary,
+        fontWeight: FontWeight.w700,
+      ),
+      unselectedLabelTextStyle: const TextStyle(color: kMutedText),
     ),
     tabBarTheme: TabBarTheme(
       labelColor: isDark ? accent : kInk,

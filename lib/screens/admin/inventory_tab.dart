@@ -16,7 +16,11 @@ import 'stocktake_screen.dart';
 enum _StockFilter { all, low, out, expiring, inactive }
 
 class InventoryTab extends StatefulWidget {
-  const InventoryTab({super.key});
+  const InventoryTab({super.key, this.embedded = false});
+
+  /// When true the screen renders inside the admin shell, which already owns
+  /// the app bar; a compact header row replaces it.
+  final bool embedded;
 
   @override
   State<InventoryTab> createState() => _InventoryTabState();
@@ -122,182 +126,213 @@ class _InventoryTabState extends State<InventoryTab> {
     final recent = tools.inventoryMovements.take(8).toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('المخزون'),
-        actions: [
-          IconButton(
-            tooltip: 'تقارير المخزون',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const InventoryReportsScreen()),
+      appBar: widget.embedded
+          ? null
+          : AppBar(
+              title: const Text('المخزون'),
+              actions: _headerActions(context),
             ),
-            icon: const Icon(Icons.insights_outlined),
-          ),
-          IconButton(
-            tooltip: 'الجرد',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const StocktakeScreen()),
-            ),
-            icon: const Icon(Icons.fact_check_outlined),
-          ),
-          IconButton(
-            tooltip: 'إضافة مادة',
-            onPressed: () => _openEditor(),
-            icon: const Icon(Icons.add_box_outlined),
-          ),
-        ],
-      ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'inventory_main_fab',
         onPressed: () => _openEditor(),
         icon: const Icon(Icons.add),
         label: const Text('مادة'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+      body: Column(
         children: [
-          _SummaryCard(health: health, currency: currency),
-          if (restock.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            _RestockBanner(
-              count: restock.length,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const InventoryReportsScreen(),
+          if (widget.embedded) _embeddedHeader(context),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+              children: [
+                _SummaryCard(health: health, currency: currency),
+                if (restock.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _RestockBanner(
+                    count: restock.length,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const InventoryReportsScreen(),
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _search,
+                  onChanged: (value) => setState(() => _query = value),
+                  decoration: InputDecoration(
+                    hintText: 'ابحث بالاسم أو SKU أو الباركود أو المورد',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'مسح البحث',
+                            onPressed: () {
+                              _search.clear();
+                              setState(() => _query = '');
+                            },
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                  ),
                 ),
-              ),
-            ),
-          ],
-          const SizedBox(height: 14),
-          TextField(
-            controller: _search,
-            onChanged: (value) => setState(() => _query = value),
-            decoration: InputDecoration(
-              hintText: 'ابحث بالاسم أو SKU أو الباركود أو المورد',
-              prefixIcon: const Icon(Icons.search_rounded),
-              border: const OutlineInputBorder(),
-              isDense: true,
-              suffixIcon: _query.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: 'مسح البحث',
-                      onPressed: () {
-                        _search.clear();
-                        setState(() => _query = '');
-                      },
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            children: [
-              _filterChip(
-                  _StockFilter.all, 'الكل', items.length, Colors.blueGrey),
-              _filterChip(_StockFilter.low, 'تحت الحد', health.lowStock,
-                  Colors.orange.shade800),
-              _filterChip(_StockFilter.out, 'نافد', health.outOfStock,
-                  Colors.red.shade700),
-              _filterChip(
-                _StockFilter.expiring,
-                'الصلاحية',
-                health.expiringSoon + health.expired,
-                Colors.deepOrange.shade700,
-              ),
-              _filterChip(_StockFilter.inactive, 'معطّل', health.inactive,
-                  Colors.grey.shade700),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'المواد (${shown.length})',
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 8),
-          if (items.isEmpty)
-            _EmptyInventory(onAdd: _openEditor)
-          else if (shown.isEmpty)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
                   children: [
-                    Icon(Icons.search_off_rounded,
-                        size: 44, color: Colors.grey.shade400),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'لا نتائج مطابقة',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                    _filterChip(_StockFilter.all, 'الكل', items.length,
+                        Colors.blueGrey),
+                    _filterChip(_StockFilter.low, 'تحت الحد', health.lowStock,
+                        Colors.orange.shade800),
+                    _filterChip(_StockFilter.out, 'نافد', health.outOfStock,
+                        Colors.red.shade700),
+                    _filterChip(
+                      _StockFilter.expiring,
+                      'الصلاحية',
+                      health.expiringSoon + health.expired,
+                      Colors.deepOrange.shade700,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'جرّب بحثاً آخر أو أزل الفلاتر.',
-                      style: TextStyle(color: Colors.grey.shade600),
-                    ),
+                    _filterChip(_StockFilter.inactive, 'معطّل', health.inactive,
+                        Colors.grey.shade700),
                   ],
                 ),
-              ),
-            )
-          else
-            ...shown.map(
-              (item) => _InventoryTile(
-                item: item,
-                currency: currency,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => InventoryItemScreen(item: item),
-                  ),
+                const SizedBox(height: 14),
+                Text(
+                  'المواد (${shown.length})',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w800),
                 ),
-                onEdit: () => _openEditor(item: item),
-                onDelete: () => _delete(item),
-                onMovement: (type) => showInventoryMovementSheet(
-                  context,
-                  item: item,
-                  type: type,
-                ),
-              ),
-            ),
-          if (recent.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'آخر الحركات',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const InventoryReportsScreen(),
+                const SizedBox(height: 8),
+                if (items.isEmpty)
+                  _EmptyInventory(onAdd: _openEditor)
+                else if (shown.isEmpty)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        children: [
+                          Icon(Icons.search_off_rounded,
+                              size: 44, color: Colors.grey.shade400),
+                          const SizedBox(height: 10),
+                          const Text(
+                            'لا نتائج مطابقة',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'جرّب بحثاً آخر أو أزل الفلاتر.',
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  ...shown.map(
+                    (item) => _InventoryTile(
+                      item: item,
+                      currency: currency,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => InventoryItemScreen(item: item),
+                        ),
+                      ),
+                      onEdit: () => _openEditor(item: item),
+                      onDelete: () => _delete(item),
+                      onMovement: (type) => showInventoryMovementSheet(
+                        context,
+                        item: item,
+                        type: type,
+                      ),
                     ),
                   ),
-                  child: const Text('التقارير'),
-                ),
+                if (recent.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'آخر الحركات',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const InventoryReportsScreen(),
+                          ),
+                        ),
+                        child: const Text('التقارير'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  ...recent.map(
+                    (movement) => _RecentMovement(
+                      movement: movement,
+                      itemName: names[movement.itemId] ?? 'مادة',
+                      currency: currency,
+                    ),
+                  ),
+                ],
               ],
             ),
-            const SizedBox(height: 4),
-            ...recent.map(
-              (movement) => _RecentMovement(
-                movement: movement,
-                itemName: names[movement.itemId] ?? 'مادة',
-                currency: currency,
-              ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _headerActions(BuildContext context) => [
+        IconButton(
+          tooltip: 'تقارير المخزون',
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const InventoryReportsScreen()),
+          ),
+          icon: const Icon(Icons.insights_outlined),
+        ),
+        IconButton(
+          tooltip: 'الجرد',
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const StocktakeScreen()),
+          ),
+          icon: const Icon(Icons.fact_check_outlined),
+        ),
+        IconButton(
+          tooltip: 'إضافة مادة',
+          onPressed: () => _openEditor(),
+          icon: const Icon(Icons.add_box_outlined),
+        ),
+      ];
+
+  Widget _embeddedHeader(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 6, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'المخزون',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800),
             ),
-          ],
+          ),
+          ..._headerActions(context),
         ],
       ),
     );

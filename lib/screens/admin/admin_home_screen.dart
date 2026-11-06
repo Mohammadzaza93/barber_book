@@ -4,8 +4,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../../l10n/strings.dart';
-import '../../models/app_role.dart';
-import '../../models/staff_permissions.dart';
 import '../../providers/appointment_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/language_provider.dart';
@@ -16,6 +14,7 @@ import '../../widgets/connection_banner.dart';
 import '../../widgets/feature_labels.dart';
 import '../../widgets/live_badge.dart';
 import '../profile_screen.dart';
+import 'admin_navigation.dart';
 import 'appointments_screen.dart';
 import 'business_tools_screen.dart';
 import 'dashboard_screen.dart';
@@ -30,44 +29,17 @@ import 'settings_screen.dart';
 import 'staff_screen.dart';
 import 'unavailability_screen.dart';
 
-const Set<int> adminTabsSet = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
-
-bool adminTabVisible(AppRole role, int index, {StaffPermissions? perms}) {
-  if (role.isAdmin) {
-    return adminTabsSet.contains(index);
-  }
-  final p = perms ?? StaffPermissions.minimal;
-  switch (index) {
-    case 0:
-      return false;
-    case 1:
-      return p.appointments;
-    case 2:
-      return p.services;
-    case 3:
-      return p.staff;
-    case 4:
-      return p.discounts;
-    case 5:
-      return p.feedback;
-    case 6:
-      return p.outOfHours;
-    case 7:
-      return p.reports;
-    case 8:
-      return p.settings;
-    case 9:
-      return p.businessTools;
-    case 10:
-      return true;
-    case 11:
-      return p.finance;
-    case 12:
-      return p.finance || p.businessTools;
-    default:
-      return false;
-  }
-}
+// Keep the old import surface (`admin_home_screen.dart`) working for callers
+// and tests that referenced the navigation helpers from this file.
+export 'admin_navigation.dart'
+    show
+        AdminNavSection,
+        AdminNavigationController,
+        AdminNavigationScope,
+        adminSections,
+        adminTabVisible,
+        adminTabsSet,
+        primaryAdminTabs;
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -77,13 +49,16 @@ class AdminHomeScreen extends StatefulWidget {
 }
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
-  int _index = 0;
-  final Set<int> _visited = {0};
+  static const double _wideBreakpoint = 760;
 
-  bool _visibleFor(BuildContext context, int index) {
-    final auth = context.read<AuthProvider>();
-    return adminTabVisible(auth.role, index, perms: auth.permissions);
-  }
+  int _index = 0;
+  final Set<int> _visited = <int>{};
+
+  String? _themeKey;
+  ThemeData? _theme;
+
+  late final AdminNavigationController _navController =
+      AdminNavigationController(_handleSelect);
 
   final _screens = const [
     DashboardScreen(),
@@ -94,136 +69,405 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     FeedbackScreen(),
     UnavailabilityScreen(),
     ReportsScreen(),
-    SettingsScreen(),
+    SettingsScreen(embedded: true),
     BusinessToolsScreen(),
-    ProfileScreen(),
-    FinanceHomeScreen(),
-    InventoryTab(),
+    ProfileScreen(embedded: true),
+    FinanceHomeScreen(embedded: true),
+    InventoryTab(embedded: true),
   ];
+
+  void _handleSelect(int index) => _goTo(index);
+
+  void _goTo(int index, {AuthProvider? auth}) {
+    final provider = auth ?? context.read<AuthProvider>();
+    if (!adminTabVisible(
+      provider.role,
+      index,
+      perms: provider.permissions,
+    )) {
+      return;
+    }
+    if (!mounted) return;
+    if (_index == index && _visited.contains(index)) return;
+    setState(() {
+      _index = index;
+      _visited.add(index);
+    });
+  }
+
+  int _homeIndex(AuthProvider auth) {
+    for (final section in adminSections) {
+      if (adminTabVisible(
+        auth.role,
+        section.index,
+        perms: auth.permissions,
+      )) {
+        return section.index;
+      }
+    }
+    return 10;
+  }
+
+  ThemeData _themeFor(String primaryHex, String accentHex, Brightness b) {
+    final key = '$primaryHex|$accentHex|${b.name}';
+    final cached = _theme;
+    if (cached != null && _themeKey == key) return cached;
+    _themeKey = key;
+    return _theme = buildAppTheme(
+      primary: parseHexColor(primaryHex),
+      accent: parseHexColor(accentHex),
+      brightness: b,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final shop = context.watch<ShopProvider>();
-    final primary =
-        parseHexColor(shop.settings?.primaryColorHex ?? '0xFF121316');
-    final accent =
-        parseHexColor(shop.settings?.accentColorHex ?? '0xFFC6CBD4');
-    final brightness = Theme.of(context).brightness;
-    final theme = buildAppTheme(
-      primary: primary,
-      accent: accent,
-      brightness: brightness,
+    final auth = context.watch<AuthProvider>();
+    final shopName = context.select<ShopProvider, String>(
+      (s) => s.settings?.shopName ?? 'BarberBook',
     );
+    final primaryHex = context.select<ShopProvider, String>(
+      (s) => s.settings?.primaryColorHex ?? defaultPrimaryHex,
+    );
+    final accentHex = context.select<ShopProvider, String>(
+      (s) => s.settings?.accentColorHex ?? defaultAccentHex,
+    );
+    final brightness = Theme.of(context).brightness;
+    final theme = _themeFor(primaryHex, accentHex, brightness);
+    final isWide = MediaQuery.sizeOf(context).width >= _wideBreakpoint;
+
+    bool visible(int index) => adminTabVisible(
+          auth.role,
+          index,
+          perms: auth.permissions,
+        );
+
+    final homeIndex = _homeIndex(auth);
+    final effectiveIndex = visible(_index) ? _index : homeIndex;
+    final visibleSections =
+        adminSections.where((s) => visible(s.index)).toList(growable: false);
+    final primary = primaryAdminTabs(auth.role, perms: auth.permissions);
+    final primarySections = <AdminNavSection>[
+      for (final index in primary)
+        adminSections.firstWhere((s) => s.index == index),
+    ];
+    final moreSections = visibleSections
+        .where((s) => !primary.contains(s.index))
+        .toList(growable: false);
 
     return Theme(
       data: theme,
-      child: Consumer<AppointmentProvider>(
-        builder: (context, appointments, _) {
-          final pendingCount = appointments.pendingRequests.length;
-          return PopScope(
-            canPop: false,
-            onPopInvokedWithResult: (didPop, _) async {
-              if (didPop) return;
-              if (_index != 0) {
-                setState(() => _index = 0);
-                return;
-              }
-              final leave = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('إغلاق التطبيق؟'),
-                  content:
-                      const Text('هل تريد الخروج من لوحة تحكم الصالون؟'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('إلغاء'),
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('خروج'),
-                    ),
-                  ],
-                ),
-              );
-              if (leave == true) {
-                SystemNavigator.pop();
-              }
-            },
-            child: GestureDetector(
-              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-              behavior: HitTestBehavior.opaque,
-              child: Scaffold(
-                appBar: AppBar(
-                  title: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          shop.settings?.shopName ?? 'BarberBook',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const LiveBadge(compact: true),
-                    ],
+      child: AdminNavigationScope(
+        controller: _navController,
+        child: PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            if (effectiveIndex != homeIndex) {
+              setState(() => _index = homeIndex);
+              return;
+            }
+            final leave = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('إغلاق التطبيق؟'),
+                content: const Text('هل تريد الخروج من لوحة تحكم الصالون؟'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('إلغاء'),
                   ),
-                  actions: [
-                    IconButton(
-                      tooltip: brightness == Brightness.dark
-                          ? 'المظهر الفاتح'
-                          : 'المظهر الداكن',
-                      onPressed: () => context
-                          .read<ThemeProvider>()
-                          .toggleLightDark(context),
-                      icon: Icon(
-                        brightness == Brightness.dark
-                            ? Icons.light_mode_rounded
-                            : Icons.dark_mode_rounded,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: t(context).openBookingPage,
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              const SettingsScreen(openShare: true),
-                        ),
-                      ),
-                      icon: const Icon(Icons.calendar_month_rounded),
-                    ),
-                    const SizedBox(width: 4),
-                  ],
-                ),
-                drawer: _buildDrawer(context, pendingCount),
-                body: Column(
-                  children: [
-                    const ConnectionBanner(),
-                    Expanded(
-                      child: IndexedStack(
-                        index: _index,
-                        children: [
-                          for (var i = 0; i < _screens.length; i++)
-                            _visited.contains(i)
-                                ? _screens[i]
-                                : const SizedBox.shrink(),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('خروج'),
+                  ),
+                ],
               ),
+            );
+            if (leave == true) {
+              SystemNavigator.pop();
+            }
+          },
+          child: GestureDetector(
+            onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+            behavior: HitTestBehavior.opaque,
+            child: Scaffold(
+              appBar: AppBar(
+                titleSpacing: 0,
+                title: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        shopName,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const LiveBadge(compact: true),
+                  ],
+                ),
+                actions: [
+                  IconButton(
+                    tooltip: brightness == Brightness.dark
+                        ? 'المظهر الفاتح'
+                        : 'المظهر الداكن',
+                    onPressed: () =>
+                        context.read<ThemeProvider>().toggleLightDark(context),
+                    icon: Icon(
+                      brightness == Brightness.dark
+                          ? Icons.light_mode_rounded
+                          : Icons.dark_mode_rounded,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: t(context).openBookingPage,
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SettingsScreen(openShare: true),
+                      ),
+                    ),
+                    icon: const Icon(Icons.calendar_month_rounded),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+              ),
+              drawer: _AdminDrawer(
+                shopName: shopName,
+                sections: visibleSections,
+                selectedIndex: effectiveIndex,
+                onSelect: (index) => _goTo(index, auth: auth),
+              ),
+              body: Column(
+                children: [
+                  const ConnectionBanner(),
+                  Expanded(
+                    child: isWide
+                        ? Row(
+                            children: [
+                              NavigationRail(
+                                selectedIndex: _railIndex(
+                                  primarySections,
+                                  effectiveIndex,
+                                ),
+                                onDestinationSelected: (i) => _onRailSelected(
+                                  i,
+                                  primarySections,
+                                  moreSections,
+                                  auth,
+                                ),
+                                groupAlignment: -0.9,
+                                labelType:
+                                    MediaQuery.sizeOf(context).width >= 1080
+                                        ? NavigationRailLabelType.all
+                                        : NavigationRailLabelType.none,
+                                destinations: _railDestinations(
+                                  primarySections,
+                                  moreSections,
+                                ),
+                              ),
+                              const VerticalDivider(width: 1),
+                              Expanded(
+                                child: _tabStack(effectiveIndex, visible),
+                              ),
+                            ],
+                          )
+                        : _tabStack(effectiveIndex, visible),
+                  ),
+                ],
+              ),
+              bottomNavigationBar: isWide
+                  ? null
+                  : _bottomBar(
+                      primarySections,
+                      moreSections,
+                      effectiveIndex,
+                      auth,
+                    ),
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildDrawer(BuildContext context, int pendingCount) {
+  Widget _tabStack(int effectiveIndex, bool Function(int) visible) {
+    return IndexedStack(
+      index: effectiveIndex,
+      children: [
+        for (var i = 0; i < _screens.length; i++)
+          ((_visited.contains(i) || i == effectiveIndex) && visible(i))
+              ? _screens[i]
+              : const SizedBox.shrink(),
+      ],
+    );
+  }
+
+  int _railIndex(
+    List<AdminNavSection> primary,
+    int effectiveIndex,
+  ) {
+    final found = primary.indexWhere((s) => s.index == effectiveIndex);
+    return found >= 0 ? found : primary.length;
+  }
+
+  void _onRailSelected(
+    int position,
+    List<AdminNavSection> primary,
+    List<AdminNavSection> more,
+    AuthProvider auth,
+  ) {
+    if (position >= primary.length) {
+      _openMoreSheet(more);
+      return;
+    }
+    _goTo(primary[position].index, auth: auth);
+  }
+
+  List<NavigationRailDestination> _railDestinations(
+    List<AdminNavSection> primary,
+    List<AdminNavSection> more,
+  ) {
+    return [
+      for (final section in primary)
+        NavigationRailDestination(
+          icon: _sectionIcon(section, selected: false),
+          selectedIcon: _sectionIcon(section, selected: true),
+          label: Text(section.navLabel(context)),
+        ),
+      NavigationRailDestination(
+        icon: const Icon(Icons.grid_view_rounded),
+        selectedIcon: const Icon(Icons.grid_view_rounded),
+        label: Text(FeatureLabels.text(context, 'المزيد', 'More')),
+      ),
+    ];
+  }
+
+  Widget _bottomBar(
+    List<AdminNavSection> primary,
+    List<AdminNavSection> more,
+    int effectiveIndex,
+    AuthProvider auth,
+  ) {
+    final selected = _railIndex(primary, effectiveIndex);
+    return NavigationBar(
+      selectedIndex: selected,
+      onDestinationSelected: (position) {
+        if (position >= primary.length) {
+          _openMoreSheet(more);
+          return;
+        }
+        _goTo(primary[position].index, auth: auth);
+      },
+      destinations: [
+        for (final section in primary)
+          NavigationDestination(
+            icon: _sectionIcon(section, selected: false),
+            selectedIcon: _sectionIcon(section, selected: true),
+            label: section.navLabel(context),
+            tooltip: section.label(context),
+          ),
+        NavigationDestination(
+          icon: const Icon(Icons.grid_view_rounded),
+          selectedIcon: const Icon(Icons.grid_view_rounded),
+          label: FeatureLabels.text(context, 'المزيد', 'More'),
+          tooltip: FeatureLabels.text(context, 'كل الأقسام', 'All sections'),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionIcon(AdminNavSection section, {required bool selected}) {
+    final icon = Icon(selected ? section.selectedIcon : section.icon);
+    if (section.index == 1) return _PendingBadge(child: icon);
+    return icon;
+  }
+
+  Future<void> _openMoreSheet(List<AdminNavSection> sections) async {
+    if (sections.isEmpty) return;
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
+      builder: (_) => _MoreSectionsSheet(sections: sections),
+    );
+    if (picked != null) _goTo(picked);
+  }
+}
+
+class _MoreSectionsSheet extends StatelessWidget {
+  const _MoreSectionsSheet({required this.sections});
+
+  final List<AdminNavSection> sections;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+      ),
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.only(bottom: 12),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Text(
+              FeatureLabels.text(context, 'كل الأقسام', 'All sections'),
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+            ),
+          ),
+          for (final section in sections)
+            ListTile(
+              leading: section.index == 1
+                  ? _PendingBadge(child: Icon(section.icon))
+                  : Icon(section.icon),
+              title: Text(section.label(context)),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.pop(context, section.index),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PendingBadge extends StatelessWidget {
+  const _PendingBadge({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = context.select<AppointmentProvider, int>(
+      (a) => a.pendingRequests.length,
+    );
+    return Badge(
+      isLabelVisible: pending > 0,
+      label: Text('$pending'),
+      child: child,
+    );
+  }
+}
+
+class _AdminDrawer extends StatelessWidget {
+  const _AdminDrawer({
+    required this.shopName,
+    required this.sections,
+    required this.selectedIndex,
+    required this.onSelect,
+  });
+
+  final String shopName;
+  final List<AdminNavSection> sections;
+  final int selectedIndex;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
     final lang = context.watch<LanguageProvider>();
     final themeProv = context.watch<ThemeProvider>();
-    final shop = context.read<ShopProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Drawer(
@@ -245,7 +489,9 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                     child: SvgPicture.asset(
                       'assets/brand/logo.svg',
                       colorFilter: const ColorFilter.mode(
-                          Color(0xFFC6CBD4), BlendMode.srcIn),
+                        Color(0xFFC6CBD4),
+                        BlendMode.srcIn,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -254,9 +500,12 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          shop.settings?.shopName ?? 'BarberBook',
+                          shopName,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                              fontWeight: FontWeight.w800, fontSize: 16),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         const LiveBadge(compact: true),
@@ -280,67 +529,32 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             Expanded(
               child: ListView(
                 children: [
-                  if (_visibleFor(context, 0))
-                    _item(context, 0, Icons.dashboard_outlined, Icons.dashboard,
-                        t(context).dashboard),
-                  if (_visibleFor(context, 1))
-                    _item(context, 1, Icons.event_note_outlined,
-                        Icons.event_note, t(context).appointments),
-                  if (_visibleFor(context, 2))
-                    _item(context, 2, Icons.content_cut_outlined,
-                        Icons.content_cut, t(context).servicesManagement),
-                  if (_visibleFor(context, 3))
-                    _item(context, 3, Icons.people_outline_rounded,
-                        Icons.people_rounded, t(context).staff),
-                  if (_visibleFor(context, 4))
-                    _item(context, 4, Icons.local_offer_outlined,
-                        Icons.local_offer, t(context).discounts),
-                  if (_visibleFor(context, 5))
-                    _item(context, 5, Icons.star_outline_rounded,
-                        Icons.star_rounded, t(context).feedback),
-                  if (_visibleFor(context, 6))
-                    _item(
-                      context,
-                      6,
-                      Icons.schedule_send_outlined,
-                      Icons.schedule_send,
-                      t(context).requestOutOfHours,
-                      badge: pendingCount,
-                    ),
-                  if (_visibleFor(context, 7))
-                    _item(context, 7, Icons.insights_outlined, Icons.insights,
-                        t(context).reports),
-                  if (_visibleFor(context, 8))
-                    _item(context, 8, Icons.tune_rounded, Icons.tune,
-                        t(context).bookingPageSettings),
-                  if (_visibleFor(context, 9))
-                    _item(
-                      context,
-                      9,
-                      Icons.business_center_outlined,
-                      Icons.business_center,
-                      FeatureLabels.text(
-                          context, 'أدوات الأعمال', 'Business Tools'),
-                    ),
-                  if (_visibleFor(context, 10))
-                    _item(context, 10, Icons.person_outline_rounded,
-                        Icons.person_rounded, t(context).profile),
-                  if (_visibleFor(context, 11))
-                    _item(
-                      context,
-                      11,
-                      Icons.account_balance_wallet_outlined,
-                      Icons.account_balance_wallet_rounded,
-                      FeatureLabels.text(
-                          context, 'المالية والمحاسبة', 'Finance & Accounting'),
-                    ),
-                  if (_visibleFor(context, 12))
-                    _item(
-                      context,
-                      12,
-                      Icons.inventory_2_outlined,
-                      Icons.inventory_2_rounded,
-                      FeatureLabels.text(context, 'المخزون', 'Inventory'),
+                  for (final section in sections)
+                    ListTile(
+                      leading: section.index == 1
+                          ? _PendingBadge(child: Icon(section.icon))
+                          : Icon(
+                              selectedIndex == section.index
+                                  ? section.selectedIcon
+                                  : section.icon,
+                            ),
+                      title: Text(
+                        section.label(context),
+                        style: TextStyle(
+                          fontWeight: selectedIndex == section.index
+                              ? FontWeight.w700
+                              : FontWeight.w400,
+                        ),
+                      ),
+                      selected: selectedIndex == section.index,
+                      selectedTileColor: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withOpacity(0.08),
+                      onTap: () {
+                        onSelect(section.index);
+                        Navigator.pop(context);
+                      },
                     ),
                 ],
               ),
@@ -370,59 +584,26 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const OpsSecurityScreen(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const OpsSecurityScreen()),
                 );
               },
             ),
             ListTile(
               leading: const Icon(Icons.link_rounded),
               title: Text(t(context).shareBookingLink),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const SettingsScreen(openShare: true),
-                ),
-              ),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SettingsScreen(openShare: true),
+                  ),
+                );
+              },
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _item(
-    BuildContext context,
-    int index,
-    IconData icon,
-    IconData selectedIcon,
-    String label, {
-    int? badge,
-  }) {
-    final selected = _index == index;
-    return ListTile(
-      leading: Badge(
-        isLabelVisible: (badge ?? 0) > 0,
-        label: Text('$badge'),
-        child: Icon(selected ? selectedIcon : icon),
-      ),
-      title: Text(
-        label,
-        style: TextStyle(
-          fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-        ),
-      ),
-      selected: selected,
-      selectedTileColor:
-          Theme.of(context).colorScheme.primary.withOpacity(0.08),
-      onTap: () {
-        setState(() {
-          _index = index;
-          _visited.add(index);
-        });
-        Navigator.pop(context);
-      },
     );
   }
 }

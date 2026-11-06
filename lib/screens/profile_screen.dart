@@ -16,7 +16,11 @@ import '../services/shop_manager.dart';
 import '../widgets/confirm.dart';
 
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({super.key, this.embedded = false});
+
+  /// When true the screen renders inside the admin shell, which already owns
+  /// the app bar; a compact title replaces it.
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
@@ -26,10 +30,20 @@ class ProfileScreen extends StatelessWidget {
     final settings = shop.settings;
 
     return Scaffold(
-      appBar: AppBar(title: Text(t(context).profile)),
+      appBar: embedded ? null : AppBar(title: Text(t(context).profile)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (embedded) ...[
+            Text(
+              t(context).profile,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 12),
+          ],
           Card(
             child: Padding(
               padding: const EdgeInsets.all(20),
@@ -70,9 +84,8 @@ class ProfileScreen extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Icons.translate_rounded),
                   title: Text(t(context).language),
-                  subtitle: Text(lang.isArabic
-                      ? t(context).arabic
-                      : t(context).english),
+                  subtitle: Text(
+                      lang.isArabic ? t(context).arabic : t(context).english),
                   trailing: const Icon(Icons.chevron_left_rounded),
                   onTap: () => lang.setLocale(
                     lang.isArabic ? const Locale('en') : const Locale('ar'),

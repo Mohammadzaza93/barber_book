@@ -11,17 +11,31 @@ import 'reports_screen.dart';
 import 'startup_costs_screen.dart';
 
 class FinanceHomeScreen extends StatelessWidget {
-  const FinanceHomeScreen({super.key});
+  const FinanceHomeScreen({super.key, this.embedded = false});
+
+  /// When true the screen renders inside the admin shell, which already owns
+  /// the app bar; a compact title replaces it.
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
     final f = context.watch<FinanceProvider>();
     final split = f.dailySplit();
     return Scaffold(
-      appBar: AppBar(title: const Text('المالية والمحاسبة')),
+      appBar: embedded ? null : AppBar(title: const Text('المالية والمحاسبة')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (embedded) ...[
+            Text(
+              'المالية والمحاسبة',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 12),
+          ],
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -30,8 +44,7 @@ class FinanceHomeScreen extends StatelessWidget {
                 children: [
                   const Text(
                     'ملخص سريع',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
                   ),
                   const SizedBox(height: 8),
                   _row('إجمالي التكاليف التأسيسية', f.sumStartup()),
@@ -107,8 +120,7 @@ class FinanceHomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _row(String label, double value,
-      {bool bold = false, Color? color}) {
+  Widget _row(String label, double value, {bool bold = false, Color? color}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -150,8 +162,8 @@ class FinanceHomeScreen extends StatelessWidget {
         title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
         trailing: const Icon(Icons.chevron_right_rounded),
-        onTap: () => Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => page)),
+        onTap: () =>
+            Navigator.of(context).push(MaterialPageRoute(builder: (_) => page)),
       ),
     );
   }
